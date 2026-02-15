@@ -1,46 +1,35 @@
 [
   {
-    "id": "menu_elegant_frame",
-    "type": "Restaurant Menu",
-    "canvas_size": {
-      "width": 2480,
-      "height": 3508,
-      "viewBox": "0 0 595 842",
-      "unit": "pt"
-    },
-    "layout_geometry": {
-      "border_frame": {
-        "type": "rect",
-        "x": 20,
-        "y": 20,
-        "width": 555,
-        "height": 802,
-        "fill": "none",
-        "stroke": "#D4AF37",
-        "stroke_width": 3
-      },
-      "header_bg": {
-        "type": "rect",
-        "x": 25,
-        "y": 25,
-        "width": 545,
-        "height": 100,
-        "fill": "#222222"
-      },
-      "divider_line": {
-        "type": "line",
-        "x1": 100,
-        "y1": 140,
-        "x2": 495,
-        "y2": 140,
-        "stroke": "#D4AF37"
-      }
-    },
-    "visual_style": {
-      "background": "#FFFDF5",
-      "text_color": "#333333",
-      "price_color": "#D4AF37",
-      "font_vibe": "Serif"
+    "id": "menu_gen_fine_dining",
+    "description": "قائمة طعام فاخرة كلاسيكية",
+    "suitable_for": "Steakhouse, Luxury Restaurant, Hotel",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "generative_rules": {
+      "border": { "instruction": "Elegant thin border frame.", "color": "Gold or Black" },
+      "layout": "Single column, centered text, plenty of spacing.",
+      "typography": "Serif fonts for headers, Italic for descriptions."
+    }
+  },
+  {
+    "id": "menu_gen_fast_food",
+    "description": "قائمة وجبات سريعة حيوية",
+    "suitable_for": "Burger, Pizza, Food Truck, Snacks",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "generative_rules": {
+      "header": { "instruction": "Bold, colorful header block with curve.", "color": "Red/Orange/Yellow" },
+      "layout": "2-Column grid or box-based layout for items.",
+      "accents": "Rounded rectangles for prices."
+    }
+  },
+  {
+    "id": "menu_gen_cafe_minimal",
+    "description": "قائمة كافيه هادئة",
+    "suitable_for": "Coffee Shop, Bakery, Breakfast",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "generative_rules": {
+      "background": { "instruction": "Texture paper or soft pastel color." },
+      "layout": "Simple list with dotted lines connecting item to price.",
+      "icons": "Use simple SVG shapes (circle/leaf) as section dividers."
     }
   }
 ]
