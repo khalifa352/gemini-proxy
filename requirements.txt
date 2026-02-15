@@ -1,2 +1,4 @@
 flask
 reportlab
+gunicorn
+pillow
