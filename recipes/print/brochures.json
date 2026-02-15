@@ -1,47 +1,32 @@
 [
   {
-    "id": "brochure_trifold_clean",
-    "type": "Trifold Brochure",
-    "canvas_size": {
-      "width": 3508,
-      "height": 2480,
-      "viewBox": "0 0 297 210",
-      "unit": "mm"
-    },
-    "layout_geometry": {
-      "left_panel": {
-        "type": "rect",
-        "x": 0,
-        "y": 0,
-        "width": 99,
-        "height": 210,
-        "fill": "#F5F5F5"
-      },
-      "center_panel": {
-        "type": "rect",
-        "x": 99,
-        "y": 0,
-        "width": 99,
-        "height": 210,
-        "fill": "#FFFFFF"
-      },
-      "right_panel": {
-        "type": "rect",
-        "x": 198,
-        "y": 0,
-        "width": 99,
-        "height": 210,
-        "fill": "#E8EAF6"
-      },
-      "fold_lines": [
-        {"x1": 99, "y1": 0, "x2": 99, "y2": 210, "stroke": "#CCCCCC", "dash": "5,5"},
-        {"x1": 198, "y1": 0, "x2": 198, "y2": 210, "stroke": "#CCCCCC", "dash": "5,5"}
-      ]
-    },
-    "visual_style": {
-      "text_align": "center",
-      "columns": 3,
-      "primary_color": "#3F51B5"
+    "id": "brochure_gen_corporate_trifold",
+    "description": "مطوية شركات رسمية 3 طيات",
+    "suitable_for": "Corporate, Bank, Insurance, Services",
+    "canvas_size": { "width": 3508, "height": 2480, "viewBox": "0 0 1122 794" },
+    "generative_rules": {
+      "layout": { "instruction": "Strict 3-column layout. Draw fold lines.", "colors": "Distinct background shade for each panel (Light/Medium/Dark)" },
+      "shapes": { "instruction": "Header blocks at the top of each panel.", "style": "Rectangular or slight slant" }
+    }
+  },
+  {
+    "id": "brochure_gen_medical_curved",
+    "description": "مطوية طبية او صحية بمنحنيات",
+    "suitable_for": "Hospital, Clinic, Spa, Wellness",
+    "canvas_size": { "width": 3508, "height": 2480, "viewBox": "0 0 1122 794" },
+    "generative_rules": {
+      "layout": { "instruction": "3 columns, but shapes flow across the fold lines.", "colors": "White, Cyan, Green" },
+      "shapes": { "instruction": "Continuous wave shape connecting all 3 panels at the bottom.", "style": "Smooth Bezier" }
+    }
+  },
+  {
+    "id": "brochure_gen_creative_dark",
+    "description": "مطوية عصرية داكنة",
+    "suitable_for": "Nightclub, Dark Mode Tech, Art Gallery",
+    "canvas_size": { "width": 3508, "height": 2480, "viewBox": "0 0 1122 794" },
+    "generative_rules": {
+      "layout": { "instruction": "Dark background (Black/Dark Grey). Text must be white.", "colors": "Dark Theme" },
+      "shapes": { "instruction": "Neon or bright accent lines/shapes.", "style": "Glowing effect gradients" }
     }
   }
 ]
