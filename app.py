@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import random # لاستخدام العشوائية عند عدم وجود تفضيل
 from flask import Flask, request, jsonify
 
 # إعداد السجلات
@@ -9,12 +10,11 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- محاولة استيراد المكتبة ---
+# --- استيراد المكتبة ---
 client = None
 try:
     from google import genai
     from google.genai import types
-    
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY)
@@ -24,8 +24,54 @@ try:
 except Exception as e:
     logger.error(f"❌ Library Error: {e}")
 
-# --- دالة جلب الوصفات ---
-def get_recipe_lenient(category_name, user_prompt):
+# --- 🧠 دالة الاختيار الذكي (The Smart Selector) ---
+def pick_best_recipe(recipes_list, user_prompt):
+    """
+    تختار أفضل وصفة بناءً على طلب المستخدم.
+    إذا طلب 'مودرن'، تختار الوصفة التي تحتوي على id='modern' وهكذا.
+    """
+    if not recipes_list: return {}
+    
+    prompt_lower = user_prompt.lower()
+    best_recipe = None
+    highest_score = -1
+    
+    logger.info(f"🔍 Scanning {len(recipes_list)} recipes for matches...")
+
+    for recipe in recipes_list:
+        score = 0
+        # 1. فحص المعرف (ID)
+        rec_id = recipe.get('id', '').lower()
+        if rec_id in prompt_lower: score += 10
+        
+        # 2. فحص الوصف (Description)
+        desc = recipe.get('description', '').lower()
+        for word in prompt_lower.split():
+            if word in desc or word in rec_id:
+                score += 2
+        
+        # 3. فحص الكلمات المفتاحية (Tags/Keywords) إن وجدت
+        tags = recipe.get('tags', [])
+        for tag in tags:
+            if tag.lower() in prompt_lower:
+                score += 5
+
+        logger.info(f"   - Recipe [{rec_id}] Score: {score}")
+
+        if score > highest_score:
+            highest_score = score
+            best_recipe = recipe
+    
+    # إذا لم نجد أي تطابق (Score 0)، نختار عشوائياً للتنوع
+    if highest_score <= 0:
+        logger.info("🎲 No specific match found. Picking RANDOM recipe.")
+        return random.choice(recipes_list)
+    
+    logger.info(f"🎯 Selected Best Match: {best_recipe.get('id')}")
+    return best_recipe
+
+# --- دالة جلب الملف ---
+def get_recipe_path(category_name, user_prompt):
     base_path = "recipes"
     cat = (category_name or "").lower()
     prompt = (user_prompt or "").lower()
@@ -46,7 +92,7 @@ def get_recipe_lenient(category_name, user_prompt):
     return os.path.join(base_path, "print/flyers.json")
 
 @app.route('/')
-def home(): return "Almonjez Engine: Ready to Design 🚀"
+def home(): return "Almonjez Engine: Smart Selection Active 🧠"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -58,50 +104,49 @@ def generate():
         cat_name = data.get('category', 'general')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        logger.info(f"📥 Request: {cat_name} ({width}x{height})")
+        logger.info(f"📥 Request: {cat_name} | Prompt: {user_msg}")
 
-        # 1. جلب الوصفة
-        recipe_path = get_recipe_lenient(cat_name, user_msg)
-        recipe_data = {}
+        # 1. جلب ملف الوصفات
+        recipe_path = get_recipe_path(cat_name, user_msg)
+        selected_recipe = {}
+        
         if os.path.exists(recipe_path):
             try:
                 with open(recipe_path, 'r', encoding='utf-8') as f:
                     raw = json.load(f)
-                    recipe_data = raw[0] if isinstance(raw, list) else raw
-            except: pass
+                    
+                    # 🚀 هنا التغيير الجذري: الاختيار الذكي بدلاً من الأول فقط
+                    if isinstance(raw, list):
+                        selected_recipe = pick_best_recipe(raw, user_msg)
+                    elif isinstance(raw, dict):
+                        selected_recipe = raw
+            except Exception as e:
+                logger.error(f"⚠️ JSON Error: {e}")
 
-        # 2. أبعاد الرسم
-        view_box = recipe_data.get('canvas_size', {}).get('viewBox', f'0 0 {width} {height}')
+        # 2. تجهيز التعليمات
+        view_box = selected_recipe.get('canvas_size', {}).get('viewBox', f'0 0 {width} {height}')
 
-        # 🧠 التعليمات الصارمة (Full Bleed + Contrast)
         sys_instructions = f"""
         Role: Senior Graphic Designer.
-        Task: Create a 'Full Bleed' SVG design.
+        Task: Create a 'Full Bleed' SVG design based on the Selected Blueprint.
         
-        RULE 1: NO WHITE MARGINS (Full Background)
-        - The very first element MUST be a <rect> or <image> that covers 100% of the canvas.
-        - Syntax: <rect x="0" y="0" width="100%" height="100%" fill="THEME_COLOR" />
-        - Do NOT leave any whitespace around the edges.
+        SELECTED BLUEPRINT ID: {selected_recipe.get('id', 'Unknown')}
         
-        RULE 2: TEXT VISIBILITY (High Contrast)
-        - If Background is Dark -> Text MUST be White (#FFFFFF).
-        - If Background is Light -> Text MUST be Black (#000000).
-        - NEVER place light text on light background.
+        RULE 1: GEOMETRY
+        - Use the specific 'layout_geometry' from the Blueprint.
+        - If the blueprint has a specific background pattern, DRAW IT.
+        - NO WHITE MARGINS. Fill the canvas.
         
-        RULE 3: HTML TEXT ENGINE (For Arabic)
+        RULE 2: TEXT (HTML Engine)
         - ALWAYS use <foreignObject> for text.
         - Syntax:
-          <foreignObject x="5%" y=".." width="90%" height="100">
-             <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl; text-align:right; font-family:sans-serif; font-weight:bold; color:CONTRAST_COLOR;">
+          <foreignObject x=".." y=".." width=".." height="auto">
+             <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl; text-align:right; font-family:sans-serif; color:CONTRAST_COLOR;">
                 CONTENT
              </div>
           </foreignObject>
         
-        RULE 4: DESIGN ELEMENTS
-        - Use the JSON Blueprint to draw shapes/layout.
-        - Make it look premium and filled with content.
-        
-        Blueprint: {json.dumps(recipe_data)}
+        Blueprint Data: {json.dumps(selected_recipe)}
         """
 
         # التوليد
@@ -112,8 +157,6 @@ def generate():
         )
 
         svg_output = response.text.replace("```svg", "").replace("```", "").strip()
-        
-        # تصحيح إضافي: التأكد من وجود xmlns في الـ SVG لضمان العرض
         if '<svg' in svg_output and 'xmlns=' not in svg_output:
             svg_output = svg_output.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
             
