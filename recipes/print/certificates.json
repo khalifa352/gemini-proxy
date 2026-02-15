@@ -1,8 +1,34 @@
 [
   {
-    "id": "cert_std",
-    "allowed_layout_sets": [
-      "letterhead_official"
-    ]
+    "id": "cert_gen_classic_ornate",
+    "description": "شهادة كلاسيكية رسمية بإطار",
+    "suitable_for": "University, Government, Long Service Awards",
+    "canvas_size": { "width": 3508, "height": 2480, "viewBox": "0 0 842 595" },
+    "generative_rules": {
+      "border": { "instruction": "Complex double border with corner ornaments.", "color": "Gold or Deep Blue" },
+      "background": { "instruction": "Very faint pattern (guilloche) or parchment texture color." },
+      "layout": "Centered, Serif fonts, Traditional vibe."
+    }
+  },
+  {
+    "id": "cert_gen_modern_wave",
+    "description": "شهادة تقدير حديثة بمنحنيات",
+    "suitable_for": "Employee of Month, Participation, Modern Companies",
+    "canvas_size": { "width": 3508, "height": 2480, "viewBox": "0 0 842 595" },
+    "generative_rules": {
+      "shapes": { "instruction": "Fluid waves at bottom-left and top-right corners.", "gradient": "Brand colors" },
+      "layout": "Clean whitespace in the center. Sans-serif fonts."
+    }
+  },
+  {
+    "id": "cert_gen_geometric_course",
+    "description": "شهادة إتمام دورة بتصميم هندسي",
+    "suitable_for": "Workshops, Online Courses, Tech Training",
+    "canvas_size": { "width": 3508, "height": 2480, "viewBox": "0 0 842 595" },
+    "generative_rules": {
+      "sidebar": { "instruction": "A geometric sidebar (triangle or polygon strip) on the left.", "width": "20% of width" },
+      "layout": "Left aligned text block next to the sidebar.",
+      "mood": "Dynamic, Progress, Achievement."
+    }
   }
 ]
