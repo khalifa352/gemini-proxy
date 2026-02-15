@@ -1,102 +1,82 @@
 import os
 import json
 import logging
-import random # لاستخدام العشوائية عند عدم وجود تفضيل
+import random
 from flask import Flask, request, jsonify
 
-# إعداد السجلات
+# 1. إعداد السجلات (Logs)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- استيراد المكتبة ---
+# 2. اتصال آمن بالمكتبة (Google GenAI 2026)
 client = None
 try:
     from google import genai
     from google.genai import types
+    
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY)
-        logger.info("✅ Google GenAI Client Connected")
+        logger.info("✅ Google GenAI Client Connected (Generative Mode)")
     else:
-        logger.warning("⚠️ API Key missing")
+        logger.warning("⚠️ Warning: API Key missing")
+except ImportError:
+    logger.error("❌ Library 'google-genai' not found. Please update requirements.txt")
 except Exception as e:
-    logger.error(f"❌ Library Error: {e}")
+    logger.error(f"❌ Client Init Error: {e}")
 
-# --- 🧠 دالة الاختيار الذكي (The Smart Selector) ---
-def pick_best_recipe(recipes_list, user_prompt):
+# 3. دالة جلب "أنظمة التصميم" (Design Systems Catalog)
+def get_design_rules(category_name, user_prompt):
     """
-    تختار أفضل وصفة بناءً على طلب المستخدم.
-    إذا طلب 'مودرن'، تختار الوصفة التي تحتوي على id='modern' وهكذا.
+    بدلاً من جلب وصفة واحدة، نجلب كتالوجاً من "القواعد التوليدية".
     """
-    if not recipes_list: return {}
-    
-    prompt_lower = user_prompt.lower()
-    best_recipe = None
-    highest_score = -1
-    
-    logger.info(f"🔍 Scanning {len(recipes_list)} recipes for matches...")
-
-    for recipe in recipes_list:
-        score = 0
-        # 1. فحص المعرف (ID)
-        rec_id = recipe.get('id', '').lower()
-        if rec_id in prompt_lower: score += 10
-        
-        # 2. فحص الوصف (Description)
-        desc = recipe.get('description', '').lower()
-        for word in prompt_lower.split():
-            if word in desc or word in rec_id:
-                score += 2
-        
-        # 3. فحص الكلمات المفتاحية (Tags/Keywords) إن وجدت
-        tags = recipe.get('tags', [])
-        for tag in tags:
-            if tag.lower() in prompt_lower:
-                score += 5
-
-        logger.info(f"   - Recipe [{rec_id}] Score: {score}")
-
-        if score > highest_score:
-            highest_score = score
-            best_recipe = recipe
-    
-    # إذا لم نجد أي تطابق (Score 0)، نختار عشوائياً للتنوع
-    if highest_score <= 0:
-        logger.info("🎲 No specific match found. Picking RANDOM recipe.")
-        return random.choice(recipes_list)
-    
-    logger.info(f"🎯 Selected Best Match: {best_recipe.get('id')}")
-    return best_recipe
-
-# --- دالة جلب الملف ---
-def get_recipe_path(category_name, user_prompt):
     base_path = "recipes"
     cat = (category_name or "").lower()
     prompt = (user_prompt or "").lower()
     
+    # خريطة المجلدات
     flexible_map = {
         "card": "print/business_cards.json",
         "flyer": "print/flyers.json",
         "brochure": "print/brochures.json",
         "menu": "print/menus.json",
-        "invoice": "print/invoices.json"
+        "invoice": "print/invoices.json",
+        "certificate": "print/certificates.json"
     }
     
+    # المسار الافتراضي
+    selected_path = os.path.join(base_path, "print/flyers.json")
+    
+    # البحث الذكي
     for key, path in flexible_map.items():
         if key in cat or key in prompt:
             full_path = os.path.join(base_path, path)
-            if os.path.exists(full_path): return full_path
-            
-    return os.path.join(base_path, "print/flyers.json")
+            if os.path.exists(full_path):
+                selected_path = full_path
+                break
+    
+    # قراءة الملف وإرجاع القائمة كاملة
+    try:
+        with open(selected_path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+            if isinstance(raw, list): return raw
+            if isinstance(raw, dict): return [raw]
+    except Exception as e:
+        logger.error(f"⚠️ Error reading rules: {e}")
+        return [] # نرجع قائمة فارغة في حال الخطأ ليستخدم ذكاءه العام
 
+# 4. المسار الرئيسي (Health Check)
 @app.route('/')
-def home(): return "Almonjez Engine: Smart Selection Active 🧠"
+def home():
+    return "Almonjez Generative Engine is Active 🧠🎨"
 
+# 5. مسار التوليد (The Brain)
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client: return jsonify({"error": "Server Error: Client failed"}), 500
+    if not client: 
+        return jsonify({"error": "Server Error: AI Client not ready"}), 500
 
     try:
         data = request.json
@@ -104,41 +84,43 @@ def generate():
         cat_name = data.get('category', 'general')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        logger.info(f"📥 Request: {cat_name} | Prompt: {user_msg}")
+        logger.info(f"📥 Generating for: {cat_name} | Canvas: {width}x{height}")
 
-        # 1. جلب ملف الوصفات
-        recipe_path = get_recipe_path(cat_name, user_msg)
-        selected_recipe = {}
+        # أ. جلب قواعد التصميم المتاحة
+        available_rules = get_design_rules(cat_name, user_msg)
         
-        if os.path.exists(recipe_path):
-            try:
-                with open(recipe_path, 'r', encoding='utf-8') as f:
-                    raw = json.load(f)
-                    
-                    # 🚀 هنا التغيير الجذري: الاختيار الذكي بدلاً من الأول فقط
-                    if isinstance(raw, list):
-                        selected_recipe = pick_best_recipe(raw, user_msg)
-                    elif isinstance(raw, dict):
-                        selected_recipe = raw
-            except Exception as e:
-                logger.error(f"⚠️ JSON Error: {e}")
-
-        # 2. تجهيز التعليمات
-        view_box = selected_recipe.get('canvas_size', {}).get('viewBox', f'0 0 {width} {height}')
-
+        # ب. تعليمات "المهندس المولد" (The Generative Architect Prompt)
         sys_instructions = f"""
-        Role: Senior Graphic Designer.
-        Task: Create a 'Full Bleed' SVG design based on the Selected Blueprint.
+        Role: World-Class Generative SVG Artist & Mathematician.
+        Mission: Generate a UNIQUE, Professional SVG design. Do NOT use fixed templates.
         
-        SELECTED BLUEPRINT ID: {selected_recipe.get('id', 'Unknown')}
+        INPUT DATA:
+        - User Request: "{user_msg}"
+        - Canvas Size: {width}x{height} (ViewBox: 0 0 {width} {height})
+        - Design Systems Available: {json.dumps(available_rules)}
         
-        RULE 1: GEOMETRY
-        - Use the specific 'layout_geometry' from the Blueprint.
-        - If the blueprint has a specific background pattern, DRAW IT.
-        - NO WHITE MARGINS. Fill the canvas.
+        PHASE 1: SELECTION & ANALYSIS
+        - Analyze the user's text volume and industry (e.g., Medical, Food, Tech).
+        - Select the most suitable "Design System" from the provided JSON list.
+        - If the system defines 'generative_rules', you MUST follow them but vary the parameters.
         
-        RULE 2: TEXT (HTML Engine)
-        - ALWAYS use <foreignObject> for text.
+        PHASE 2: GEOMETRY CALCULATION (The "Fishing" Part)
+        - Do NOT just copy-paste paths. CALCULATE them.
+        - If a rule says "header_curve: random height 100-300", pick a specific number (e.g., 245) and draw a Bezier curve (Q or C command) utilizing that height.
+        - Create fluid, organic, or geometric shapes based on the industry style.
+        - RULE: Must cover the entire background (Full Bleed). No white margins.
+        
+        PHASE 3: COLOR PSYCHOLOGY
+        - Detect the brand mood from the text.
+        - Generate professional <linearGradient> or <radialGradient> definitions in <defs>.
+        - Apply these gradients to your generated shapes.
+        - Ensure High Contrast for text (White text on Dark BG, Dark text on Light BG).
+        
+        PHASE 4: TYPOGRAPHY (HTML Engine)
+        - ALWAYS use <foreignObject> for text support (Arabic/English).
+        - Scale font-size dynamically:
+          * Short text -> Large, Bold, Impactful.
+          * Long text -> Smaller, Organized, Grid-based.
         - Syntax:
           <foreignObject x=".." y=".." width=".." height="auto">
              <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl; text-align:right; font-family:sans-serif; color:CONTRAST_COLOR;">
@@ -146,26 +128,35 @@ def generate():
              </div>
           </foreignObject>
         
-        Blueprint Data: {json.dumps(selected_recipe)}
+        OUTPUT:
+        - Return ONLY the raw SVG code.
+        - Start with <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}">.
         """
 
-        # التوليد
+        # ج. الطلب من Gemini
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=sys_instructions)
+            config=types.GenerateContentConfig(
+                system_instruction=sys_instructions,
+                temperature=0.8  # رفعنا درجة الإبداع ليعطي نتائج مختلفة كل مرة
+            )
         )
 
+        # د. تنظيف الرد
         svg_output = response.text.replace("```svg", "").replace("```", "").strip()
+        
+        # ضمان وجود xmlns (إصلاح مشاكل العرض في آيفون)
         if '<svg' in svg_output and 'xmlns=' not in svg_output:
             svg_output = svg_output.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
             
         return jsonify({"response": svg_output})
 
     except Exception as e:
-        logger.error(f"‼️ Error: {e}")
+        logger.error(f"‼️ Generation Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    # استخدام المنفذ الديناميكي لـ Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
