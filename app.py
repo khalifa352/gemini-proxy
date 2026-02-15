@@ -47,15 +47,25 @@ def generate():
             with open(recipe_path, 'r', encoding='utf-8') as f:
                 recipe_data = json.load(f)
 
-        # التعليمات المطورة للنصوص
+              # تعليمات تجعل الوصفة هي الأساس
         sys_instructions = f"""
-        Context: Almonjez Design Engine. 
-        Canvas: {width}x{height}
-        Task: Create a professional SVG using <foreignObject> for ALL text.
-        CSS: Use 'direction: rtl; text-align: right; font-family: sans-serif; word-wrap: break-word;'
-        Geometry: {json.dumps(recipe_data)}
-        Return ONLY raw SVG code.
+        You are the 'Almonjez Design Architect'. 
+        You MUST use the attached JSON Recipe as your MASTER BLUEPRINT.
+        
+        1. STRUCTURE: Draw every 'panel' or 'section' defined in the JSON using <rect> or <path>.
+        2. COLORS: Use the 'visual_style' or 'color_vibe' from the JSON.
+        3. DIMENSIONS: Your <svg> viewBox must be exactly {recipe_data.get('canvas_size', {}).get('viewBox', f'0 0 {width} {height}')}.
+        4. TEXT: Place the user's text ONLY inside the designated safe zones from the JSON.
+        
+        RECIPE DATA (The Blueprint):
+        {json.dumps(recipe_data)}
+        
+        USER REQUEST:
+        {user_msg}
+        
+        Final Step: Output ONLY the SVG code. Make it look like a finished, professional print-ready file.
         """
+
 
         # طلب التوليد باستخدام المكتبة الجديدة
         response = client.models.generate_content(
