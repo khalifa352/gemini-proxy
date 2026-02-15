@@ -1,8 +1,45 @@
 [
   {
-    "id": "flyer_std",
-    "allowed_layout_sets": [
-      "wave_header_pro"
-    ]
+    "id": "flyer_standard_a4",
+    "description": "Professional Corporate Flyer with Wave Header",
+    "canvas_size": {
+      "width": 2480,
+      "height": 3508,
+      "viewBox": "0 0 595 842",
+      "unit": "pt"
+    },
+    "layout_geometry": {
+      "header": {
+        "type": "path",
+        "path_data": "M0,0 L595,0 L595,150 Q297,250 0,150 Z",
+        "fill": "primary_gradient"
+      },
+      "footer": {
+        "type": "rect",
+        "x": 0,
+        "y": 780,
+        "width": 595,
+        "height": 62,
+        "fill": "secondary_color"
+      },
+      "content_area": {
+        "x": 40,
+        "y": 200,
+        "width": 515,
+        "height": 550
+      }
+    },
+    "visual_style": {
+      "colors": {
+        "primary": "#1a237e",
+        "secondary": "#ff6f00",
+        "background": "#ffffff"
+      },
+      "typography": {
+        "headline_size": 48,
+        "body_size": 14,
+        "font_family": "Cairo, sans-serif"
+      }
+    }
   }
 ]
