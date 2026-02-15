@@ -82,25 +82,26 @@ def generate():
                 recipe_data = json.load(f)
         
         # بناء تعليمات النظام الصارمة لضمان جودة الـ SVG
-        system_instruction = f"""
+                system_instruction = f"""
         Context: You are the 'Almonjez Design Engine'. 
-        You must generate a professional SVG design based on the provided geometry.
+        Task: Create a professional SVG.
         
-        GEOMETRY RECIPE:
-        {json.dumps(recipe_data)}
+        TYPOGRAPHY RULES:
+        1. SAFE ZONE: Keep ALL text at least {width * 0.05}px away from edges.
+        2. NO OVERFLOW: If a text string is long, split it into multiple <tspan> elements or use smaller font-size.
+        3. DYNAMIC FONT: Header size should be approx {height * 0.08}px, Body size approx {height * 0.04}px.
+        4. ARABIC RENDERING: Use 'direction: rtl' and 'text-anchor: end'. Use x="{width * 0.9}" for right-aligned text.
+        5. ALIGNMENT: Ensure text is centered or logically aligned within its background shapes.
         
-        CANVAS SIZE:
+        CANVAS SPECS:
         Width: {width}, Height: {height}
+        Recipe Geometry: {json.dumps(recipe_data)}
         
-        USER REQUEST:
-        {user_msg}
+        User Request: {user_msg}
         
-        CRITICAL RULES:
-        1. Output ONLY pure SVG code starting with <svg> and ending with </svg>.
-        2. No explanations, no markdown (```), no preamble.
-        3. For Arabic text: use <text> tags with 'direction: rtl' and 'text-anchor: end'.
-        4. Colors must be professional and high-contrast.
+        Return ONLY pure SVG code.
         """
+
         
         # إرسال الطلب لـ Gemini
         response = model.generate_content(system_instruction)
