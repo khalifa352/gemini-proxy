@@ -1,8 +1,44 @@
 [
   {
-    "id": "card_std",
-    "allowed_layout_sets": [
-      "diagonal_split_modern"
-    ]
+    "id": "card_luxury_gold",
+    "type": "Business Card",
+    "canvas_size": {
+      "width": 1050,
+      "height": 600,
+      "viewBox": "0 0 85 55",
+      "unit": "mm"
+    },
+    "layout_geometry": {
+      "background": {
+        "type": "rect",
+        "fill": "#1a1a1a",
+        "width": "100%",
+        "height": "100%"
+      },
+      "gold_accent": {
+        "type": "path",
+        "path_data": "M50,0 L85,0 L85,55 L30,55 Z",
+        "fill": "#D4AF37",
+        "opacity": 0.9
+      },
+      "logo_area": {
+        "x": 5,
+        "y": 5,
+        "width": 20,
+        "height": 20
+      }
+    },
+    "visual_style": {
+      "colors": {
+        "primary": "#FFFFFF",
+        "secondary": "#D4AF37",
+        "background": "#1a1a1a"
+      },
+      "typography": {
+        "name_size": 5,
+        "title_size": 3,
+        "details_size": 2.5
+      }
+    }
   }
 ]
