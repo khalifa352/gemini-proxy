@@ -1,23 +1,29 @@
-[
-  {
-    "id": "trifold_brochure",
-    "allowed_layout_sets": [
-      "trifold_3col_pro"
-    ],
-    "constraints": {
-      "size": "A4_Landscape",
-      "folds": 2,
-      "sides": 2
+{
+  "template_name": "professional_trifold_brochure",
+  "canvas_size": {
+    "width": 297,
+    "height": 210,
+    "unit": "mm",
+    "viewBox": "0 0 1122 794"
+  },
+  "layout": {
+    "type": "trifold",
+    "columns": 3,
+    "column_width": 374,
+    "safe_margin": 40,
+    "fold_lines": [374, 748]
+  },
+  "design_elements": {
+    "background": "geometric_gradients",
+    "typography": {
+      "headline_scale": 0.08,
+      "body_scale": 0.035,
+      "alignment": "right_to_left"
     }
   },
-  {
-    "id": "bifold_brochure",
-    "allowed_layout_sets": [
-      "wave_header_pro"
-    ],
-    "constraints": {
-      "size": "A4_Folded_A5",
-      "folds": 1
-    }
-  }
-]
+  "structure": [
+    {"id": "panel_1", "role": "back_cover", "x_range": [0, 374]},
+    {"id": "panel_2", "role": "inside_flap", "x_range": [374, 748]},
+    {"id": "panel_3", "role": "front_cover", "x_range": [748, 1122]}
+  ]
+}
