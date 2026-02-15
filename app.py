@@ -5,22 +5,19 @@ import google.generativeai as genai
 
 app = Flask(__name__)
 
-# 1. إعداد الاتصال بـ Gemini (استخدام المفتاح المعرف في Render)
+# 1. إعداد الاتصال بـ Gemini
 API_KEY = os.environ.get('GOOGLE_API_KEY')
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-# استخدام موديل 2026 المستقر والأسرع
 model = genai.GenerativeModel("gemini-2.0-flash")
 
-# 2. نظام البحث المتساهل (Lenient Search) عن الوصفات
+# 2. نظام البحث المتساهل عن الوصفات
 def get_recipe_lenient(category_name, user_prompt):
     base_path = "recipes"
-    # تحويل النصوص لصغيرة لضمان المطابقة
     cat = (category_name or "").lower()
     prompt = (user_prompt or "").lower()
     
-    # خريطة الربط المرنة بين الكلمات والمجلدات
     flexible_map = {
         "card": "print/business_cards.json",
         "flyer": "print/flyers.json",
@@ -40,21 +37,11 @@ def get_recipe_lenient(category_name, user_prompt):
     }
     
     selected_path = None
-
-    # البحث أولاً في التصنيف المختار من الواجهة
     for key, rel_path in flexible_map.items():
-        if key in cat:
+        if key in cat or key in prompt:
             selected_path = os.path.join(base_path, rel_path)
             break
-
-    # إذا لم يجد، يبحث في نص "الطلب" نفسه
-    if not selected_path:
-        for key, rel_path in flexible_map.items():
-            if key in prompt:
-                selected_path = os.path.join(base_path, rel_path)
-                break
                 
-    # الحل الأخير (Fallback): إذا لم يجد أي شيء، استخدم قالب الفلاير كقالب عام
     if not selected_path or not os.path.exists(selected_path):
         selected_path = os.path.join(base_path, "print/flyers.json")
         
@@ -62,7 +49,7 @@ def get_recipe_lenient(category_name, user_prompt):
 
 @app.route('/')
 def index():
-    return "Almonjez Design Engine is Live & Online! 🚀"
+    return "Almonjez Design Engine is Live! 🚀"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -70,44 +57,50 @@ def generate():
         data = request.json
         user_msg = data.get('message', '')
         cat_name = data.get('category', 'general')
-        width = data.get('width', 800)
-        height = data.get('height', 600)
+        width = int(data.get('width', 800))
+        height = int(data.get('height', 600))
         
-        # 🎯 سحب الوصفة المناسبة من مكتبة GitHub
+        # حساب أحجام خطوط متناسبة (تجنب الخطوط الضخمة)
+        base_dim = min(width, height)
+        max_h_font = int(base_dim * 0.08) # العنوان 8% من أصغر ضلع
+        max_b_font = int(base_dim * 0.04) # النص 4% من أصغر ضلع
+        
         recipe_path = get_recipe_lenient(cat_name, user_msg)
-        
         recipe_data = {}
         if os.path.exists(recipe_path):
             with open(recipe_path, 'r', encoding='utf-8') as f:
                 recipe_data = json.load(f)
         
-        # بناء تعليمات النظام الصارمة لضمان جودة الـ SVG
-                    let strictPrompt = """
-    \(prompt)
-    - TEXT WRAPPING: Mandatory! Split long text into 3-4 words per line using <tspan>.
-    - ALIGNMENT: Start text from the right (x = 90% of width).
-    - FONT SIZE: Keep it elegant and professional. Do NOT make it huge. 
-    - MARGINS: 10% safety padding on all sides.
-    """
-
-       
-
+        # بناء تعليمات النظام (تصحيح تداخل Swift)
+        system_instruction = f"""
+        Context: You are the 'Almonjez Design Engine'.
+        Canvas Size: {width}x{height}
         
-        # إرسال الطلب لـ Gemini
+        STRICT TYPOGRAPHY RULES:
+        1. MARGINS: Keep all elements within a 10% safety margin.
+        2. FONT SIZE: Headlines MAX {max_h_font}px, Body MAX {max_b_font}px. Keep it elegant.
+        3. ARABIC RTL: Use x="{width * 0.9}" with 'text-anchor: end' and 'direction: rtl' for all Arabic.
+        4. TEXT WRAPPING: Use <tspan> for long sentences. Never let text exceed {width * 0.8}px in width.
+        5. VIEWBOX: Ensure <svg viewBox="0 0 {width} {height}">.
+        
+        Recipe: {json.dumps(recipe_data)}
+        User Request: {user_msg}
+        
+        Output ONLY the raw SVG code.
+        """
+        
         response = model.generate_content(system_instruction)
 
         if response.text:
-            # تنظيف أي علامات تنسيق زائدة من الرد
             clean_svg = response.text.replace("```svg", "").replace("```", "").strip()
             return jsonify({"response": clean_svg})
         else:
-            return jsonify({"error": "Empty response from AI"}), 500
+            return jsonify({"error": "Empty response"}), 500
 
     except Exception as e:
-        print(f"‼️ CRITICAL ERROR: {str(e)}")
+        print(f"‼️ ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # تشغيل السيرفر على البورت المخصص لـ Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
