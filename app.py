@@ -82,24 +82,14 @@ def generate():
                 recipe_data = json.load(f)
         
         # بناء تعليمات النظام الصارمة لضمان جودة الـ SVG
-                system_instruction = f"""
-        Context: You are the 'Almonjez Design Engine'. 
-        Task: Create a professional SVG.
-        
-        TYPOGRAPHY RULES:
-        1. SAFE ZONE: Keep ALL text at least {width * 0.05}px away from edges.
-        2. NO OVERFLOW: If a text string is long, split it into multiple <tspan> elements or use smaller font-size.
-        3. DYNAMIC FONT: Header size should be approx {height * 0.08}px, Body size approx {height * 0.04}px.
-        4. ARABIC RENDERING: Use 'direction: rtl' and 'text-anchor: end'. Use x="{width * 0.9}" for right-aligned text.
-        5. ALIGNMENT: Ensure text is centered or logically aligned within its background shapes.
-        
-        CANVAS SPECS:
-        Width: {width}, Height: {height}
-        Recipe Geometry: {json.dumps(recipe_data)}
-        
-        User Request: {user_msg}
-        
-        Return ONLY pure SVG code.
+                    let strictPrompt = """
+    \(prompt)
+    - TEXT WRAPPING: Mandatory! Split long text into 3-4 words per line using <tspan>.
+    - ALIGNMENT: Start text from the right (x = 90% of width).
+    - FONT SIZE: Keep it elegant and professional. Do NOT make it huge. 
+    - MARGINS: 10% safety padding on all sides.
+    """
+
         """
 
         
