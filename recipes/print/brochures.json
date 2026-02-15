@@ -1,29 +1,47 @@
-{
-  "template_name": "professional_trifold_brochure",
-  "canvas_size": {
-    "width": 297,
-    "height": 210,
-    "unit": "mm",
-    "viewBox": "0 0 1122 794"
-  },
-  "layout": {
-    "type": "trifold",
-    "columns": 3,
-    "column_width": 374,
-    "safe_margin": 40,
-    "fold_lines": [374, 748]
-  },
-  "design_elements": {
-    "background": "geometric_gradients",
-    "typography": {
-      "headline_scale": 0.08,
-      "body_scale": 0.035,
-      "alignment": "right_to_left"
+[
+  {
+    "id": "brochure_trifold_clean",
+    "type": "Trifold Brochure",
+    "canvas_size": {
+      "width": 3508,
+      "height": 2480,
+      "viewBox": "0 0 297 210",
+      "unit": "mm"
+    },
+    "layout_geometry": {
+      "left_panel": {
+        "type": "rect",
+        "x": 0,
+        "y": 0,
+        "width": 99,
+        "height": 210,
+        "fill": "#F5F5F5"
+      },
+      "center_panel": {
+        "type": "rect",
+        "x": 99,
+        "y": 0,
+        "width": 99,
+        "height": 210,
+        "fill": "#FFFFFF"
+      },
+      "right_panel": {
+        "type": "rect",
+        "x": 198,
+        "y": 0,
+        "width": 99,
+        "height": 210,
+        "fill": "#E8EAF6"
+      },
+      "fold_lines": [
+        {"x1": 99, "y1": 0, "x2": 99, "y2": 210, "stroke": "#CCCCCC", "dash": "5,5"},
+        {"x1": 198, "y1": 0, "x2": 198, "y2": 210, "stroke": "#CCCCCC", "dash": "5,5"}
+      ]
+    },
+    "visual_style": {
+      "text_align": "center",
+      "columns": 3,
+      "primary_color": "#3F51B5"
     }
-  },
-  "structure": [
-    {"id": "panel_1", "role": "back_cover", "x_range": [0, 374]},
-    {"id": "panel_2", "role": "inside_flap", "x_range": [374, 748]},
-    {"id": "panel_3", "role": "front_cover", "x_range": [748, 1122]}
-  ]
-}
+  }
+]
