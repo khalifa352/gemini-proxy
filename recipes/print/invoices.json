@@ -1,8 +1,44 @@
 [
   {
-    "id": "inv_std",
-    "allowed_layout_sets": [
-      "letterhead_official"
-    ]
+    "id": "invoice_corporate",
+    "type": "Invoice",
+    "canvas_size": {
+      "width": 2480,
+      "height": 3508,
+      "viewBox": "0 0 595 842",
+      "unit": "pt"
+    },
+    "layout_geometry": {
+      "header_block": {
+        "type": "rect",
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 120,
+        "fill": "#0052cc"
+      },
+      "table_header_strip": {
+        "type": "rect",
+        "x": 40,
+        "y": 250,
+        "width": 515,
+        "height": 30,
+        "fill": "#f0f0f0"
+      },
+      "total_block": {
+        "type": "rect",
+        "x": 350,
+        "y": 650,
+        "width": 200,
+        "height": 40,
+        "fill": "#e6f7ff",
+        "stroke": "#0052cc"
+      }
+    },
+    "visual_style": {
+      "primary_color": "#0052cc",
+      "secondary_color": "#555555",
+      "table_row_height": 25
+    }
   }
 ]
