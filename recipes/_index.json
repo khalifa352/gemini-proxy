@@ -1,0 +1,20 @@
+{
+  "version": "3.0 (Full Suite)",
+  "core": {
+    "layout_sets": "recipes/core/layout_sets.json",
+    "shape_library": "recipes/core/shape_library.json",
+    "content_rules": "recipes/core/content_rules.json",
+    "typography": "recipes/core/typography_system.json",
+    "colors": "recipes/core/color_system.json"
+  },
+  "print": {
+    "flyers": "recipes/print/flyers.json",
+    "brochures": "recipes/print/brochures.json",
+    "stationery": "recipes/print/stationery.json",
+    "signage": "recipes/print/signage.json",
+    "business_cards": "recipes/print/business_cards.json",
+    "invoices": "recipes/print/invoices.json",
+    "menus": "recipes/print/menus.json",
+    "certificates": "recipes/print/certificates.json"
+  }
+}

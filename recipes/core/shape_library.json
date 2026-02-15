@@ -1,0 +1,32 @@
+[
+  {
+    "id": "footer_wave",
+    "type": "shape",
+    "zone": "bottom",
+    "structure": {
+      "layers": [
+        {
+          "d_base": "M0 842 L595 842 L595 750 Q297 800 0 750 Z",
+          "fill": "{{COLOR_1}}"
+        }
+      ]
+    }
+  },
+  {
+    "id": "circle_accent",
+    "type": "shape",
+    "zone": "corner",
+    "structure": {
+      "layers": [
+        {
+          "element": "circle",
+          "cx": "550",
+          "cy": "50",
+          "r": "100",
+          "fill": "{{ACCENT}}",
+          "opacity": 0.1
+        }
+      ]
+    }
+  }
+]

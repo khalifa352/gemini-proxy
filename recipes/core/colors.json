@@ -1,0 +1,14 @@
+[
+  {
+    "id": "corporate_blue",
+    "primary": "#0056b3",
+    "secondary": "#e3f2fd",
+    "accent": "#ffab00"
+  },
+  {
+    "id": "food_red",
+    "primary": "#d32f2f",
+    "secondary": "#fff8e1",
+    "accent": "#212121"
+  }
+]

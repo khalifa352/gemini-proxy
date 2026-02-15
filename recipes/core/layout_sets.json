@@ -1,0 +1,207 @@
+[
+  {
+    "id": "wave_header_pro",
+    "type": "layout_set",
+    "vibes": [
+      "corporate",
+      "clean"
+    ],
+    "logic": {
+      "text_safe_area": {
+        "top": 250,
+        "left": 40,
+        "right": 40,
+        "bottom": 60
+      }
+    },
+    "structure": {
+      "viewBox": "0 0 595 842",
+      "defs": [
+        "<linearGradient id='grad1' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='{{COLOR_1}}'/><stop offset='100%' stop-color='{{COLOR_2}}'/></linearGradient>"
+      ],
+      "layers": [
+        {
+          "d_base": "M0 0 L595 0 L595 {{H1}} C{{C1x}} {{C1y}} {{C2x}} {{C2y}} 0 {{H2}} Z",
+          "fill": "url(#grad1)",
+          "opacity": 1.0,
+          "z_index": 1
+        }
+      ]
+    },
+    "params": {
+      "H1": {
+        "min": 150,
+        "max": 220
+      },
+      "H2": {
+        "min": 170,
+        "max": 260
+      },
+      "C1x": {
+        "min": 360,
+        "max": 520
+      },
+      "C1y": {
+        "min": 190,
+        "max": 300
+      },
+      "C2x": {
+        "min": 120,
+        "max": 260
+      },
+      "C2y": {
+        "min": 90,
+        "max": 190
+      }
+    },
+    "content_rules": [
+      {
+        "if": {
+          "title_chars_gt": 50
+        },
+        "set": {
+          "H1": "min"
+        }
+      }
+    ]
+  },
+  {
+    "id": "trifold_3col_pro",
+    "type": "layout_set",
+    "vibes": [
+      "informative",
+      "structured"
+    ],
+    "logic": {
+      "orientation": "landscape",
+      "columns": 3,
+      "fold_lines": [
+        297,
+        594
+      ],
+      "text_safe_area": {
+        "top": 40,
+        "bottom": 40,
+        "inner_margin": 20
+      }
+    },
+    "structure": {
+      "viewBox": "0 0 842 595",
+      "layers": [
+        {
+          "d_base": "M561 0 L842 0 L842 595 L561 {{SLANT}} Z",
+          "fill": "{{COLOR_1}}",
+          "opacity": 1.0,
+          "z_index": 1
+        },
+        {
+          "d_base": "M280 0 L280 595",
+          "stroke": "#ccc",
+          "stroke_width": 1,
+          "stroke_dasharray": "5,5",
+          "z_index": 0
+        },
+        {
+          "d_base": "M561 0 L561 595",
+          "stroke": "#ccc",
+          "stroke_width": 1,
+          "stroke_dasharray": "5,5",
+          "z_index": 0
+        }
+      ]
+    },
+    "params": {
+      "SLANT": {
+        "min": 450,
+        "max": 550
+      }
+    }
+  },
+  {
+    "id": "rollup_banner_tall",
+    "type": "layout_set",
+    "vibes": [
+      "bold",
+      "event",
+      "marketing"
+    ],
+    "logic": {
+      "text_safe_area": {
+        "top": 150,
+        "bottom": 300
+      },
+      "contrast_mode": "high"
+    },
+    "structure": {
+      "viewBox": "0 0 850 2000",
+      "layers": [
+        {
+          "d_base": "M0 0 L850 0 L850 {{H_TOP}} Q425 {{CURVE}} 0 {{H_TOP}} Z",
+          "fill": "{{COLOR_1}}",
+          "opacity": 1.0,
+          "z_index": 1
+        },
+        {
+          "d_base": "M0 2000 L850 2000 L850 1850 L0 1850 Z",
+          "fill": "{{COLOR_2}}",
+          "opacity": 1.0,
+          "z_index": 1
+        }
+      ]
+    },
+    "params": {
+      "H_TOP": {
+        "min": 400,
+        "max": 600
+      },
+      "CURVE": {
+        "min": 650,
+        "max": 800
+      }
+    }
+  },
+  {
+    "id": "letterhead_official",
+    "type": "layout_set",
+    "vibes": [
+      "minimal",
+      "official"
+    ],
+    "logic": {
+      "text_safe_area": {
+        "top": 120,
+        "left": 50,
+        "right": 50,
+        "bottom": 80
+      },
+      "is_background_light": true
+    },
+    "structure": {
+      "viewBox": "0 0 595 842",
+      "layers": [
+        {
+          "d_base": "M0 0 L595 0 L595 15 L0 15 Z",
+          "fill": "{{COLOR_1}}",
+          "opacity": 1.0,
+          "z_index": 1
+        },
+        {
+          "element": "circle",
+          "cx": "297",
+          "cy": "421",
+          "r": "100",
+          "fill": "{{COLOR_2}}",
+          "opacity": 0.05,
+          "z_index": 0
+        },
+        {
+          "d_base": "M0 842 L595 842 L595 800 L0 800 Z",
+          "fill": "{{COLOR_1}}",
+          "opacity": 1.0,
+          "z_index": 1
+        }
+      ]
+    },
+    "params": {}
+  }
+]

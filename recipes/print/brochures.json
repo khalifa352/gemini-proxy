@@ -1,0 +1,23 @@
+[
+  {
+    "id": "trifold_brochure",
+    "allowed_layout_sets": [
+      "trifold_3col_pro"
+    ],
+    "constraints": {
+      "size": "A4_Landscape",
+      "folds": 2,
+      "sides": 2
+    }
+  },
+  {
+    "id": "bifold_brochure",
+    "allowed_layout_sets": [
+      "wave_header_pro"
+    ],
+    "constraints": {
+      "size": "A4_Folded_A5",
+      "folds": 1
+    }
+  }
+]

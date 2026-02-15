@@ -1,0 +1,21 @@
+[
+  {
+    "id": "letterhead_standard",
+    "allowed_layout_sets": [
+      "letterhead_official"
+    ],
+    "constraints": {
+      "size": "A4",
+      "writable_area": "high"
+    }
+  },
+  {
+    "id": "envelope_dl",
+    "allowed_layout_sets": [
+      "diagonal_split_modern"
+    ],
+    "constraints": {
+      "size": "DL (220x110mm)"
+    }
+  }
+]

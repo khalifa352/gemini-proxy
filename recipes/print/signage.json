@@ -1,0 +1,22 @@
+[
+  {
+    "id": "rollup_standard",
+    "allowed_layout_sets": [
+      "rollup_banner_tall"
+    ],
+    "constraints": {
+      "size": "85x200cm",
+      "resolution": "high",
+      "bleed": "bottom_heavy"
+    }
+  },
+  {
+    "id": "banner_landscape",
+    "allowed_layout_sets": [
+      "wave_header_pro"
+    ],
+    "constraints": {
+      "size": "300x100cm"
+    }
+  }
+]

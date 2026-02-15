@@ -1,0 +1,8 @@
+[
+  {
+    "id": "inv_std",
+    "allowed_layout_sets": [
+      "letterhead_official"
+    ]
+  }
+]
