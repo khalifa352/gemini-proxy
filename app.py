@@ -1,13 +1,13 @@
 import os
 import json
 from flask import Flask, request, jsonify
-# المكتبة الأحدث لعام 2026
+# استخدام مكتبة جوجل الحديثة 2026
 from google import genai
 from google.genai import types
 
 app = Flask(__name__)
 
-# 1. إعداد العميل الجديد
+# 1. إعداد العميل
 API_KEY = os.environ.get('GOOGLE_API_KEY')
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
@@ -15,6 +15,7 @@ def get_recipe_lenient(category_name, user_prompt):
     base_path = "recipes"
     cat = (category_name or "").lower()
     prompt = (user_prompt or "").lower()
+    
     flexible_map = {
         "card": "print/business_cards.json",
         "flyer": "print/flyers.json",
@@ -22,14 +23,17 @@ def get_recipe_lenient(category_name, user_prompt):
         "menu": "print/menus.json",
         "invoice": "print/invoices.json"
     }
+    
     for key, path in flexible_map.items():
         if key in cat or key in prompt:
             full_path = os.path.join(base_path, path)
             if os.path.exists(full_path): return full_path
+            
+    # Fallback default
     return os.path.join(base_path, "print/flyers.json")
 
 @app.route('/')
-def home(): return "Almonjez Engine 2026 is Live! 🚀"
+def home(): return "Almonjez Ultimate Engine is Live! 🚀"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -41,48 +45,89 @@ def generate():
         cat_name = data.get('category', 'general')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
+        # 1. تحديد مسار الملف
         recipe_path = get_recipe_lenient(cat_name, user_msg)
-        recipe_data = {}
+        recipe_data = {} # القيمة الافتراضية
+        
+        # 2. قراءة الملف بحذر شديد (Critical Fix for List vs Dict)
         if os.path.exists(recipe_path):
-            with open(recipe_path, 'r', encoding='utf-8') as f:
-                recipe_data = json.load(f)
+            try:
+                with open(recipe_path, 'r', encoding='utf-8') as f:
+                    raw_content = json.load(f)
+                    
+                    # 🛡️ الفحص الأمني: هل هو قائمة أم قاموس؟
+                    if isinstance(raw_content, list):
+                        # إذا كان قائمة، نأخذ العنصر الأول
+                        if len(raw_content) > 0:
+                            recipe_data = raw_content[0]
+                            print(f"ℹ️ Loaded first recipe from list: {recipe_path}")
+                        else:
+                            print(f"⚠️ Warning: Recipe list is empty in {recipe_path}")
+                    elif isinstance(raw_content, dict):
+                        # إذا كان قاموساً، نستخدمه كما هو
+                        recipe_data = raw_content
+                    else:
+                        print(f"⚠️ Warning: Unknown JSON format in {recipe_path}")
+                        
+            except Exception as e:
+                print(f"⚠️ Error parsing JSON file: {e}")
+                # نستمر بقاموس فارغ لتجنب توقف السيرفر
+                recipe_data = {}
 
-              # تعليمات تجعل الوصفة هي الأساس
+        # الآن recipe_data هو قاموس { } بالتأكيد، ولن يحدث خطأ .get()
+        
+        # استخراج الأبعاد بأمان
+        # نستخدم canvas_size الموجود في الوصفة، أو نستخدم الأبعاد المرسلة من التطبيق كبديل
+        canvas_info = recipe_data.get('canvas_size', {})
+        view_box = canvas_info.get('viewBox', f'0 0 {width} {height}')
+
+        # 🧠 التعليمات المدمجة
         sys_instructions = f"""
-        You are the 'Almonjez Design Architect'. 
-        You MUST use the attached JSON Recipe as your MASTER BLUEPRINT.
+        Role: You are 'Almonjez Master Architect'.
+        Task: Create a print-ready SVG based on the User Request and the Master Blueprint (JSON).
         
-        1. STRUCTURE: Draw every 'panel' or 'section' defined in the JSON using <rect> or <path>.
-        2. COLORS: Use the 'visual_style' or 'color_vibe' from the JSON.
-        3. DIMENSIONS: Your <svg> viewBox must be exactly {recipe_data.get('canvas_size', {}).get('viewBox', f'0 0 {width} {height}')}.
-        4. TEXT: Place the user's text ONLY inside the designated safe zones from the JSON.
+        PHASE 1: GEOMETRY & LAYOUT (The Blueprint)
+        - STRICTLY follow the 'layout_geometry', 'panels', and 'dimensions' from the JSON.
+        - Draw the background shapes FIRST using <rect> or <path>.
+        - Apply the colors defined in 'visual_style' (gradients, solid fills).
+        - Use the specific paths provided in the JSON for headers/footers.
         
-        RECIPE DATA (The Blueprint):
-        {json.dumps(recipe_data)}
+        PHASE 2: TYPOGRAPHY (The Content)
+        - CRITICAL: NEVER use standard <text> tags for body text.
+        - USE <foreignObject> for all text blocks to ensure Arabic wrapping.
+        - Syntax:
+          <foreignObject x=".." y=".." width=".." height="auto">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl; text-align:right; font-family:sans-serif; color:black; word-wrap:break-word;">
+              CONTENT_HERE
+            </div>
+          </foreignObject>
         
-        USER REQUEST:
-        {user_msg}
+        PHASE 3: SPECS
+        - ViewBox: {view_box}
+        - Output: ONLY raw SVG code. No markdown.
         
-        Final Step: Output ONLY the SVG code. Make it look like a finished, professional print-ready file.
+        Blueprint Data: {json.dumps(recipe_data)}
         """
 
-
-        # طلب التوليد باستخدام المكتبة الجديدة
+        # التوليد
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=sys_instructions)
+            config=types.GenerateContentConfig(
+                system_instruction=sys_instructions,
+                temperature=0.7
+            )
         )
 
         svg_output = response.text.replace("```svg", "").replace("```", "").strip()
-        print(f"✅ Design Generated: {len(svg_output)} bytes")
+        print(f"✅ Generated Design: {len(svg_output)} bytes")
         return jsonify({"response": svg_output})
 
     except Exception as e:
         print(f"‼️ ERROR: {str(e)}")
+        # إرجاع الخطأ بتفاصيل للمساعدة في التشخيص
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # تأكد من أن السيرفر يفتح المنفذ الصحيح لـ Render
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
