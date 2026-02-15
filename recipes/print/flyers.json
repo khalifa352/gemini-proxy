@@ -1,45 +1,35 @@
 [
   {
-    "id": "flyer_standard_a4",
-    "description": "Professional Corporate Flyer with Wave Header",
-    "canvas_size": {
-      "width": 2480,
-      "height": 3508,
-      "viewBox": "0 0 595 842",
-      "unit": "pt"
-    },
-    "layout_geometry": {
-      "header": {
-        "type": "path",
-        "path_data": "M0,0 L595,0 L595,150 Q297,250 0,150 Z",
-        "fill": "primary_gradient"
-      },
-      "footer": {
-        "type": "rect",
-        "x": 0,
-        "y": 780,
-        "width": 595,
-        "height": 62,
-        "fill": "secondary_color"
-      },
-      "content_area": {
-        "x": 40,
-        "y": 200,
-        "width": 515,
-        "height": 550
-      }
-    },
-    "visual_style": {
-      "colors": {
-        "primary": "#1a237e",
-        "secondary": "#ff6f00",
-        "background": "#ffffff"
-      },
-      "typography": {
-        "headline_size": 48,
-        "body_size": 14,
-        "font_family": "Cairo, sans-serif"
-      }
+    "id": "flyer_gen_fluid_waves",
+    "description": "نظام توليد فلايرات بمنحنيات ناعمة",
+    "suitable_for": "Creative, Marketing, Medical, Spa, Events",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "generative_rules": {
+      "header": { "instruction": "Draw a deep Bezier curve header. Start (0,0) to (595,0). Control point Y must be random (200-400).", "style": "Gradient fill" },
+      "footer": { "instruction": "Draw a wavy footer intersecting the bottom edge.", "height": "15% of canvas" },
+      "mood": "Organic, smooth, approachable."
+    }
+  },
+  {
+    "id": "flyer_gen_geometric_sharp",
+    "description": "نظام توليد فلايرات هندسية حادة (مضلعات)",
+    "suitable_for": "Corporate, Construction, Law, Industrial, Real Estate",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "generative_rules": {
+      "header": { "instruction": "Draw overlapping polygons/triangles at the top. Use sharp angles (30-60 degrees).", "opacity": "Mix solid and 0.8 opacity" },
+      "accents": { "instruction": "Add a vertical sidebar or diagonal slash lines.", "color": "Contrast accent" },
+      "mood": "Strong, trustworthy, structured."
+    }
+  },
+  {
+    "id": "flyer_gen_grid_content",
+    "description": "نظام شبكي للنصوص الكثيرة والقوائم",
+    "suitable_for": "Product Lists, Menus, detailed Services, Data-heavy",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "generative_rules": {
+      "header": { "instruction": "Simple rectangular header strip (height 100-120). Focus on title.", "style": "Solid color" },
+      "body": { "instruction": "Divide the page into a 2-column or 3-column grid layout for content boxes.", "gap": "20px" },
+      "mood": "Clean, organized, informative."
     }
   }
 ]
