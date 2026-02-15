@@ -1,8 +1,46 @@
 [
   {
-    "id": "menu_std",
-    "allowed_layout_sets": [
-      "wave_header_pro"
-    ]
+    "id": "menu_elegant_frame",
+    "type": "Restaurant Menu",
+    "canvas_size": {
+      "width": 2480,
+      "height": 3508,
+      "viewBox": "0 0 595 842",
+      "unit": "pt"
+    },
+    "layout_geometry": {
+      "border_frame": {
+        "type": "rect",
+        "x": 20,
+        "y": 20,
+        "width": 555,
+        "height": 802,
+        "fill": "none",
+        "stroke": "#D4AF37",
+        "stroke_width": 3
+      },
+      "header_bg": {
+        "type": "rect",
+        "x": 25,
+        "y": 25,
+        "width": 545,
+        "height": 100,
+        "fill": "#222222"
+      },
+      "divider_line": {
+        "type": "line",
+        "x1": 100,
+        "y1": 140,
+        "x2": 495,
+        "y2": 140,
+        "stroke": "#D4AF37"
+      }
+    },
+    "visual_style": {
+      "background": "#FFFDF5",
+      "text_color": "#333333",
+      "price_color": "#D4AF37",
+      "font_vibe": "Serif"
+    }
   }
 ]
