@@ -5,31 +5,13 @@ import google.generativeai as genai
 
 app = Flask(__name__)
 
-# 1. إعداد المفتاح (تأكد من وجوده في Render باسم GOOGLE_API_KEY)
+# 1. إعداد المفتاح
 API_KEY = os.environ.get('GOOGLE_API_KEY')
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-# 2. إعداد الموديل مع إيقاف فلاتر الأمان لضمان توليد الكود دون حجب
-generation_config = {
-    "temperature": 0.7,
-    "top_p": 0.95,
-    "top_k": 40,
-    "max_output_tokens": 8192,
-}
-
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-]
-
-model = genai.GenerativeModel(
-    ‏model = genai.GenerativeModel('gemini-2.0-flash') # استخدام النسخة المستقرة
-    generation_config=generation_config,
-    safety_settings=safety_settings
-)
+# 2. استخدام الموديل المستقر (تم تنظيف الحروف المخفية هنا)
+model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
 @app.route('/')
 def index():
@@ -45,22 +27,27 @@ def generate():
         if not user_message:
             return jsonify({"error": "No message provided"}), 400
 
-        # تبسيط تعليمات النظام
-        system_instruction = """
-        You are 'Almonjez Design Engine'. 
-        Generate ONLY professional SVG code. 
-        Use RTL for Arabic. 
-        Do not explain anything, just output the code starting with <svg>.
-        """
-
-        full_prompt = f"{system_instruction}\n\nUser Prompt: {user_message}\nLayout Template: {template_from_app}"
+        # بناء الطلب بوضوح
+        prompt = f"""
+        System: You are 'Almonjez Design Engine'. 
+        Task: Generate professional SVG code. 
+        Rules: 
+        - Use RTL for Arabic text.
+        - Output ONLY the SVG code.
+        - Start with <svg> and end with </svg>.
         
-        response = model.generate_content(full_prompt)
+        Layout Info: {template_from_app}
+        User Request: {user_message}
+        """
+        
+        response = model.generate_content(prompt)
 
         if response.text:
-            return jsonify({"response": response.text})
+            # تنظيف الكود من أي زوائد
+            clean_svg = response.text.replace("```svg", "").replace("```", "").strip()
+            return jsonify({"response": clean_svg})
         else:
-            return jsonify({"error": "Gemini returned empty response"}), 500
+            return jsonify({"error": "Empty response from AI"}), 500
 
     except Exception as e:
         print(f"‼️ ERROR: {str(e)}")
