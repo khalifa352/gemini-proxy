@@ -1,5 +1,4 @@
 flask
-reportlab
 gunicorn
 pillow
-google-generativeai
+google-genai
