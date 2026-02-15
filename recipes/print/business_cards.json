@@ -1,44 +1,35 @@
 [
   {
-    "id": "card_luxury_gold",
-    "type": "Business Card",
-    "canvas_size": {
-      "width": 1050,
-      "height": 600,
-      "viewBox": "0 0 85 55",
-      "unit": "mm"
-    },
-    "layout_geometry": {
-      "background": {
-        "type": "rect",
-        "fill": "#1a1a1a",
-        "width": "100%",
-        "height": "100%"
-      },
-      "gold_accent": {
-        "type": "path",
-        "path_data": "M50,0 L85,0 L85,55 L30,55 Z",
-        "fill": "#D4AF37",
-        "opacity": 0.9
-      },
-      "logo_area": {
-        "x": 5,
-        "y": 5,
-        "width": 20,
-        "height": 20
-      }
-    },
-    "visual_style": {
-      "colors": {
-        "primary": "#FFFFFF",
-        "secondary": "#D4AF37",
-        "background": "#1a1a1a"
-      },
-      "typography": {
-        "name_size": 5,
-        "title_size": 3,
-        "details_size": 2.5
-      }
+    "id": "card_gen_luxury_vip",
+    "description": "كرت فخم ألوان داكنة وذهبية",
+    "suitable_for": "CEO, VIP, High-end Brands, Jewelry, Law",
+    "canvas_size": { "width": 1050, "height": 600, "viewBox": "0 0 1050 600" },
+    "generative_rules": {
+      "background": { "instruction": "Dark solid background (Black, Navy, Dark Grey).", "texture": "Optional subtle pattern" },
+      "decor": { "instruction": "Gold/Silver foil effect lines. Minimalist placement (borders or one diagonal line).", "gradient": "Gold Linear Gradient" },
+      "layout": "Center aligned or Left aligned with massive whitespace."
+    }
+  },
+  {
+    "id": "card_gen_modern_tech",
+    "description": "كرت عصري تقني ألوان زاهية",
+    "suitable_for": "Tech, Startups, Design, Freelancers, Marketing",
+    "canvas_size": { "width": 1050, "height": 600, "viewBox": "0 0 1050 600" },
+    "generative_rules": {
+      "background": { "instruction": "White or Light Grey background." },
+      "shapes": { "instruction": "Abstract geometric shapes (circles/pills) on the edges.", "color": "Brand primary colors" },
+      "layout": "Asymmetric. Allow space for QR code if needed."
+    }
+  },
+  {
+    "id": "card_gen_minimalist_clean",
+    "description": "كرت بسيط جداً وواضح",
+    "suitable_for": "Doctors, Consultants, Minimalist Brands",
+    "canvas_size": { "width": 1050, "height": 600, "viewBox": "0 0 1050 600" },
+    "generative_rules": {
+      "background": { "instruction": "Pure White." },
+      "accent": { "instruction": "A single colored bar (top, bottom, or side). Thickness: 20-50px.", "color": "One solid accent color" },
+      "typography": "Focus on strong, clean fonts. No distractions."
     }
   }
 ]
