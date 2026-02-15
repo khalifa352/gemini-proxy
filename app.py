@@ -90,7 +90,7 @@ def generate():
     - MARGINS: 10% safety padding on all sides.
     """
 
-        """
+       
 
         
         # إرسال الطلب لـ Gemini
