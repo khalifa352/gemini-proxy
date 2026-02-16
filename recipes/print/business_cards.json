@@ -1,35 +1,297 @@
 [
   {
-    "id": "card_gen_luxury_vip",
-    "description": "كرت فخم ألوان داكنة وذهبية",
-    "suitable_for": "CEO, VIP, High-end Brands, Jewelry, Law",
-    "canvas_size": { "width": 1050, "height": 600, "viewBox": "0 0 1050 600" },
+    "id": "card_global_rules_v1",
+    "description": "قواعد جودة عامة تُحقن في كل وصفة بطاقة",
+    "suitable_for": "All business cards",
+    "canvas_size": {
+      "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 },
+      "px_300dpi": { "width": 1063, "height": 591 },
+      "viewBox": "0 0 90 50"
+    },
+    "global_quality_rules": {
+      "rtl": true,
+      "print_ready": { "bleed_mm": 3, "safe_mm": 4, "min_font_pt": 6.5, "avoid_edge_text": true },
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["monochromatic", "analogous"], "forbidden": ["random_multi_color"] },
+      "anti_repetition": {
+        "min_changes_required": 4,
+        "changeable_parameters": ["layout", "palette_variant", "accent_location", "typography_scale", "icon_style", "pattern_density"]
+      },
+      "typography_hierarchy": {
+        "levels": ["name", "role", "company", "contacts"],
+        "name_prominence": "highest",
+        "line_height": "1.15-1.45"
+      },
+      "icon_policy": { "use_icons": "optional", "style": "outline_or_simple", "no_random_icons": true }
+    }
+  },
+
+  // =========================
+  //  ✅ Minimal / Swiss / Clean (10)
+  // =========================
+  {
+    "id": "card_minimal_swiss_left_align",
+    "description": "Minimal Swiss: نص مرتب + مساحات بيضاء + خط فاصل رفيع",
+    "suitable_for": "Corporate, Consulting, Legal, Tech",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
     "generative_rules": {
-      "background": { "instruction": "Dark solid background (Black, Navy, Dark Grey).", "texture": "Optional subtle pattern" },
-      "decor": { "instruction": "Gold/Silver foil effect lines. Minimalist placement (borders or one diagonal line).", "gradient": "Gold Linear Gradient" },
-      "layout": "Center aligned or Left aligned with massive whitespace."
+      "layout": { "type": "swiss_grid", "columns": 6, "gutter_mm": "2-3", "alignment": "RTL-aware" },
+      "elements": {
+        "name": { "position": "top-right", "weight": "bold" },
+        "role": { "position": "under_name", "opacity": "0.75-0.9" },
+        "divider": { "type": "thin_line", "position": "mid", "stroke_mm": "0.2-0.35" },
+        "contacts": { "position": "bottom-right", "stack": "2-3 lines" }
+      },
+      "palette_suggestions": ["#0F172A + #FFFFFF + #2563EB", "#111827 + #F9FAFB + #10B981"],
+      "mood": "Clean, precise, premium minimal."
     }
   },
   {
-    "id": "card_gen_modern_tech",
-    "description": "كرت عصري تقني ألوان زاهية",
-    "suitable_for": "Tech, Startups, Design, Freelancers, Marketing",
-    "canvas_size": { "width": 1050, "height": 600, "viewBox": "0 0 1050 600" },
+    "id": "card_minimal_centered_monoline",
+    "description": "Minimal Center: كل شيء في الوسط + سطر تواصل واحد أسفل",
+    "suitable_for": "Personal brand, Freelancers, Designers",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
     "generative_rules": {
-      "background": { "instruction": "White or Light Grey background." },
-      "shapes": { "instruction": "Abstract geometric shapes (circles/pills) on the edges.", "color": "Brand primary colors" },
-      "layout": "Asymmetric. Allow space for QR code if needed."
+      "layout": { "type": "centered", "white_space_ratio": "0.45-0.60" },
+      "elements": {
+        "name": { "position": "center", "size_priority": "high" },
+        "company": { "position": "under_name", "style": "small_caps_optional" },
+        "contacts": { "position": "bottom-center", "format": "one_line_with_separators" }
+      },
+      "palette_suggestions": ["#111111 + #FFFFFF + #C89B3C", "#0B1F3B + #FFFFFF + #9CA3AF"],
+      "mood": "Elegant, calm."
     }
   },
   {
-    "id": "card_gen_minimalist_clean",
-    "description": "كرت بسيط جداً وواضح",
-    "suitable_for": "Doctors, Consultants, Minimalist Brands",
-    "canvas_size": { "width": 1050, "height": 600, "viewBox": "0 0 1050 600" },
+    "id": "card_minimal_corner_mark",
+    "description": "Minimal: علامة زاوية صغيرة (Corner Mark) + نص بسيط",
+    "suitable_for": "Corporate, Studio, Architecture",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
     "generative_rules": {
-      "background": { "instruction": "Pure White." },
-      "accent": { "instruction": "A single colored bar (top, bottom, or side). Thickness: 20-50px.", "color": "One solid accent color" },
-      "typography": "Focus on strong, clean fonts. No distractions."
+      "decor": { "type": "corner_L_marks", "corners": "2", "stroke_mm": "0.35-0.55", "opacity": "0.55-0.8" },
+      "layout": { "type": "right_stack", "padding_mm": "4-6" },
+      "palette_suggestions": ["#0F172A + #FFFFFF + #F59E0B", "#1E3A8A + #FFFFFF + #10B981"],
+      "mood": "Modern, disciplined."
     }
-  }
-]
+  },
+
+  // =========================
+  //  ✅ Curves / Layered Waves (8) — بنفس فكرتك لكن للبطاقات
+  // =========================
+  {
+    "id": "card_curve_layers_bottom",
+    "description": "منحنيات طبقات متدرجة أسفل البطاقة (نظيفة وممدودة)",
+    "suitable_for": "Beauty, Medical, Marketing, Events, Creative",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "curve_layering_system": {
+        "layer_count": "3-5",
+        "max_control_points": 6,
+        "offset_mm": "1.2-2.6",
+        "scale_range": "1.02-1.06",
+        "coverage_ratio": "0.20-0.35",
+        "position": "bottom",
+        "edge_tip_ratio": "0.05-0.12",
+        "instruction": "Create one long smooth wave curve, duplicate layers with subtle offsets and same hue brightness steps. No bumps, no self-intersection."
+      },
+      "text_zone": { "position": "top-right", "keep_clear": true, "min_clear_ratio": "0.60" },
+      "palette_suggestions": ["#0EA5E9 + #FFFFFF + #0F172A", "#14B8A6 + #FFFFFF + #1E293B"],
+      "mood": "Smooth, premium, friendly."
+    }
+  },
+  {
+    "id": "card_curve_layers_corner_swoosh",
+    "description": "Swoosh زاوية: منحنيات متدرجة في زاوية فقط + فراغ كبير",
+    "suitable_for": "Corporate modern, Creative, Tech",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "curve_layering_system": {
+        "layer_count": "3-4",
+        "offset_mm": "1.0-2.2",
+        "coverage_ratio": "0.15-0.28",
+        "position": "top-left_or_bottom-left",
+        "instruction": "Corner-only layered curves. Keep them subtle and long."
+      },
+      "layout": { "type": "swiss_minimal", "alignment": "RTL-aware" },
+      "palette_suggestions": ["#2563EB + #FFFFFF + #0B1F3B", "#6A11CB + #FFFFFF + #2575FC"],
+      "mood": "Dynamic but clean."
+    }
+  },
+
+  // =========================
+  //  ✅ Dark Premium / Black & Gold (6)
+  // =========================
+  {
+    "id": "card_dark_premium_gold_line",
+    "description": "أسود فاخر + خط ذهبي رفيع + نص أبيض نظيف",
+    "suitable_for": "Luxury, Perfume, Jewelry, VIP Services",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "background": { "type": "dark_solid_or_soft_gradient", "base": "#0B0B0B" },
+      "gold_element": { "type": "single_line_or_corner_frame", "stroke_mm": "0.25-0.5", "color": "#C89B3C" },
+      "typography": { "title": "white_or_gold", "avoid_heavy_effects": true },
+      "palette_suggestions": ["#0B0B0B + #FFFFFF + #C89B3C", "#111111 + #F5F5F5 + #B08D57"],
+      "mood": "VIP, elegant."
+    }
+  },
+  {
+    "id": "card_dark_glow_accent",
+    "description": "داكن + Glow خفيف خلف الاسم + Accent صغير فقط",
+    "suitable_for": "Night business, Events, Creatives",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "background": { "base": "#0F172A", "glow": { "opacity": "0.12-0.22", "position": "behind_name" } },
+      "accent": { "use": "small_badge_or_dot", "max_area_ratio": 0.06 },
+      "palette_suggestions": ["#0F172A + #FFFFFF + #00FFB3", "#111827 + #FFFFFF + #FF2D95"],
+      "mood": "Modern, energetic but controlled."
+    }
+  },
+
+  // =========================
+  //  ✅ Gradient / Glass / Tech (8)
+  // =========================
+  {
+    "id": "card_gradient_modern_blob",
+    "description": "تدرج حديث + Blob ضبابي واحد بعيد عن النص",
+    "suitable_for": "Tech, Startup, App, AI Services",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "background_gradient": { "colors": "2-3", "angle_deg": "25-150" },
+      "creativity_zone": {
+        "zone_ratio": "0.10-0.16",
+        "allowed_elements": ["soft_blob"],
+        "forbidden_elements": ["overlapping_text", "heavy_noise"],
+        "instruction": "One subtle blob only, placed away from text."
+      },
+      "text_card_optional": { "enabled": true, "style": "semi_transparent", "opacity": "0.75-0.88", "radius_mm": "2.5-4.5" },
+      "palette_suggestions": ["#6A11CB + #2575FC + #FFFFFF", "#00C6FF + #0072FF + #0B0B0B"],
+      "mood": "Futuristic, clean."
+    }
+  },
+  {
+    "id": "card_glassmorphism_two_cards",
+    "description": "Glassmorphism: بطاقتان شفافتان متداخلتان + نص واضح",
+    "suitable_for": "Modern Business, Architecture, Studio",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "cards": { "count": 2, "overlap": "slight", "opacity": "0.70-0.85", "stroke_opacity": "0.25-0.35" },
+      "background": { "type": "soft_gradient", "noise_opacity": "0.03-0.06" },
+      "palette_suggestions": ["#0EA5E9 + #111827 + #FFFFFF", "#14B8A6 + #0F172A + #F8FAFC"],
+      "mood": "Airy, premium tech."
+    }
+  },
+
+  // =========================
+  //  ✅ Photo / Brand mark / Logo area (6)
+  // =========================
+  {
+    "id": "card_logo_left_mark_clean",
+    "description": "شعار/علامة يسار + نص مرتب يمين (احترافي جدًا)",
+    "suitable_for": "Corporate, Agencies, Shops",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "logo_zone": { "position": "left", "ratio": "0.22-0.30", "shape": "circle_or_round_rect" },
+      "text_zone": { "position": "right", "stack": "name-role-company-contacts" },
+      "divider": { "type": "thin_line", "optional": true },
+      "palette_suggestions": ["#0B3D91 + #FFFFFF + #C89B3C", "#111827 + #FFFFFF + #F97316"],
+      "mood": "Brand-first, clean."
+    }
+  },
+  {
+    "id": "card_monogram_big_watermark",
+    "description": "Monogram كبير كـ watermark شفاف + نص فوقه",
+    "suitable_for": "Personal brand, Designers, Premium services",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "watermark": { "type": "monogram", "opacity": "0.05-0.12", "position": "center-left" },
+      "typography": { "name_prominent": true, "minimal_effects": true },
+      "palette_suggestions": ["#111111 + #FFFFFF + #C89B3C", "#0F172A + #F8FAFC + #2563EB"],
+      "mood": "Sophisticated, modern."
+    }
+  },
+
+  // =========================
+  //  ✅ Industry-specific Sets (12)
+  // =========================
+  {
+    "id": "card_medical_cross_watermark",
+    "description": "طبي: watermark صليب/رمز طبي خفيف + صندوق موعد مصغر",
+    "suitable_for": "Clinics, Doctors, Dental, Pharmacy",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "watermark": { "symbol": "medical", "opacity": "0.05-0.10" },
+      "appointment_chip": { "enabled": true, "shape": "pill", "accent_only": true, "text": "موعد / Appointment" },
+      "palette_suggestions": ["#0EA5E9 + #FFFFFF + #0F172A", "#14B8A6 + #FFFFFF + #1E293B"],
+      "mood": "Trustworthy, clean."
+    }
+  },
+  {
+    "id": "card_law_firm_serif_clean",
+    "description": "محاماة: طابع رسمي + خطوط رفيعة + تباين هادئ",
+    "suitable_for": "Law Firms, Notary, Consulting",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "layout": { "type": "formal_blocks", "symmetry": "soft" },
+      "decor": { "type": "thin_frame_optional", "stroke_mm": "0.2-0.35", "opacity": "0.35-0.55" },
+      "palette_suggestions": ["#111111 + #F5F5F5 + #B08D57", "#0B1F3B + #FFFFFF + #9CA3AF"],
+      "mood": "Serious, prestigious."
+    }
+  },
+  {
+    "id": "card_construction_geometric",
+    "description": "مقاولات: أشكال هندسية قوية + شريط Accent واضح",
+    "suitable_for": "Construction, Industrial, Real Estate",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "polygons": { "count": "2-5", "angle_deg": "25-60", "opacity_mix": ["1.0", "0.85", "0.70"] },
+      "accent_bar": { "width_mm": "2-4", "position": "edge", "accent_only": true },
+      "palette_suggestions": ["#0B1F3B + #FFFFFF + #FFB400", "#111827 + #FFFFFF + #F97316"],
+      "mood": "Strong, structured."
+    }
+  },
+  {
+    "id": "card_beauty_feminine_soft",
+    "description": "تجميل: أنثوي ناعم + منحنى خفيف + ذهب/وردي متناسق",
+    "suitable_for": "Beauty, Makeup, Skincare, Salon",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "curve_layering_system": { "layer_count": "3-4", "coverage_ratio": "0.18-0.30", "position": "bottom-right", "max_control_points": 6 },
+      "palette_suggestions": ["#F7C6D0 + #FFFFFF + #C89B3C", "#FFB5E8 + #FFFFFF + #B08D57"],
+      "mood": "Feminine, premium, clean."
+    }
+  },
+  {
+    "id": "card_sports_fight_club",
+    "description": "رياضة/قتال: داكن + خط حركة + Badge صغير (بدون فوضى)",
+    "suitable_for": "Boxing, Kickboxing, Gym, Coach",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "background": { "base": "#0B0B0B", "motion_lines": "2-5", "opacity": "0.15-0.35" },
+      "badge": { "count": 1, "shape": "rounded", "accent_only": true },
+      "typography": { "name": "bold", "role": "condensed_optional" },
+      "palette_suggestions": ["#0B0B0B + #FFFFFF + #00FFB3", "#111111 + #FFFFFF + #FF2D95"],
+      "mood": "Aggressive, modern."
+    }
+  },
+
+  // =========================
+  //  ✅ Back-side patterns / QR / Dual language (8)
+  // =========================
+  {
+    "id": "card_dual_side_front_minimal_back_pattern",
+    "description": "وجه أمامي Minimal + خلفي Pattern خفيف مع الشعار",
+    "suitable_for": "All brands needing two-side card",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "front": { "style": "minimal_swiss", "white_space_ratio": "0.45-0.60" },
+      "back": { "pattern": { "opacity": "0.06-0.12", "density": "low" }, "logo_center": true },
+      "palette_suggestions": ["#0F172A + #FFFFFF + #2563EB", "#111111 + #FFFFFF + #C89B3C"],
+      "mood": "Premium brand system."
+    }
+  },
+  {
+    "id": "card_qr_contact_focus",
+    "description": "QR: تركيز على التواصل—QR واضح + رقم كبير + اسم",
+    "suitable_for": "Shops, Delivery, Services, Quick contact",
+    "canvas_size": { "mm": { "width": 90, "height": 50, "bleed": 3, "safe": 4 }, "viewBox": "0 0 90 50" },
+    "generative_rules": {
+      "qr_zone": { "ratio": "0.18-0.24", "
