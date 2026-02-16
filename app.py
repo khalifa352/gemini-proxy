@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- Google Client Setup ---
 client = None
 try:
     from google import genai
@@ -18,101 +17,53 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY)
-        logger.info("✅ GenAI Connected (Professional Mode)")
 except: pass
 
-# --- 🧠 محرك الرياضيات الاحترافي (Pro Smooth Curve Engine) ---
-def generate_smooth_wave(width, height, position='bottom', complexity=2, amplitude_ratio=0.15):
+# --- 🧠 محرك الطبقات المتداخلة (The Multi-Layer Mesh Engine) ---
+def generate_layered_waves(width, height, position='bottom'):
     """
-    يولد موجات بيزير انسيابية تماماً (Perfectly Smooth Cubic Bezier).
-    يضمن استمرارية المماس (C1 Continuity) لمنع التشوه.
-    يرجع المسار + أقصى ارتفاع وصل إليه (لحساب المنطقة الآمنة).
+    يولد 'عائلة' من المنحنيات المترابطة (ليست عشوائية).
+    تخرج من نفس الأطراف وتتوسع في المنتصف لتعطي تأثير 'الخروج من تحت'.
     """
-    amplitude = height * amplitude_ratio
+    assets = {}
     
+    # إعدادات الموجة الرئيسية
     if position == 'bottom':
-        base_y = height - (amplitude * 1.5) # خط الأساس
-        path = f"M0,{height} L0,{base_y}"
-        max_y_reached = base_y - amplitude # لتقريب منطقة الخطر
+        # أقصى ارتفاع للموجة (مثلاً 25% من الشاشة)
+        amplitude = height * 0.25
+        base_y = height  # تبدأ من الأسفل
         
-        segment_width = width / complexity
+        # نقاط التحكم الأساسية (Master Control Points)
+        # موجة تبدأ عالية من اليسار وتنخفض لليمين (أو العكس)
+        p0 = (0, height - (amplitude * 0.8))  # اليسار
+        p3 = (width, height - (amplitude * 0.4)) # اليمين
         
-        for i in range(complexity):
-            start_x = i * segment_width
-            end_x = (i + 1) * segment_width
-            
-            # تبديل الاتجاه (موجة فوق وموجة تحت)
-            direction = 1 if i % 2 == 0 else -1
-            
-            # نقاط التحكم لضمان النعومة
-            cp1_x = start_x + (segment_width * 0.5)
-            cp1_y = base_y + (direction * amplitude)
-            
-            cp2_x = end_x - (segment_width * 0.5)
-            cp2_y = base_y - (direction * amplitude)
-            
-            # نقطة النهاية تعود لخط الأساس
-            path += f" C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {end_x},{base_y}"
-            
-        path += f" L{width},{height} L0,{height} Z"
-        # ارتفاع المنطقة المشغولة من الأسفل
-        occupied_height = height - max_y_reached + 50 # 50px هامش أمان
-        return path, occupied_height
-
-    elif position == 'top':
-        base_y = amplitude * 1.5
-        path = f"M0,0 L0,{base_y}"
-        max_y_reached = base_y + amplitude
-
-        segment_width = width / complexity
-        for i in range(complexity):
-            start_x = i * segment_width
-            end_x = (i + 1) * segment_width
-            direction = -1 if i % 2 == 0 else 1 # عكس الاتجاه للعلوي
-            
-            cp1_x = start_x + (segment_width * 0.5)
-            cp1_y = base_y + (direction * amplitude)
-            cp2_x = end_x - (segment_width * 0.5)
-            cp2_y = base_y - (direction * amplitude)
-            
-            path += f" C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {end_x},{base_y}"
-            
-        path += f" L{width},0 L0,0 Z"
-        occupied_height = max_y_reached + 50 # 50px هامش أمان
-        return path, occupied_height
+        # نقاط التحكم في المنتصف (لعمل الـ S-Curve)
+        cp1 = (width * 0.3, height - amplitude * 1.5)
+        cp2 = (width * 0.7, height - amplitude * 0.1)
         
-    return "", 0
+        # --- الطبقة 1: الخلفية الباهتة (أكبر وأوسع) ---
+        path1 = f"M0,{height} L{p0[0]},{p0[1]} C{cp1[0]},{cp1[1]-40} {cp2[0]},{cp2[1]+40} {p3[0]},{p3[1]} L{width},{height} Z"
+        assets['layer_back'] = path1
+        
+        # --- الطبقة 2: الطبقة الوسطى (لون مختلف) ---
+        # نغير نقاط التحكم قليلاً لنخلق "فراغاً" بين الطبقات
+        path2 = f"M0,{height} L{p0[0]},{p0[1]+20} C{cp1[0]+20},{cp1[1]} {cp2[0]-20},{cp2[1]+20} {p3[0]},{p3[1]+20} L{width},{height} Z"
+        assets['layer_mid'] = path2
+        
+        # --- الطبقة 3: الموجة الرئيسية (الأمامية الداكنة) ---
+        path3 = f"M0,{height} L{p0[0]},{p0[1]+50} C{cp1[0]+50},{cp1[1]+40} {cp2[0]-50},{cp2[1]+50} {p3[0]},{p3[1]+50} L{width},{height} Z"
+        assets['layer_front'] = path3
+        
+        # حساب المنطقة الآمنة للنص (فوق أعلى نقطة في الموجات)
+        safe_bottom_limit = min(p0[1], p3[1], cp1[1], cp2[1]) - 50
+        
+        return assets, safe_bottom_limit
 
-# --- Helper Functions (Catalog Fetcher) ---
-def get_design_rules(category_name, user_prompt):
-    base_path = "recipes"
-    cat = (category_name or "").lower()
-    prompt = (user_prompt or "").lower()
-    flexible_map = {
-        "card": "print/business_cards.json",
-        "flyer": "print/flyers.json",
-        "brochure": "print/brochures.json",
-        "menu": "print/menus.json",
-        "invoice": "print/invoices.json",
-        "certificate": "print/certificates.json"
-    }
-    selected_path = os.path.join(base_path, "print/flyers.json")
-    for key, path in flexible_map.items():
-        if key in cat or key in prompt:
-            full_path = os.path.join(base_path, path)
-            if os.path.exists(full_path):
-                selected_path = full_path
-                break
-    try:
-        with open(selected_path, 'r', encoding='utf-8') as f:
-            raw = json.load(f)
-            if isinstance(raw, list): return raw
-            if isinstance(raw, dict): return [raw]
-    except: return []
-    return []
+    return {}, height
 
 @app.route('/')
-def home(): return "Almonjez Pro Engine: Smooth Curves & Safe Zones Active 🛡️🌊"
+def home(): return "Almonjez Pro: Layered Curves & Grid Layout Active 📐"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -124,58 +75,49 @@ def generate():
         cat_name = data.get('category', 'general')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        # 1. جلب القواعد
-        available_rules = get_design_rules(cat_name, user_msg)
+        # 1. توليد الطبقات الرياضية
+        # سنولد مجموعة للسفل ومجموعة للأعلى
+        bottom_layers, safe_y_bottom = generate_layered_waves(width, height, 'bottom')
         
-        # 2. توليد الأصول الرياضية + حساب مناطق الأمان
-        # نولد منحنيات بدرجات تعقيد مختلفة
-        curve_top_simple, top_h1 = generate_smooth_wave(width, height, 'top', complexity=1, amplitude_ratio=0.2)
-        curve_top_complex, top_h2 = generate_smooth_wave(width, height, 'top', complexity=3, amplitude_ratio=0.15)
+        # 2. حساب منطقة النص (The Strict Text Box)
+        # النص يجب أن يكون محصوراً تماماً في المساحة البيضاء
+        text_zone_height = safe_y_bottom - 100 # هامش علوي 100 بكسل
+        text_zone_y_start = 50 
         
-        curve_bottom_simple, bottom_h1 = generate_smooth_wave(width, height, 'bottom', complexity=1, amplitude_ratio=0.2)
-        curve_bottom_complex, bottom_h2 = generate_smooth_wave(width, height, 'bottom', complexity=3, amplitude_ratio=0.15)
-        
-        # تحديد حدود المنطقة الآمنة للنص
-        safe_top_y = max(top_h1, top_h2) + 40 # هامش إضافي
-        safe_bottom_y = height - max(bottom_h1, bottom_h2) - 40 # هامش إضافي
-        safe_height = safe_bottom_y - safe_top_y
-
-        # 3. التعليمات الصارمة الجديدة
+        # 3. التعليمات الصارمة
         sys_instructions = f"""
-        Role: Senior SVG Specialist & Layout Engineer.
-        Task: Create a professional design with PERFECT curves, STRICT safe zones, and HIGH contrast.
+        Role: Senior Vector Artist & Typography Expert.
+        Task: Assemble a multi-layered vector design based on pre-calculated paths.
         
-        --- 🛡️ CRITICAL LAYOUT RULES (DO NOT BREAK) ---
-        1. CONTENT SAFE ZONE:
-           - ALL text and main content MUST be placed between Y={safe_top_y} and Y={safe_bottom_y}.
-           - Absolutely NO text is allowed in the top header area (Y < {safe_top_y}) or the bottom footer area (Y > {safe_bottom_y}). These areas are for graphics only.
+        --- 🎨 LAYERED GEOMETRY INSTRUCTIONS ---
+        I have calculated 3 interlocking paths for the footer. You MUST use them to create the "Emerging Layers" effect.
         
-        2. COLOR CONTRAST PROTOCOL:
-           - IF background is DARK (e.g., Blue, Green, Black) -> Text MUST be WHITE (#FFFFFF).
-           - IF background is LIGHT (e.g., White, Light Grey) -> Text MUST be DARK BLACK (#000000 or #111111).
-           - NEVER use low contrast combinations like Blue text on Green background.
+        1. **Layer 1 (Back)**: Use Path: "{bottom_layers.get('layer_back')}"
+           - Fill: Lightest shade of the primary color (opacity 0.2).
+        2. **Layer 2 (Middle)**: Use Path: "{bottom_layers.get('layer_mid')}"
+           - Fill: Medium shade (opacity 0.6).
+        3. **Layer 3 (Front)**: Use Path: "{bottom_layers.get('layer_front')}"
+           - Fill: Darkest/Strongest shade (opacity 1.0).
+           - This creates the 3D depth effect.
         
-        3. TYPOGRAPHY & KASHEEDA:
-           - Use <foreignObject> for ALL text.
-           - For body paragraphs/lists, use CSS: `text-align: justify;` to create a formal Arabic look.
-           - Title fonts must be large and bold.
+        --- 📝 TEXT LAYOUT & CONTRAST (ZERO TOLERANCE) ---
+        1. **Safe Zone**: ALL Text must be inside a transparent box from Y={text_zone_y_start} to Y={safe_y_bottom}.
+           - DO NOT place text overlapping the footer waves.
         
-        --- 🌊 GEOMETRY ASSETS (PRE-CALCULATED) ---
-        Use these paths for professional, smooth curves. Do not draw your own messy curves.
-        - Simple Top Wave: "{curve_top_simple}"
-        - Complex Top Wave: "{curve_top_complex}"
-        - Simple Bottom Wave: "{curve_bottom_simple}"
-        - Complex Bottom Wave: "{curve_bottom_complex}"
+        2. **Alignment & Flow**:
+           - Use HTML/CSS inside <foreignObject>:
+             <div style="width: 100%; height: {text_zone_height}px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+               ...content...
+             </div>
+           - For lists, use `text-align: right` (RTL) with proper padding.
         
-        INSTRUCTIONS:
-        - Analyze the user request and the design catalog.
-        - Select the best curves from the assets above. You can layer them with opacity.
-        - Draw the background first, then curves, then text in the Safe Zone.
+        3. **Contrast**:
+           - Background is White/Light -> Text MUST be #111111 or #0F172A.
+           - Footer is Dark -> Text inside footer (if any) MUST be #FFFFFF.
         
         INPUT DATA:
         - Request: "{user_msg}"
         - ViewBox: 0 0 {width} {height}
-        - Catalog: {json.dumps(available_rules)}
         
         OUTPUT:
         - Return ONLY raw SVG code.
@@ -184,7 +126,7 @@ def generate():
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=0.7)
+            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=0.6)
         )
 
         svg_output = response.text.replace("```svg", "").replace("```", "").strip()
