@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- مكتبة Google ---
+# --- Google Client Setup ---
 client = None
 try:
     from google import genai
@@ -18,61 +18,73 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY)
+        logger.info("✅ GenAI Connected (Professional Mode)")
 except: pass
 
-# --- 🧠 محرك الرياضيات (The CurveKit Engine) ---
-def generate_complex_wave(width, height, position='bottom', complexity=3):
+# --- 🧠 محرك الرياضيات الاحترافي (Pro Smooth Curve Engine) ---
+def generate_smooth_wave(width, height, position='bottom', complexity=2, amplitude_ratio=0.15):
     """
-    يولد مسار SVG معقد (مثل الأمثلة التي أرسلتها) بدلاً من منحنى بسيط.
+    يولد موجات بيزير انسيابية تماماً (Perfectly Smooth Cubic Bezier).
+    يضمن استمرارية المماس (C1 Continuity) لمنع التشوه.
+    يرجع المسار + أقصى ارتفاع وصل إليه (لحساب المنطقة الآمنة).
     """
-    points = []
-    segment_width = width / complexity
+    amplitude = height * amplitude_ratio
     
-    # نقطة البداية
     if position == 'bottom':
-        start_y = height * 0.8
-        path = f"M0,{start_y}"
+        base_y = height - (amplitude * 1.5) # خط الأساس
+        path = f"M0,{height} L0,{base_y}"
+        max_y_reached = base_y - amplitude # لتقريب منطقة الخطر
+        
+        segment_width = width / complexity
         
         for i in range(complexity):
-            cp1_x = (i * segment_width) + (segment_width * 0.3)
-            cp1_y = start_y + random.randint(-50, 50)
-            
-            cp2_x = (i * segment_width) + (segment_width * 0.7)
-            cp2_y = start_y + random.randint(-50, 50)
-            
+            start_x = i * segment_width
             end_x = (i + 1) * segment_width
-            end_y = start_y + random.randint(-20, 20)
             
-            path += f" C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {end_x},{end_y}"
+            # تبديل الاتجاه (موجة فوق وموجة تحت)
+            direction = 1 if i % 2 == 0 else -1
             
-        # إغلاق الشكل
+            # نقاط التحكم لضمان النعومة
+            cp1_x = start_x + (segment_width * 0.5)
+            cp1_y = base_y + (direction * amplitude)
+            
+            cp2_x = end_x - (segment_width * 0.5)
+            cp2_y = base_y - (direction * amplitude)
+            
+            # نقطة النهاية تعود لخط الأساس
+            path += f" C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {end_x},{base_y}"
+            
         path += f" L{width},{height} L0,{height} Z"
-        return path
-        
+        # ارتفاع المنطقة المشغولة من الأسفل
+        occupied_height = height - max_y_reached + 50 # 50px هامش أمان
+        return path, occupied_height
+
     elif position == 'top':
-        start_y = height * 0.2
-        path = f"M0,{start_y}"
-        
+        base_y = amplitude * 1.5
+        path = f"M0,0 L0,{base_y}"
+        max_y_reached = base_y + amplitude
+
+        segment_width = width / complexity
         for i in range(complexity):
-            cp1_x = (i * segment_width) + (segment_width * 0.3)
-            cp1_y = start_y + random.randint(-40, 40)
-            
-            cp2_x = (i * segment_width) + (segment_width * 0.7)
-            cp2_y = start_y + random.randint(-40, 40)
-            
+            start_x = i * segment_width
             end_x = (i + 1) * segment_width
-            end_y = start_y + random.randint(-15, 15)
+            direction = -1 if i % 2 == 0 else 1 # عكس الاتجاه للعلوي
             
-            path += f" C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {end_x},{end_y}"
+            cp1_x = start_x + (segment_width * 0.5)
+            cp1_y = base_y + (direction * amplitude)
+            cp2_x = end_x - (segment_width * 0.5)
+            cp2_y = base_y - (direction * amplitude)
+            
+            path += f" C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {end_x},{base_y}"
             
         path += f" L{width},0 L0,0 Z"
-        return path
-    
-    return ""
+        occupied_height = max_y_reached + 50 # 50px هامش أمان
+        return path, occupied_height
+        
+    return "", 0
 
-# --- الدوال المساعدة ---
+# --- Helper Functions (Catalog Fetcher) ---
 def get_design_rules(category_name, user_prompt):
-    # (نفس كود جلب الملفات السابق - لا تغيير)
     base_path = "recipes"
     cat = (category_name or "").lower()
     prompt = (user_prompt or "").lower()
@@ -100,7 +112,7 @@ def get_design_rules(category_name, user_prompt):
     return []
 
 @app.route('/')
-def home(): return "CurveKit Engine Active 🌊"
+def home(): return "Almonjez Pro Engine: Smooth Curves & Safe Zones Active 🛡️🌊"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -115,38 +127,50 @@ def generate():
         # 1. جلب القواعد
         available_rules = get_design_rules(cat_name, user_msg)
         
-        # 2. توليد "أصول" رياضية (Pre-calculated Assets)
-        # هنا السحر: نحن نعطي جيميني الكود الجاهز للمنحنى بدلاً من أن نطلب منه تخيله
-        curve_top = generate_complex_wave(width, height, 'top')
-        curve_bottom = generate_complex_wave(width, height, 'bottom')
+        # 2. توليد الأصول الرياضية + حساب مناطق الأمان
+        # نولد منحنيات بدرجات تعقيد مختلفة
+        curve_top_simple, top_h1 = generate_smooth_wave(width, height, 'top', complexity=1, amplitude_ratio=0.2)
+        curve_top_complex, top_h2 = generate_smooth_wave(width, height, 'top', complexity=3, amplitude_ratio=0.15)
         
+        curve_bottom_simple, bottom_h1 = generate_smooth_wave(width, height, 'bottom', complexity=1, amplitude_ratio=0.2)
+        curve_bottom_complex, bottom_h2 = generate_smooth_wave(width, height, 'bottom', complexity=3, amplitude_ratio=0.15)
+        
+        # تحديد حدود المنطقة الآمنة للنص
+        safe_top_y = max(top_h1, top_h2) + 40 # هامش إضافي
+        safe_bottom_y = height - max(bottom_h1, bottom_h2) - 40 # هامش إضافي
+        safe_height = safe_bottom_y - safe_top_y
+
+        # 3. التعليمات الصارمة الجديدة
         sys_instructions = f"""
-        Role: Senior SVG Engineer.
-        Task: Create a High-End Design with strict WHITESPACE and COMPLEX CURVES.
+        Role: Senior SVG Specialist & Layout Engineer.
+        Task: Create a professional design with PERFECT curves, STRICT safe zones, and HIGH contrast.
         
-        --- CRITICAL ASSETS (USE THESE PATHS) ---
-        I have pre-calculated professional Bezier curves for you. YOU MUST USE THEM if the design needs curves.
-        > Top Curve Path: "{curve_top}"
-        > Bottom Curve Path: "{curve_bottom}"
+        --- 🛡️ CRITICAL LAYOUT RULES (DO NOT BREAK) ---
+        1. CONTENT SAFE ZONE:
+           - ALL text and main content MUST be placed between Y={safe_top_y} and Y={safe_bottom_y}.
+           - Absolutely NO text is allowed in the top header area (Y < {safe_top_y}) or the bottom footer area (Y > {safe_bottom_y}). These areas are for graphics only.
         
-        --- DESIGN RULES ---
-        1. WHITESPACE (Negative Space):
-           - Keep at least 40% of the canvas EMPTY (White or light grey).
-           - Do NOT fill every corner. Let the design breathe.
-           - Text must have padding (at least 60px from edges).
+        2. COLOR CONTRAST PROTOCOL:
+           - IF background is DARK (e.g., Blue, Green, Black) -> Text MUST be WHITE (#FFFFFF).
+           - IF background is LIGHT (e.g., White, Light Grey) -> Text MUST be DARK BLACK (#000000 or #111111).
+           - NEVER use low contrast combinations like Blue text on Green background.
         
-        2. LAYERING:
-           - Draw the 'Top Curve Path' with a primary color.
-           - Draw it AGAIN underneath with slight opacity (0.3) and scale (1.05) to create the "Layered" effect seen in professional examples.
+        3. TYPOGRAPHY & KASHEEDA:
+           - Use <foreignObject> for ALL text.
+           - For body paragraphs/lists, use CSS: `text-align: justify;` to create a formal Arabic look.
+           - Title fonts must be large and bold.
         
-        3. TYPOGRAPHY:
-           - Use <foreignObject> for all text.
-           - Title: Bold, Large (48px+), Dark Color.
-           - Body: Clean, Line-height 1.6, Grey Color.
+        --- 🌊 GEOMETRY ASSETS (PRE-CALCULATED) ---
+        Use these paths for professional, smooth curves. Do not draw your own messy curves.
+        - Simple Top Wave: "{curve_top_simple}"
+        - Complex Top Wave: "{curve_top_complex}"
+        - Simple Bottom Wave: "{curve_bottom_simple}"
+        - Complex Bottom Wave: "{curve_bottom_complex}"
         
-        4. COLOR PALETTE:
-           - Extract mood from request.
-           - Use Gradients (<linearGradient>) for the curves to make them look 3D.
+        INSTRUCTIONS:
+        - Analyze the user request and the design catalog.
+        - Select the best curves from the assets above. You can layer them with opacity.
+        - Draw the background first, then curves, then text in the Safe Zone.
         
         INPUT DATA:
         - Request: "{user_msg}"
