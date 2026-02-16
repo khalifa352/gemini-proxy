@@ -19,52 +19,60 @@ try:
         client = genai.Client(api_key=API_KEY)
 except: pass
 
-# --- 🧠 محرك المنحنيات المتغيرة (Variable Math Engine) ---
-def generate_dynamic_waves(width, height):
-    """
-    يولد منحنيات احترافية لكن يغير شكلها في كل مرة (Random Seed).
-    """
-    w = int(width)
-    h = int(height)
-    
-    # 🎲 1. العشوائية المدروسة (Controlled Randomness)
-    # نغير ارتفاع الموجة ومكان القمة في كل مرة
-    amp_factor = random.uniform(0.15, 0.30)  # ارتفاع بين 15% و 30%
-    amplitude = int(h * amp_factor)
-    
-    # نغير اتجاه الانحناء (يسار أو يمين)
-    direction = random.choice([-1, 1]) 
-    
-    # نقاط التحكم
-    start_y = h - int(amplitude * 0.8)
-    end_y = h - int(amplitude * 0.4)
-    
-    # تحريك نقاط التحكم أفقياً وعمودياً للتنوع
-    cp1_x = int(w * (0.3 + (random.uniform(-0.1, 0.1))))
-    cp1_y = h - int(amplitude * (1.5 if direction == 1 else 0.5))
-    
-    cp2_x = int(w * (0.7 + (random.uniform(-0.1, 0.1))))
-    cp2_y = h - int(amplitude * (0.1 if direction == 1 else 1.2))
+# --- 📐 مكتبة الأشكال الهندسية (The Geometry Library) ---
 
-    # 🌊 2. توليد الطبقات
-    # الطبقة الخلفية (Layer 1)
-    path_back = f"M0,{h} L0,{start_y} C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {w},{end_y} L{w},{h} Z"
+def geo_smooth_waves(width, height):
+    """ يولد موجات ناعمة (للتصاميم الطبية، التجميل، الحديثة) """
+    w, h = int(width), int(height)
+    amp = int(h * random.uniform(0.15, 0.25))
     
-    # الطبقة الوسطى (Layer 2) - إزاحة بسيطة
-    path_mid = f"M0,{h} L0,{start_y+30} C{cp1_x+30},{cp1_y+20} {cp2_x-30},{cp2_y+20} {w},{end_y+30} L{w},{h} Z"
+    # نقاط تحكم عشوائية لكسر التكرار
+    direction = random.choice([-1, 1])
+    p_start = h - int(amp * 0.8)
+    p_end = h - int(amp * 0.4)
+    cp1 = (int(w * 0.3), h - int(amp * (1.5 if direction==1 else 0.5)))
+    cp2 = (int(w * 0.7), h - int(amp * (0.1 if direction==1 else 1.2)))
     
-    # الطبقة الأمامية (Layer 3) - إزاحة أكبر
-    path_front = f"M0,{h} L0,{start_y+60} C{cp1_x+60},{cp1_y+50} {cp2_x-60},{cp2_y+50} {w},{end_y+60} L{w},{h} Z"
+    path_back = f"M0,{h} L0,{p_start} C{cp1[0]},{cp1[1]} {cp2[0]},{cp2[1]} {w},{p_end} L{w},{h} Z"
+    path_front = f"M0,{h} L0,{p_start+60} C{cp1[0]+60},{cp1[1]+50} {cp2[0]-60},{cp2[1]+50} {w},{p_end+60} L{w},{h} Z"
     
-    # 🛡️ 3. حساب المنطقة الآمنة
-    top_limit = min(start_y, end_y, cp1_y, cp2_y)
-    safe_bottom = top_limit - 60  # هامش أمان
+    return {"back": path_back, "front": path_front}, min(p_start, p_end, cp1[1], cp2[1]) - 50
+
+def geo_sharp_polygons(width, height):
+    """ يولد أشكالاً حادة ومضلعات (للشركات، العقارات، المقاولات) """
+    w, h = int(width), int(height)
+    peak = h - int(h * 0.3)
     
-    return {
-        "back": path_back,
-        "mid": path_mid,
-        "front": path_front
-    }, safe_bottom
+    # مثلث قاطع حاد
+    x_peak = int(w * random.uniform(0.2, 0.8))
+    
+    path_back = f"M0,{h} L0,{peak} L{x_peak},{peak-100} L{w},{peak} L{w},{h} Z"
+    path_front = f"M0,{h} L0,{peak+50} L{x_peak},{peak-50} L{w},{peak+50} L{w},{h} Z"
+    
+    return {"back": path_back, "front": path_front}, peak - 120
+
+def geo_modern_slant(width, height):
+    """ يولد قطعاً مائلاً بسيطاً (للتصاميم الرسمية والبسيطة) """
+    w, h = int(width), int(height)
+    start_y = h - int(h * 0.2)
+    end_y = h - int(h * 0.1)
+    
+    # مجرد خط مائل نظيف
+    path_back = f"M0,{h} L0,{start_y} L{w},{end_y} L{w},{h} Z"
+    path_front = f"M0,{h} L0,{start_y+40} L{w},{end_y+40} L{w},{h} Z"
+    
+    return {"back": path_back, "front": path_front}, min(start_y, end_y) - 50
+
+# --- 🧠 الموجه الذكي (The Router) ---
+def generate_geometry_by_style(style_type, width, height):
+    """ يختار الدالة المناسبة بناءً على نوع الوصفة """
+    if "corporate" in style_type or "sharp" in style_type or "real_estate" in style_type:
+        return geo_sharp_polygons(width, height), "SHARP_POLYGONS"
+    elif "minimal" in style_type or "clean" in style_type:
+        return geo_modern_slant(width, height), "MODERN_SLANT"
+    else:
+        # الافتراضي للمنحنيات
+        return geo_smooth_waves(width, height), "SMOOTH_WAVES"
 
 # --- جلب الوصفات ---
 def get_recipe_data(category_name, user_prompt):
@@ -89,15 +97,12 @@ def get_recipe_data(category_name, user_prompt):
     try:
         with open(selected_path, 'r', encoding='utf-8') as f:
             raw = json.load(f)
-            # هنا نختار وصفة عشوائية أو حسب الطلب من القائمة
-            if isinstance(raw, list):
-                # فلترة بسيطة أو اختيار عشوائي للتنوع
-                return random.choice(raw) 
+            if isinstance(raw, list): return random.choice(raw)
             return raw
     except: return {}
 
 @app.route('/')
-def home(): return "Hybrid Engine: Math Curves + Recipe Colors 🎨📐"
+def home(): return "Almonjez: Polymorphic Geometry Engine 📐🎨"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -109,47 +114,38 @@ def generate():
         cat_name = data.get('category', 'general')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        # 1. جلب الوصفة (بما فيها الألوان والستايل)
+        # 1. جلب الوصفة
         recipe = get_recipe_data(cat_name, user_msg)
         
-        # استخراج الألوان من الوصفة (أهم خطوة!)
-        # إذا لم توجد ألوان، نستخدم قيم افتراضية
-        visual_style = recipe.get('visual_style', {})
-        colors = recipe.get('generative_rules', {}).get('palette_suggestions', ["#1a237e + #ffffff + #ff6f00"])
+        # معرفة "نوع" الوصفة لتحديد الشكل الهندسي
+        # نبحث في الـ tags أو الـ description أو الـ id
+        recipe_context = (recipe.get('id', '') + recipe.get('suitable_for', '') + str(recipe.get('tags', []))).lower()
         
-        # 2. توليد المنحنيات الرياضية (بشكل متغير كل مرة)
-        waves, safe_bottom = generate_dynamic_waves(width, height)
-        text_zone_height = safe_bottom - 50
+        # 2. بايثون يختار "القلم" المناسب (موجة؟ مثلث؟ خط مائل؟)
+        paths, geo_type = generate_geometry_by_style(recipe_context, width, height)
+        safe_bottom = paths[1] # القيمة الثانية هي المنطقة الآمنة
 
-        # 3. بناء التعليمات الهجينة
+        # 3. التعليمات (ديناميكية حسب الشكل المختار)
         sys_instructions = f"""
-        Role: Senior Art Director.
-        Task: Create a vivid, professional design merging PRE-CALCULATED CURVES with RECIPE COLORS.
+        Role: Senior Designer.
+        Task: Apply the selected recipe style onto the pre-calculated geometry.
         
-        --- 🎨 SOURCE RECIPE (STYLE GUIDE) ---
-        Recipe ID: {recipe.get('id', 'Dynamic')}
-        Description: {recipe.get('description', 'Professional Design')}
-        SUGGESTED PALETTE: {json.dumps(colors)}
+        --- 📐 GEOMETRY MODE: {geo_type} ---
+        Python has generated these specific footer paths for you:
+        1. **Background Layer**: Path="{paths[0]['back']}" (Opacity 0.3)
+        2. **Foreground Layer**: Path="{paths[0]['front']}" (Opacity 1.0)
         
-        --- 📐 GEOMETRY & LAYOUT (MANDATORY) ---
-        Use these exact math-generated paths for the footer waves:
-        1. **Layer 1 (Back)**: Path="{waves['back']}"
-           - COLOR: Use the LIGHTEST/SOFTEST color from the palette (Opacity 0.3).
-        2. **Layer 2 (Mid)**:  Path="{waves['mid']}"
-           - COLOR: Use a SECONDARY color or medium shade (Opacity 0.7).
-        3. **Layer 3 (Front)**: Path="{waves['front']}"
-           - COLOR: Use the PRIMARY/DARKEST brand color (Opacity 1.0).
-           - This layer must look solid and define the bottom edge.
-           
-        --- 📝 CONTENT & SAFETY ---
-        - **Safe Zone**: Text must be between Y=0 and Y={safe_bottom}.
-        - **No Overlap**: Do not place text on top of the footer waves.
-        - **Contrast**: 
-           - If using Dark Background recipe -> White Text.
-           - If using Light Background recipe -> Dark Text.
+        --- 🎨 RECIPE STYLE ---
+        - ID: {recipe.get('id')}
+        - Colors: Use the recipe's palette. If {geo_type} is SHARP, use high contrast. If WAVES, use gradients.
+        
+        --- 📝 LAYOUT RULES ---
+        - **Safe Zone**: Text must end at Y={safe_bottom}.
+        - **Contrast**: Strict Dark/Light rules apply.
+        - **Alignment**: Justify text for professional look.
         
         INPUT:
-        - Request: "{user_msg}"
+        - Content: "{user_msg}"
         - ViewBox: 0 0 {width} {height}
         
         OUTPUT:
@@ -159,7 +155,7 @@ def generate():
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=0.9) # حرارة عالية للتنوع
+            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=0.8)
         )
 
         svg_output = response.text.replace("```svg", "").replace("```", "").strip()
