@@ -1,15 +1,15 @@
 import os
 import json
 import logging
+import random
+import math
 from flask import Flask, request, jsonify
 
-# إعداد السجلات لنرى سبب التوقف إن وجد
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- محاولة الاتصال بـ Google GenAI ---
 client = None
 try:
     from google import genai
@@ -17,48 +17,48 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY)
-        logger.info("✅ GenAI Client Connected Successfully")
-    else:
-        logger.warning("⚠️ Warning: GOOGLE_API_KEY not found")
-except Exception as e:
-    logger.error(f"❌ GenAI Import Error: {e}")
+except: pass
 
-# --- محرك الطبقات والمنحنيات (Layered Waves Engine) ---
-def generate_layered_waves(width, height):
+# --- 🧠 محرك المنحنيات المتغيرة (Variable Math Engine) ---
+def generate_dynamic_waves(width, height):
     """
-    يولد 3 طبقات منحنية متداخلة (خلفية، وسطى، أمامية).
+    يولد منحنيات احترافية لكن يغير شكلها في كل مرة (Random Seed).
     """
-    # تحويل الأبعاد لأرقام صحيحة لتجنب الكسور
     w = int(width)
     h = int(height)
     
-    # ارتفاع الموجة
-    amp = int(h * 0.25) 
+    # 🎲 1. العشوائية المدروسة (Controlled Randomness)
+    # نغير ارتفاع الموجة ومكان القمة في كل مرة
+    amp_factor = random.uniform(0.15, 0.30)  # ارتفاع بين 15% و 30%
+    amplitude = int(h * amp_factor)
     
-    # نقاط التحكم (Control Points)
-    p_start_y = h - int(amp * 0.8)
-    p_end_y = h - int(amp * 0.4)
+    # نغير اتجاه الانحناء (يسار أو يمين)
+    direction = random.choice([-1, 1]) 
     
-    cp1_x = int(w * 0.3)
-    cp1_y = h - int(amp * 1.5)
+    # نقاط التحكم
+    start_y = h - int(amplitude * 0.8)
+    end_y = h - int(amplitude * 0.4)
     
-    cp2_x = int(w * 0.7)
-    cp2_y = h - int(amp * 0.1)
+    # تحريك نقاط التحكم أفقياً وعمودياً للتنوع
+    cp1_x = int(w * (0.3 + (random.uniform(-0.1, 0.1))))
+    cp1_y = h - int(amplitude * (1.5 if direction == 1 else 0.5))
+    
+    cp2_x = int(w * (0.7 + (random.uniform(-0.1, 0.1))))
+    cp2_y = h - int(amplitude * (0.1 if direction == 1 else 1.2))
 
-    # توليد المسارات (Paths)
-    # الطبقة الخلفية (الأوسع)
-    path_back = f"M0,{h} L0,{p_start_y} C{cp1_x},{cp1_y-40} {cp2_x},{cp2_y+40} {w},{p_end_y} L{w},{h} Z"
+    # 🌊 2. توليد الطبقات
+    # الطبقة الخلفية (Layer 1)
+    path_back = f"M0,{h} L0,{start_y} C{cp1_x},{cp1_y} {cp2_x},{cp2_y} {w},{end_y} L{w},{h} Z"
     
-    # الطبقة الوسطى
-    path_mid = f"M0,{h} L0,{p_start_y+20} C{cp1_x+20},{cp1_y} {cp2_x-20},{cp2_y+20} {w},{p_end_y+20} L{w},{h} Z"
+    # الطبقة الوسطى (Layer 2) - إزاحة بسيطة
+    path_mid = f"M0,{h} L0,{start_y+30} C{cp1_x+30},{cp1_y+20} {cp2_x-30},{cp2_y+20} {w},{end_y+30} L{w},{h} Z"
     
-    # الطبقة الأمامية (الأضيق)
-    path_front = f"M0,{h} L0,{p_start_y+50} C{cp1_x+50},{cp1_y+40} {cp2_x-50},{cp2_y+50} {w},{p_end_y+50} L{w},{h} Z"
+    # الطبقة الأمامية (Layer 3) - إزاحة أكبر
+    path_front = f"M0,{h} L0,{start_y+60} C{cp1_x+60},{cp1_y+50} {cp2_x-60},{cp2_y+50} {w},{end_y+60} L{w},{h} Z"
     
-    # حساب المنطقة الآمنة (أعلى نقطة تصل إليها الموجات)
-    # نأخذ أقل قيمة Y (لأن الصفر في الأعلى) ونطرح هامشاً
-    min_y = min(p_start_y, p_end_y, cp1_y, cp2_y)
-    safe_bottom = min_y - 50
+    # 🛡️ 3. حساب المنطقة الآمنة
+    top_limit = min(start_y, end_y, cp1_y, cp2_y)
+    safe_bottom = top_limit - 60  # هامش أمان
     
     return {
         "back": path_back,
@@ -66,57 +66,90 @@ def generate_layered_waves(width, height):
         "front": path_front
     }, safe_bottom
 
-# --- المسار الرئيسي (فحص الصحة) ---
+# --- جلب الوصفات ---
+def get_recipe_data(category_name, user_prompt):
+    # (نفس دالة البحث السابقة)
+    base_path = "recipes"
+    cat = (category_name or "").lower()
+    prompt = (user_prompt or "").lower()
+    flexible_map = {
+        "card": "print/business_cards.json",
+        "flyer": "print/flyers.json",
+        "brochure": "print/brochures.json",
+        "menu": "print/menus.json",
+        "invoice": "print/invoices.json"
+    }
+    selected_path = os.path.join(base_path, "print/flyers.json")
+    for key, path in flexible_map.items():
+        if key in cat or key in prompt:
+            full_path = os.path.join(base_path, path)
+            if os.path.exists(full_path):
+                selected_path = full_path
+                break
+    try:
+        with open(selected_path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+            # هنا نختار وصفة عشوائية أو حسب الطلب من القائمة
+            if isinstance(raw, list):
+                # فلترة بسيطة أو اختيار عشوائي للتنوع
+                return random.choice(raw) 
+            return raw
+    except: return {}
+
 @app.route('/')
-def home():
-    return "Almonjez Pro Engine is Running! 🚀"
+def home(): return "Hybrid Engine: Math Curves + Recipe Colors 🎨📐"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client:
-        return jsonify({"error": "Server Error: AI Client not initialized"}), 500
+    if not client: return jsonify({"error": "AI Error"}), 500
 
     try:
         data = request.json
         user_msg = data.get('message', '')
-        # الأبعاد الافتراضية
-        width = int(data.get('width', 800))
-        height = int(data.get('height', 600))
+        cat_name = data.get('category', 'general')
+        width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        # 1. حساب الطبقات رياضياً
-        layers, safe_bottom_y = generate_layered_waves(width, height)
+        # 1. جلب الوصفة (بما فيها الألوان والستايل)
+        recipe = get_recipe_data(cat_name, user_msg)
         
-        # تحديد منطقة النص الآمنة
-        text_zone_top = 50
-        text_zone_height = safe_bottom_y - text_zone_top
+        # استخراج الألوان من الوصفة (أهم خطوة!)
+        # إذا لم توجد ألوان، نستخدم قيم افتراضية
+        visual_style = recipe.get('visual_style', {})
+        colors = recipe.get('generative_rules', {}).get('palette_suggestions', ["#1a237e + #ffffff + #ff6f00"])
+        
+        # 2. توليد المنحنيات الرياضية (بشكل متغير كل مرة)
+        waves, safe_bottom = generate_dynamic_waves(width, height)
+        text_zone_height = safe_bottom - 50
 
-        # 2. التعليمات
+        # 3. بناء التعليمات الهجينة
         sys_instructions = f"""
-        Role: Senior Vector Designer.
-        Task: Create a multi-layer SVG with perfect geometry and contrast.
+        Role: Senior Art Director.
+        Task: Create a vivid, professional design merging PRE-CALCULATED CURVES with RECIPE COLORS.
         
-        --- 🎨 GEOMETRY INSTRUCTIONS (USE THESE PATHS) ---
-        I have pre-calculated 3 interlocking wave paths for the footer. You MUST use them:
-        1. **Layer 1 (Back)**: Path="{layers['back']}" (Opacity 0.2)
-        2. **Layer 2 (Mid)**:  Path="{layers['mid']}"  (Opacity 0.6)
-        3. **Layer 3 (Front)**: Path="{layers['front']}" (Opacity 1.0 - Darkest)
+        --- 🎨 SOURCE RECIPE (STYLE GUIDE) ---
+        Recipe ID: {recipe.get('id', 'Dynamic')}
+        Description: {recipe.get('description', 'Professional Design')}
+        SUGGESTED PALETTE: {json.dumps(colors)}
         
-        --- 📐 LAYOUT & SAFETY (STRICT) ---
-        1. **Text Safe Zone**: 
-           - ALL text must be inside the upper white space (Y=0 to Y={safe_bottom_y}).
-           - NO text is allowed to overlap the footer waves.
-        
-        2. **Typography**:
-           - Use <foreignObject> for all text.
-           - Text Container Height: {text_zone_height}px.
-           - Alignment: Center or Justify.
-        
-        3. **Contrast Protocol**:
-           - Background White -> Text Black (#111111).
-           - Footer Dark -> Footer Text White (#FFFFFF).
+        --- 📐 GEOMETRY & LAYOUT (MANDATORY) ---
+        Use these exact math-generated paths for the footer waves:
+        1. **Layer 1 (Back)**: Path="{waves['back']}"
+           - COLOR: Use the LIGHTEST/SOFTEST color from the palette (Opacity 0.3).
+        2. **Layer 2 (Mid)**:  Path="{waves['mid']}"
+           - COLOR: Use a SECONDARY color or medium shade (Opacity 0.7).
+        3. **Layer 3 (Front)**: Path="{waves['front']}"
+           - COLOR: Use the PRIMARY/DARKEST brand color (Opacity 1.0).
+           - This layer must look solid and define the bottom edge.
+           
+        --- 📝 CONTENT & SAFETY ---
+        - **Safe Zone**: Text must be between Y=0 and Y={safe_bottom}.
+        - **No Overlap**: Do not place text on top of the footer waves.
+        - **Contrast**: 
+           - If using Dark Background recipe -> White Text.
+           - If using Light Background recipe -> Dark Text.
         
         INPUT:
-        - Content: "{user_msg}"
+        - Request: "{user_msg}"
         - ViewBox: 0 0 {width} {height}
         
         OUTPUT:
@@ -126,18 +159,16 @@ def generate():
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=0.7)
+            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=0.9) # حرارة عالية للتنوع
         )
 
         svg_output = response.text.replace("```svg", "").replace("```", "").strip()
-        # إصلاح مشاكل العرض في آيفون
         if '<svg' in svg_output and 'xmlns=' not in svg_output:
             svg_output = svg_output.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
             
         return jsonify({"response": svg_output})
 
     except Exception as e:
-        logger.error(f"Runtime Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
