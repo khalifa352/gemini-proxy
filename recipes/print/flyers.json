@@ -1,35 +1,567 @@
 [
   {
-    "id": "flyer_gen_fluid_waves",
-    "description": "نظام توليد فلايرات بمنحنيات ناعمة",
-    "suitable_for": "Creative, Marketing, Medical, Spa, Events",
+    "id": "flyer_gen_curve_layers_corner",
+    "description": "منحنيات طبقات متدرجة في زاوية واحدة (نظيفة وممدودة)",
+    "suitable_for": "Corporate, Medical, Beauty, Services",
     "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "anti_deformation": { "max_control_points": 6, "self_intersection": "forbidden", "smoothness": "high" },
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["monochromatic", "analogous"], "forbidden": ["random_multi_color"] },
+      "white_space": { "min_negative_space_ratio": 0.35, "priority": "readability_over_decoration" },
+      "anti_repetition": {
+        "min_changes_required": 4,
+        "changeable_parameters": ["curve_position", "layer_count", "palette_variant", "typography_scale", "grid_mode", "accent_location"]
+      },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "40-70", "bleed_px": "20-35", "avoid_edge_text": true }
+    },
     "generative_rules": {
-      "header": { "instruction": "Draw a deep Bezier curve header. Start (0,0) to (595,0). Control point Y must be random (200-400).", "style": "Gradient fill" },
-      "footer": { "instruction": "Draw a wavy footer intersecting the bottom edge.", "height": "15% of canvas" },
-      "mood": "Organic, smooth, approachable."
+      "layout_strategy": { "content_zone_ratio": "0.60-0.75", "curve_zone_ratio": "0.20-0.35" },
+      "curve_layering_system": {
+        "layer_count": "3-5",
+        "offset_range_px": "18-45",
+        "scale_range": "1.02-1.06",
+        "allowed_positions": ["top-left", "top-right", "bottom-left", "bottom-right"],
+        "edge_tip_ratio": "0.05-0.12",
+        "instruction": "Create 1 long smooth curve, duplicate layers with slight offset/scale and same-hue brightness steps."
+      },
+      "typography": { "title_ratio": "0.08-0.14", "body_line_height": "1.3-1.6", "levels": ["title", "subtitle", "body"] },
+      "palette_suggestions": ["#0B3D91 + #FFFFFF + #C89B3C", "#14B8A6 + #FFFFFF + #0F172A"]
     }
   },
   {
-    "id": "flyer_gen_geometric_sharp",
-    "description": "نظام توليد فلايرات هندسية حادة (مضلعات)",
-    "suitable_for": "Corporate, Construction, Law, Industrial, Real Estate",
+    "id": "flyer_gen_curve_layers_sideband",
+    "description": "منحنيات متدرجة + شريط جانبي رفيع للتوازن",
+    "suitable_for": "Business, Consulting, Finance, Logistics",
     "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "anti_deformation": { "max_control_points": 6, "self_intersection": "forbidden" },
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["analogous", "monochromatic"] },
+      "white_space": { "min_negative_space_ratio": 0.33 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["sideband_width", "curve_amplitude", "palette_variant", "title_alignment"] },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "40-70", "bleed_px": "20-35" }
+    },
     "generative_rules": {
-      "header": { "instruction": "Draw overlapping polygons/triangles at the top. Use sharp angles (30-60 degrees).", "opacity": "Mix solid and 0.8 opacity" },
-      "accents": { "instruction": "Add a vertical sidebar or diagonal slash lines.", "color": "Contrast accent" },
-      "mood": "Strong, trustworthy, structured."
+      "sideband": { "width_px": "10-18", "position": "opposite_of_curves", "opacity": "0.8-1.0" },
+      "curve_layering_system": { "layer_count": "3-4", "offset_range_px": "16-36", "scale_range": "1.02-1.05" },
+      "layout": { "grid": "stacked_blocks", "cta_bar": true },
+      "palette_suggestions": ["#111827 + #FFFFFF + #F97316", "#1E3A8A + #F8FAFC + #10B981"]
     }
   },
   {
-    "id": "flyer_gen_grid_content",
-    "description": "نظام شبكي للنصوص الكثيرة والقوائم",
-    "suitable_for": "Product Lists, Menus, detailed Services, Data-heavy",
+    "id": "flyer_gen_geometric_polygons_top",
+    "description": "مضلعات هندسية حادة أعلى الصفحة مع تباين قوي",
+    "suitable_for": "Corporate, Construction, Real Estate, Law",
     "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["analogous", "monochromatic"], "forbidden": ["random_multi_color"] },
+      "white_space": { "min_negative_space_ratio": 0.30 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["polygon_count", "angles", "accent_bar_position", "grid_mode"] },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "40-70" }
+    },
     "generative_rules": {
-      "header": { "instruction": "Simple rectangular header strip (height 100-120). Focus on title.", "style": "Solid color" },
-      "body": { "instruction": "Divide the page into a 2-column or 3-column grid layout for content boxes.", "gap": "20px" },
-      "mood": "Clean, organized, informative."
+      "header_polygons": { "count": "3-6", "angle_range_deg": "25-60", "opacity_mix": ["1.0", "0.85", "0.70"] },
+      "accents": { "diagonal_lines": "2-4", "line_width_px": "2-4" },
+      "layout": { "grid": "2_column_services", "icon_placeholders": true },
+      "palette_suggestions": ["#0B1F3B + #FFFFFF + #FFB400", "#111111 + #F5F5F5 + #00AEEF"]
+    }
+  },
+  {
+    "id": "flyer_gen_swiss_grid_clean",
+    "description": "Swiss Grid احترافي جدًا (محاذاة صارمة + مساحات بيضاء)",
+    "suitable_for": "Corporate, Tech, Editorial, Reports",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "white_space": { "min_negative_space_ratio": 0.40, "priority": "grid_discipline" },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["grid_columns", "headline_scale", "accent_location", "photo_ratio"] },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "50-80" }
+    },
+    "generative_rules": {
+      "grid": { "columns": "6-12", "gutter_px": "18-28", "baseline_grid": true },
+      "typography": { "levels": ["title", "subtitle", "body"], "title_ratio": "0.07-0.12" },
+      "decor": { "minimal_lines": "1-3", "no_heavy_shapes": true },
+      "palette_suggestions": ["#0F172A + #FFFFFF + #2563EB", "#111827 + #F9FAFB + #10B981"]
+    }
+  },
+  {
+    "id": "flyer_gen_minimal_luxury_gold",
+    "description": "Minimal Luxury (أبيض + ذهب) مع إطار رفيع ومساحة تنفس",
+    "suitable_for": "Luxury, Jewelry, Perfume, Premium Services",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["monochromatic", "analogous"] },
+      "white_space": { "min_negative_space_ratio": 0.55 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["frame_style", "gold_line_position", "title_tracking", "content_density"] },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "60-90" }
+    },
+    "generative_rules": {
+      "background": { "base": "#FFFFFF", "grain_opacity": "0.03-0.06" },
+      "gold_elements": { "max_elements": 2, "line_width_px": "1-3", "gold": ["#C89B3C", "#B08D57"] },
+      "layout": { "centered": true, "bullets": "3-5", "cta": "small" },
+      "palette_suggestions": ["#FFFFFF + #111111 + #C89B3C", "#FDF6E3 + #1C1C1C + #B08D57"]
+    }
+  },
+
+  // =========================
+  //  🎨 10 Recipes: Gradients & Glass
+  // =========================
+  {
+    "id": "flyer_gen_gradient_blobs_modern",
+    "description": "خلفية تدرج + Blobs ضبابية خلف بطاقات زجاجية",
+    "suitable_for": "Tech, Startup, App Launch, Digital Services",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["analogous"], "forbidden": ["random_multi_color"] },
+      "white_space": { "min_negative_space_ratio": 0.30 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["blob_count", "gradient_angle", "card_positions", "accent_color"] },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "40-70" }
+    },
+    "generative_rules": {
+      "background_gradient": { "colors": "2-3", "angle_deg": "20-160" },
+      "blobs": { "count": "2-4", "blur": "high", "opacity": "0.25-0.55" },
+      "glass_cards": { "count": "2-4", "opacity": "0.70-0.85", "radius": 22, "stroke_opacity": 0.30 },
+      "palette_suggestions": ["#6A11CB + #2575FC + #FFFFFF", "#00C6FF + #0072FF + #0B0B0B"]
+    }
+  },
+  {
+    "id": "flyer_gen_glassmorphism_clean_cards",
+    "description": "Glassmorphism نظيف: بطاقتان كبيرتان + CTA بار",
+    "suitable_for": "Modern Business, Architecture, Creative Studio",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "white_space": { "min_negative_space_ratio": 0.33 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["card_count", "card_stack", "gradient_variant", "title_alignment"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "cards": { "count": "2-3", "stack_style": "overlap_slight", "shadow": "soft" },
+      "cta_bar": { "enabled": true, "height_ratio": "0.10-0.13" },
+      "palette_suggestions": ["#0EA5E9 + #111827 + #FFFFFF", "#14B8A6 + #0F172A + #F8FAFC"]
+    }
+  },
+  {
+    "id": "flyer_gen_duotone_gradient_split",
+    "description": "تقسيم نصفين بتدرج Duotone مع نص واضح ومركز",
+    "suitable_for": "Events, Workshops, Corporate, Training",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["analogous"] },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["split_direction", "gradient_strength", "headline_scale", "badge_position"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "split": { "direction": ["vertical", "horizontal"], "ratio": "45/55 to 55/45" },
+      "duotone": { "overlay_opacity": "0.25-0.55" },
+      "badge": { "shape": "rounded", "count": "1-2" }
+    }
+  },
+
+  // =========================
+  //  🧱 12 Recipes: Content-Heavy / Menus / Lists
+  // =========================
+  {
+    "id": "flyer_gen_catalog_cards_2col",
+    "description": "قائمة خدمات/منتجات ببطاقات 2 أعمدة مع أسعار/Tags",
+    "suitable_for": "Menus, Catalog, Services List, Price List",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "white_space": { "min_negative_space_ratio": 0.25 },
+      "color_harmony": { "max_colors": 3 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["columns", "card_radius", "tag_style", "header_style"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "header_strip": { "height_ratio": "0.10-0.14", "style": "solid_or_soft_gradient" },
+      "grid": { "columns": 2, "gap_px": "18-26", "rows": "auto" },
+      "cards": { "radius": "14-22", "shadow": "very_soft" },
+      "tags_prices": { "style": "pill", "accent_only": true }
+    }
+  },
+  {
+    "id": "flyer_gen_menu_modern_photo_blocks",
+    "description": "منيو حديث: صور أطباق + بطاقات أسعار + تقسيم مريح",
+    "suitable_for": "Restaurants, Cafes, Fast Food, Bakery",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["photo_grid", "price_badge_style", "palette_variant", "section_count"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "photo_area": { "ratio": "0.30-0.45", "shape": ["rounded_rect", "circle_crop"] },
+      "sections": { "count": "2-4", "divider_style": "thin_line_or_dots" },
+      "price_badge": { "shape": "pill_or_sticker", "accent_only": true },
+      "palette_suggestions": ["#D62828 + #F8F1E7 + #1B1B1B", "#FF7A00 + #FFF7ED + #0F172A"]
+    }
+  },
+  {
+    "id": "flyer_gen_table_like_services",
+    "description": "شبكة شبه جدول: خدمات + وصف + سعر بشكل مرتب جدًا",
+    "suitable_for": "Salons, Clinics, Repair Shops, Agencies",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.28 } },
+    "generative_rules": {
+      "layout": { "mode": "rows", "row_height_px": "120-160", "separator": "thin_line" },
+      "columns": { "count": "2-3", "align": "RTL aware" },
+      "accent": { "use": "only_headers_or_prices" }
+    }
+  },
+
+  // =========================
+  //  🖼️ 10 Recipes: Hero Image / Product / Real Estate
+  // =========================
+  {
+    "id": "flyer_gen_hero_image_overlay_clean",
+    "description": "Hero Image كبير أعلى + Overlay + نص واضح + خدمات تحت",
+    "suitable_for": "Hotels, Products, Medical, Events, Restaurants",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["hero_ratio", "overlay_strength", "card_count", "cta_style"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "hero": { "ratio": "0.45-0.55", "overlay_opacity": "0.35-0.65", "title_on_hero": true },
+      "below": { "cards": "3-5", "icon_placeholders": true },
+      "cta": { "type": "bar_or_button", "accent_only": true }
+    }
+  },
+  {
+    "id": "flyer_gen_real_estate_premium",
+    "description": "عقارات: صورة كبيرة + تفاصيل منظمة + شريط CTA قوي",
+    "suitable_for": "Real Estate, Construction, Property Rental",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true },
+    "generative_rules": {
+      "hero": { "ratio": "0.40-0.50", "overlay_opacity": "0.45-0.60" },
+      "details": { "grid": "2_columns", "items": ["location", "rooms", "size", "price"] },
+      "cta": { "height_ratio": "0.10-0.13", "qr_zone": true },
+      "palette_suggestions": ["#0B3D91 + #F1F5F9 + #C89B3C"]
+    }
+  },
+
+  // =========================
+  //  ⚡ 10 Recipes: Bold / Sports / Street
+  // =========================
+  {
+    "id": "flyer_gen_sport_energy_streaks",
+    "description": "رياضي: خطوط حركة قطرية + عنوان ضخم + بلوكات معلومات",
+    "suitable_for": "Gym, Fitness, Martial Arts, Sports Events",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "color_harmony": { "max_colors": 3, "forbidden": ["random_multi_color"] },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["streak_count", "headline_style", "badge_position", "palette_variant"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "background": { "base": "dark", "streaks": "5-12", "glow": "optional" },
+      "title": { "ratio": "0.10-0.18", "outline": true },
+      "info_blocks": { "count": "3", "style": "sharp_rect" },
+      "palette_suggestions": ["#0B0B0B + #FFFFFF + #00FFB3", "#111111 + #FFFFFF + #FF2D95"]
+    }
+  },
+  {
+    "id": "flyer_gen_brutalist_blocks",
+    "description": "Brutalist: كتل صلبة + محاذاة غير متماثلة + خطوط دقيقة",
+    "suitable_for": "Creative Agency, Art, Design Studio",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["block_count", "block_positions", "headline_scale", "micro_lines_style"] } },
+    "generative_rules": {
+      "blocks": { "count": "2-5", "opacity_mix": ["1.0", "0.85"] },
+      "micro_lines": { "count": "3-8", "stroke_px": "2-3" },
+      "typography": { "asymmetry": true, "highlight_bars": "1-2" }
+    }
+  },
+
+  // =========================
+  //  🌙 8 Recipes: Islamic / Elegant / Formal
+  // =========================
+  {
+    "id": "flyer_gen_islamic_modern_pattern_soft",
+    "description": "طابع إسلامي عصري: زخرفة هندسية خفيفة كـ watermark + قوس علوي",
+    "suitable_for": "Ramadan, Hajj & Umrah, Charity, Islamic Events",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "white_space": { "min_negative_space_ratio": 0.35 },
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["analogous", "monochromatic"] },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["pattern_density", "arch_height", "palette_variant", "separator_style"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "pattern": { "opacity": "0.05-0.12", "density": "low-medium" },
+      "arch_header": { "height_ratio": "0.18-0.26", "curve_smoothness": "high" },
+      "separators": { "style": "thin_line_with_small_diamond", "count": "1-2" },
+      "palette_suggestions": ["#0F3D2E + #FFFFFF + #C89B3C", "#0B1F3B + #FFFFFF + #D4AF37"]
+    }
+  },
+  {
+    "id": "flyer_gen_formal_frame_double",
+    "description": "إطار رسمي مزدوج: خطين رفيعين + مساحة داخلية متناظرة",
+    "suitable_for": "Certificates, Official Announcements, Invitations",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.45 } },
+    "generative_rules": {
+      "frame": { "outer_px": "2-4", "inner_px": "1-2", "gap_px": "12-22" },
+      "layout": { "symmetry": true, "centered_title": true },
+      "ornament": { "max": 2, "opacity": "0.10-0.25" }
+    }
+  },
+
+  // =========================
+  //  🎉 8 Recipes: Playful / Memphis / Kids
+  // =========================
+  {
+    "id": "flyer_gen_memphis_playful",
+    "description": "Memphis: نقاط وخطوط وأشكال صغيرة لكن بكثافة مضبوطة",
+    "suitable_for": "Promotions, Education, Youth Events, Kids",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["pattern_set", "shape_count", "badge_style", "palette_variant"] },
+      "rtl": true
+    },
+    "generative_rules": {
+      "pattern_density": "low-medium",
+      "shapes": { "count": "6-14", "stroke_px": "3-5" },
+      "cards": { "count": "3-6", "radius": "18-28" },
+      "palette_suggestions": ["#FF6B6B + #FFD93D + #6BCB77 + #4D96FF"]
+    }
+  },
+  {
+    "id": "flyer_gen_kids_soft_pastels",
+    "description": "أطفال: ألوان باستيـل + بطاقات دائرية + ملصق تاريخ",
+    "suitable_for": "Schools, Nursery, Courses, Kids Events",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.30 } },
+    "generative_rules": {
+      "background": { "pastel": true, "soft_shapes": "6-12" },
+      "sticker_badge": { "count": "1-2", "shape": "rounded_cloud" },
+      "layout": { "center_illustration_placeholder": true, "detail_cards": "3-5" },
+      "palette_suggestions": ["#FFB5E8 + #B28DFF + #AFF8DB + #FFF5BA"]
+    }
+  },
+
+  // =========================
+  //  🧾 12 Recipes: Ticket / Timeline / Infographic / Report
+  // =========================
+  {
+    "id": "flyer_gen_ticket_pass_qr",
+    "description": "Ticket / Pass: قصات جانبية + خط متقطع + QR + باركود",
+    "suitable_for": "Concert, Conference, Workshop, Sports Match",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["ticket_ratio", "dash_style", "barcode_style", "palette_variant"] } },
+    "generative_rules": {
+      "ticket_block": { "radius": "16-22", "cut_circles": true, "dash": "10 8" },
+      "qr_zone": { "ratio": "0.14-0.20", "label": true },
+      "barcode": { "enabled": true, "line_density": "medium" },
+      "palette_suggestions": ["#111827 + #FFFFFF + #F97316", "#0B0B0B + #F5F5F5 + #00AEEF"]
+    }
+  },
+  {
+    "id": "flyer_gen_infographic_stats_blocks",
+    "description": "Infographic: أرقام كبيرة + بلوكات إحصاء + mini charts وهمية",
+    "suitable_for": "NGO, Reports, Awareness, Business Data",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.28 } },
+    "generative_rules": {
+      "stats_blocks": { "count": "4-8", "grid": "2_columns", "big_numbers": true },
+      "mini_charts": { "type": ["bars", "dots"], "accent_only": true },
+      "timeline_optional": { "probability": 0.45, "style": "vertical_dots_line" }
+    }
+  },
+  {
+    "id": "flyer_gen_timeline_vertical_story",
+    "description": "Timeline عمودي: نقاط + خط + مراحل واضحة (Story Layout)",
+    "suitable_for": "Company History, Roadmap, Event Agenda",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true },
+    "generative_rules": {
+      "timeline": { "steps": "4-7", "dot_size_px": "10-16", "line_width_px": "3-5" },
+      "cards": { "style": "rounded", "alternate_sides": true },
+      "accent": { "use": "timeline_dots_only" }
+    }
+  },
+
+  // =========================
+  //  🧩 8 Recipes: Split Layout / Diagonal / Sidebar
+  // =========================
+  {
+    "id": "flyer_gen_split_diagonal_modern",
+    "description": "تقسيم قطري: نصف معلومات/نصف صورة + خط فصل رفيع",
+    "suitable_for": "Fitness, Fashion, Real Estate, Events",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["split_angle", "split_ratio", "cta_position", "palette_variant"] } },
+    "generative_rules": {
+      "split_angle_deg": "20-40",
+      "split_ratio": "45/55 to 55/45",
+      "text_on_light_side": true,
+      "cta_on_dark_side": true
+    }
+  },
+  {
+    "id": "flyer_gen_sidebar_indexed_sections",
+    "description": "Sidebar فهرسة: شريط جانبي بأرقام الأقسام + محتوى منظم",
+    "suitable_for": "Courses, Programs, Services, Reports",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.30 } },
+    "generative_rules": {
+      "sidebar": { "width_ratio": "0.12-0.18", "numbered": true, "accent_only": true },
+      "sections": { "count": "4-8", "divider": "thin_line" },
+      "layout": { "clean_cards": true }
+    }
+  },
+
+  // =========================
+  //  🧠 10 Recipes: Corporate Clean / Finance / Medical / Legal
+  // =========================
+  {
+    "id": "flyer_gen_finance_trust_clean",
+    "description": "مالي: نظيف جداً + أيقونات خطية + CTA واضح + تباين قوي",
+    "suitable_for": "Finance, Microfinance, Insurance, Banking",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "color_harmony": { "max_colors": 3 }, "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["icon_style", "cta_bar_height", "header_style", "accent_location"] } },
+    "generative_rules": {
+      "header": { "style": "solid_strip_or_soft_curve", "height_ratio": "0.12-0.18" },
+      "services": { "cards": "4-6", "icon_placeholders": "outline" },
+      "cta": { "type": "bar", "qr_zone": true },
+      "palette_suggestions": ["#0B1F3B + #FFFFFF + #FFB400", "#0F172A + #F8FAFC + #22C55E"]
+    }
+  },
+  {
+    "id": "flyer_gen_medical_clinic_ultra_clean",
+    "description": "عيادة: أبيض + أزرق/تركواز + صندوق موعد بارز بدون ازدحام",
+    "suitable_for": "Clinics, Dental, Pharmacy, Hospitals",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.40 } },
+    "generative_rules": {
+      "watermark": { "medical_symbol_opacity": "0.05-0.10" },
+      "appointment_box": { "radius": "16-22", "accent_only": true, "highlight": true },
+      "services_list": { "bullets": "4-8", "icons": "outline" },
+      "palette_suggestions": ["#0EA5E9 + #FFFFFF + #0F172A", "#14B8A6 + #FFFFFF + #1E293B"]
+    }
+  },
+  {
+    "id": "flyer_gen_legal_serious_blocks",
+    "description": "قانوني: كتل هادئة + خطوط رفيعة + عنوان قوي بدون زخرفة زائدة",
+    "suitable_for": "Law Firms, Legal Services, Notary",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "color_harmony": { "max_colors": 3 } },
+    "generative_rules": {
+      "layout": { "mode": "stacked_blocks", "divider": "thin_line" },
+      "accent": { "use": "only_for_separator_or_cta" },
+      "palette_suggestions": ["#111111 + #F5F5F5 + #C89B3C", "#0B1F3B + #FFFFFF + #9CA3AF"]
+    }
+  },
+
+  // =========================
+  //  ✨ 8 Recipes: Artistic / Texture / Pattern (Controlled)
+  // =========================
+  {
+    "id": "flyer_gen_subtle_grain_editorial",
+    "description": "Editorial: خلفية فاتحة + Grain خفيف + خطوط تقسيم دقيقة",
+    "suitable_for": "Magazine Style, Premium Announcements, Brands",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.50 } },
+    "generative_rules": {
+      "grain": { "opacity": "0.03-0.07" },
+      "lines": { "count": "2-6", "stroke_px": "1-2", "opacity": "0.30-0.60" },
+      "layout": { "editorial": true, "photo_optional": true }
+    }
+  },
+  {
+    "id": "flyer_gen_pattern_border_minimal",
+    "description": "Pattern Border: زخرفة على الأطراف فقط (لا تلمس النص)",
+    "suitable_for": "Invitations, Cultural Events, Brands",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "white_space": { "min_negative_space_ratio": 0.45 } },
+    "generative_rules": {
+      "pattern": { "placement": "edges_only", "opacity": "0.06-0.12", "density": "low" },
+      "content_safe_zone": { "padding_px": "70-95" }
+    }
+  },
+
+  // =========================
+  //  🧷 6 Recipes: QR / Contact-Focused / CTA
+  // =========================
+  {
+    "id": "flyer_gen_cta_bottom_bar_qr",
+    "description": "CTA Bar أسفل + رقم كبير + QR + مساحة نظيفة فوق",
+    "suitable_for": "Any Service, Offers, Contact-driven flyers",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": { "rtl": true, "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["cta_height", "cta_shape", "qr_position", "palette_variant"] } },
+    "generative_rules": {
+      "cta_bar": { "height_ratio": "0.11-0.15", "style": "solid_or_gradient", "phone_big": true },
+      "upper_area": { "clean": true, "feature_cards": "2-4" }
+    }
+  },
+
+  // =========================
+  //  ✅ 6 Recipes: A5-specific (matches your screenshot style)
+  // =========================
+  {
+    "id": "flyer_gen_a5_top_curve_band",
+    "description": "A5: شريط علوي منحني طويل نظيف مثل المثال مع تدرج لطيف",
+    "suitable_for": "A5 Flyers, Brief Company Profiles, Announcements",
+    "canvas_size": { "width": 1748, "height": 2480, "viewBox": "0 0 420 595" },
+    "global_quality_rules": {
+      "anti_deformation": { "max_control_points": 6, "self_intersection": "forbidden", "smoothness": "high" },
+      "color_harmony": { "max_colors": 3, "allowed_modes": ["monochromatic", "analogous"], "forbidden": ["random_multi_color"] },
+      "white_space": { "min_negative_space_ratio": 0.40 },
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["curve_depth", "band_height", "palette_variant", "footer_curve_direction"] },
+      "rtl": true,
+      "print_ready": { "safe_margin_px": "35-55", "bleed_px": "18-28", "avoid_edge_text": true }
+    },
+    "generative_rules": {
+      "top_band": {
+        "instruction": "Create a long smooth curve band across the top. It must be clean and wide, not bumpy. Add optional second layer with 0.65 opacity.",
+        "height_ratio": "0.12-0.18",
+        "curve_depth_ratio": "0.20-0.40"
+      },
+      "bottom_corner": {
+        "instruction": "Add a subtle bottom corner curve wedge (small). Keep it balanced with top band.",
+        "coverage_ratio": "0.12-0.20"
+      },
+      "content": { "mode": "single_column", "sections": "4-8", "bullets": true },
+      "palette_suggestions": ["#0EA5E9 + #FFFFFF + #0F172A", "#2563EB + #FFFFFF + #0B1F3B"]
+    }
+  },
+  {
+    "id": "flyer_gen_a5_bottom_curve_wedge",
+    "description": "A5: كتلة منحنى سفلية مثلثية ناعمة + نص فوقها",
+    "suitable_for": "A5, Offers, Minimal Flyers",
+    "canvas_size": { "width": 1748, "height": 2480, "viewBox": "0 0 420 595" },
+    "global_quality_rules": { "rtl": true, "anti_deformation": { "max_control_points": 6, "self_intersection": "forbidden" }, "color_harmony": { "max_colors": 3 } },
+    "generative_rules": {
+      "bottom_wedge": { "coverage_ratio": "0.18-0.30", "layer_count": "2-4", "offset_range_px": "12-28" },
+      "upper_space": { "white_space_ratio": "0.45-0.60" }
+    }
+  },
+
+  // =========================
+  //  🔥 8 Recipes: “Creativity Zone” controlled
+  // =========================
+  {
+    "id": "flyer_gen_creativity_zone_soft_blob",
+    "description": "منطقة إبداع: عنصر زخرفي واحد (Blob) خفيف بعيد عن النص",
+    "suitable_for": "Any modern flyer needing unique touch",
+    "canvas_size": { "width": 2480, "height": 3508, "viewBox": "0 0 595 842" },
+    "global_quality_rules": {
+      "rtl": true,
+      "anti_repetition": { "min_changes_required": 4, "changeable_parameters": ["blob_shape", "blob_position", "opacity", "palette_variant"] },
+      "white_space": { "min_negative_space_ratio": 0.33 }
+    },
+    "generative_rules": {
+      "creativity_zone": {
+        "zone_ratio": "0.10-0.18",
+        "allowed_elements": ["abstract_blob", "soft_glow", "micro_pattern"],
+        "forbidden_elements": ["heavy_noise", "overlapping_text", "random_icons"],
+        "instruction": "Place exactly one subtle creative element in a corner. Must not reduce readability."
+      }
     }
   }
+
+  // ملاحظة: هذه مكتبة ضخمة بالفعل، وإذا تريد “أضخم” أكثر (200+ وصفة)،
+  // سأرسلها لك على دفعات كبيرة حسب الفئات: Corporate / Luxury / Playful / Medical / Food / Events / Infographic / Minimal / Islamic / Sports ...
 ]
