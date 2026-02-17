@@ -227,7 +227,9 @@ REQUIRED JSON PLAN FORMAT:
     "main_rules_applied": ["1_Hierarchy", "3_Arabic_BiDi", "4_Geo_Safety"]
   }}
 }}
-        ys_instructions = f"""
+
+"""
+    sys_instructions = f"""
     ROLE: Almonjez V16 Engineering Architect.
     
     --- 🏛️ CONSTITUTION (STRICT) ---
@@ -336,7 +338,6 @@ REQUIRED JSON PLAN FORMAT:
         "meta": {
             "model": used_model, 
             "plan": extracted_plan,
-            
             "protocol": "V16-GEO-BIDI"
         }
     })
@@ -344,6 +345,8 @@ REQUIRED JSON PLAN FORMAT:
 except Exception as e:
     logger.critical(f"Fatal System Error: {e}")
     return jsonify({"error": str(e)}), 500
-    f name == 'main':
+
+if name == 'main':
 # Running on standard port
 app.run(host='0.0.0.0', port=10000)
+
