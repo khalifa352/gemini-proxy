@@ -258,7 +258,7 @@ REQUIRED JSON PLAN FORMAT:
     fail_reason = ""
     
     # Models Queue
-    models = ["gemini-2.0-pro-exp-02-05", "gemini-1.5-pro"]
+    models = ["gemini-2.0-pro-exp-02-05", "gemini-2.0-flash"]
     
     for attempt in range(max_attempts):
         model = models[0] if attempt == 0 else models[-1]
