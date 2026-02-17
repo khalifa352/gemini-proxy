@@ -80,24 +80,24 @@ def sanitize_json_payload(raw_text):
     لضمان استخراج كائن JSON سليم.
     """
     if not raw_text: return None
-    
+
     # 1. Extract JSON candidate using Regex
     match = PLAN_RE.search(raw_text)
     candidate = match.group(1) if match else raw_text
 
     # 2. Remove Comments (// ...)
     candidate = re.sub(r"//.*", "", candidate)
-    
+
     # 3. Remove Markdown blocks if present
     candidate = re.sub(r"```json\s*|\s*```", "", candidate)
-    
+
     # 4. Locate strict outermost braces
     start = candidate.find('{')
     end = candidate.rfind('}')
     if start == -1 or end == -1: return None
-    
+
     clean_str = candidate[start:end+1]
-    
+
     # 5. Remove Trailing Commas (Common LLM Error)
     clean_str = re.sub(r",\s*}", "}", clean_str)
     clean_str = re.sub(r",\s*]", "]", clean_str)
@@ -113,7 +113,7 @@ def sanitize_json_payload(raw_text):
 # ======================================================
 
 def is_arabic_advanced(text):
-    """كشف عميق للنصوص العربية باستخدام النطاقات الموسعة."""
+    """كشف عميق للنصوص العربية باستخدام النطاقات الموسعة.""" 
     return bool(ARABIC_EXTENDED_RE.search(text))
 
 def apply_opacity_tier(element_type):
@@ -137,7 +137,7 @@ def enforce_safe_zone(x, y, width, height, viewbox_width=1080, viewbox_height=10
     """
     safe_margin = GEO_PROTOCOL["safe_margin_pct"] * min(viewbox_width, viewbox_height)
     bleed = 18  # Approx px for 3mm bleed at 150DPI
-    
+
     # Adjust for bleed (extend backgrounds outward)
     if x < 0:
         x -= bleed
@@ -147,13 +147,13 @@ def enforce_safe_zone(x, y, width, height, viewbox_width=1080, viewbox_height=10
         width += bleed
     if y + height > viewbox_height:
         height += bleed
-    
+
     # Enforce safe zone for text/content (inset)
     x = max(x, safe_margin)
     y = max(y, safe_margin)
     width = min(width, viewbox_width - 2 * safe_margin)
     height = min(height, viewbox_height - 2 * safe_margin)
-    
+
     return x, y, width, height
 
 def optimize_path_data(d):
@@ -162,18 +162,18 @@ def optimize_path_data(d):
     """
     # Rounding decimals to 2 places
     d = re.sub(r"(\d+\.\d{3,})", lambda m: f"{float(m.group(1)):.2f}", d)
-    
+
     # Close paths if not closed (add Z if last command isn't Z and path seems closed)
     if d.strip()[-1] != 'Z' and d.startswith('M'):
         # Simple check: if first and last points are close
         coords = re.findall(r"[-+]?\d*\.?\d+", d)
         if len(coords) >= 4 and abs(float(coords[0]) - float(coords[-2])) < 0.01 and abs(float(coords[1]) - float(coords[-1])) < 0.01:
             d += 'Z'
-    
+
     # Optimize straight lines to curves if appropriate (simplified: convert sequences of L to Q if obtuse)
     # For now, placeholder for advanced bezier conversion
     d = re.sub(r"L\s*(\d+\.?\d*)\s*(\d+\.?\d*)\s*L", r"Q \1 \2 ", d)  # Basic conversion example
-    
+
     return d
 
 def enforce_geo_protocol(svg_code, viewbox_width=1080, viewbox_height=1080):
@@ -186,10 +186,10 @@ def enforce_geo_protocol(svg_code, viewbox_width=1080, viewbox_height=1080):
     """
     # 1. Rounding long floats to 2 decimal places (Optimization)
     svg_code = re.sub(r"(\d+\.\d{3,})", lambda m: f"{float(m.group(1)):.2f}", svg_code)
-    
+
     # 2. Optimize paths
     svg_code = re.sub(r'd="([^"]+)"', lambda m: f'd="{optimize_path_data(m.group(1))}"', svg_code)
-    
+
     # 3. Apply opacity tiers (scan and adjust opacity attributes)
     def adjust_opacity(match):
         tag = match.group(0)
@@ -198,25 +198,25 @@ def enforce_geo_protocol(svg_code, viewbox_width=1080, viewbox_height=1080):
             opacity = apply_opacity_tier(element_type)
             tag = tag.replace(">", f' opacity="{opacity}">', 1)
         return tag
-    
+
     svg_code = re.sub(r"<(rect|circle|ellipse|path|text|tspan)[^>]*>", adjust_opacity, svg_code)
-    
+
     # 4. Enforce safe zones (adjust x,y,width,height attributes)
     def adjust_coords(match):
         tag = match.group(0)
         attrs = re.findall(r'(\w+)="([^"]+)"', tag)
         attr_dict = dict(attrs)
-        
+
         if 'x' in attr_dict and 'y' in attr_dict and 'width' in attr_dict and 'height' in attr_dict:
             x, y, w, h = map(float, [attr_dict['x'], attr_dict['y'], attr_dict['width'], attr_dict['height']])
             x, y, w, h = enforce_safe_zone(x, y, w, h, viewbox_width, viewbox_height)
             for key, val in {'x': x, 'y': y, 'width': w, 'height': h}.items():
                 tag = re.sub(f'{key}="[^"]+"', f'{key}="{val:.2f}"', tag)
-        
+
         return tag
-    
+
     svg_code = re.sub(r"<(rect|image|text)[^>]*>", adjust_coords, svg_code)
-    
+
     return svg_code
 
 def inject_bidi_attributes(svg_code):
@@ -230,17 +230,17 @@ def inject_bidi_attributes(svg_code):
             # 1. Force RTL
             if "direction" not in tag_content:
                 tag_content = tag_content.replace("<text", '<text direction="rtl" unicode-bidi="embed"')
-            
+
             # 2. Flip Anchors (Start -> End) for proper RTL alignment
             if 'text-anchor="start"' in tag_content:
                 tag_content = tag_content.replace('text-anchor="start"', 'text-anchor="end"')
             elif 'text-anchor="end"' in tag_content:
                 tag_content = tag_content.replace('text-anchor="end"', 'text-anchor="start"')
-                
+
             # 3. Ensure Font Fallback (Optional but recommended)
             if "font-family" not in tag_content:
                 tag_content = tag_content.replace("<text", '<text font-family="Arial, sans-serif"')
-                
+
         return tag_content
 
     # Apply to <text> and <tspan> tags
@@ -253,7 +253,7 @@ def inject_bidi_attributes(svg_code):
 
 def validate_plan_content(plan):
     if not isinstance(plan, dict): return False, "Invalid JSON Object."
-    
+
     contract = plan.get("design_contract")
     if not isinstance(contract, dict): return False, "Missing 'design_contract'."
 
@@ -317,15 +317,15 @@ def generate():
         data = request.json
         user_msg = data.get('message', '')
         cat_name = data.get('category', 'general')
-        
+
         # Default V16 Dimensions
         width, height = int(data.get('width', 1080)), int(data.get('height', 1080))
-        
+
         recipe = get_recipe_data(cat_name, user_msg)
-        
+
         # Prepare Context
         indexed_rules = [f"{k}: {v}" for k,v in ALMONJEZ_CONSTITUTION.items()]
-        
+
         # ✅ FIX 2: THE LITERAL CONTRACT (Updated for V16)
         plan_template = f"""
 REQUIRED JSON PLAN FORMAT:
@@ -422,24 +422,24 @@ def sanitize_json_payload(raw_text):
     لضمان استخراج كائن JSON سليم.
     """
     if not raw_text: return None
-    
+
     # 1. Extract JSON candidate using Regex
     match = PLAN_RE.search(raw_text)
     candidate = match.group(1) if match else raw_text
 
     # 2. Remove Comments (// ...)
     candidate = re.sub(r"//.*", "", candidate)
-    
+
     # 3. Remove Markdown blocks if present
     candidate = re.sub(r"```json\s*|\s*```", "", candidate)
-    
+
     # 4. Locate strict outermost braces
     start = candidate.find('{')
     end = candidate.rfind('}')
     if start == -1 or end == -1: return None
-    
+
     clean_str = candidate[start:end+1]
-    
+
     # 5. Remove Trailing Commas (Common LLM Error)
     clean_str = re.sub(r",\s*}", "}", clean_str)
     clean_str = re.sub(r",\s*]", "]", clean_str)
@@ -455,7 +455,7 @@ def sanitize_json_payload(raw_text):
 # ======================================================
 
 def is_arabic_advanced(text):
-    """كشف عميق للنصوص العربية باستخدام النطاقات الموسعة."""
+    """كشف عميق للنصوص العربية باستخدام النطاقات الموسعة.""" 
     return bool(ARABIC_EXTENDED_RE.search(text))
 
 def apply_opacity_tier(element_type):
@@ -479,7 +479,7 @@ def enforce_safe_zone(x, y, width, height, viewbox_width=1080, viewbox_height=10
     """
     safe_margin = GEO_PROTOCOL["safe_margin_pct"] * min(viewbox_width, viewbox_height)
     bleed = 18  # Approx px for 3mm bleed at 150DPI
-    
+
     # Adjust for bleed (extend backgrounds outward)
     if x < 0:
         x -= bleed
@@ -489,13 +489,13 @@ def enforce_safe_zone(x, y, width, height, viewbox_width=1080, viewbox_height=10
         width += bleed
     if y + height > viewbox_height:
         height += bleed
-    
+
     # Enforce safe zone for text/content (inset)
     x = max(x, safe_margin)
     y = max(y, safe_margin)
     width = min(width, viewbox_width - 2 * safe_margin)
     height = min(height, viewbox_height - 2 * safe_margin)
-    
+
     return x, y, width, height
 
 def optimize_path_data(d):
@@ -504,18 +504,18 @@ def optimize_path_data(d):
     """
     # Rounding decimals to 2 places
     d = re.sub(r"(\d+\.\d{3,})", lambda m: f"{float(m.group(1)):.2f}", d)
-    
+
     # Close paths if not closed (add Z if last command isn't Z and path seems closed)
     if d.strip()[-1] != 'Z' and d.startswith('M'):
         # Simple check: if first and last points are close
         coords = re.findall(r"[-+]?\d*\.?\d+", d)
         if len(coords) >= 4 and abs(float(coords[0]) - float(coords[-2])) < 0.01 and abs(float(coords[1]) - float(coords[-1])) < 0.01:
             d += 'Z'
-    
+
     # Optimize straight lines to curves if appropriate (simplified: convert sequences of L to Q if obtuse)
     # For now, placeholder for advanced bezier conversion
     d = re.sub(r"L\s*(\d+\.?\d*)\s*(\d+\.?\d*)\s*L", r"Q \1 \2 ", d)  # Basic conversion example
-    
+
     return d
 
 def enforce_geo_protocol(svg_code, viewbox_width=1080, viewbox_height=1080):
@@ -528,10 +528,10 @@ def enforce_geo_protocol(svg_code, viewbox_width=1080, viewbox_height=1080):
     """
     # 1. Rounding long floats to 2 decimal places (Optimization)
     svg_code = re.sub(r"(\d+\.\d{3,})", lambda m: f"{float(m.group(1)):.2f}", svg_code)
-    
+
     # 2. Optimize paths
     svg_code = re.sub(r'd="([^"]+)"', lambda m: f'd="{optimize_path_data(m.group(1))}"', svg_code)
-    
+
     # 3. Apply opacity tiers (scan and adjust opacity attributes)
     def adjust_opacity(match):
         tag = match.group(0)
@@ -540,25 +540,25 @@ def enforce_geo_protocol(svg_code, viewbox_width=1080, viewbox_height=1080):
             opacity = apply_opacity_tier(element_type)
             tag = tag.replace(">", f' opacity="{opacity}">', 1)
         return tag
-    
+
     svg_code = re.sub(r"<(rect|circle|ellipse|path|text|tspan)[^>]*>", adjust_opacity, svg_code)
-    
+
     # 4. Enforce safe zones (adjust x,y,width,height attributes)
     def adjust_coords(match):
         tag = match.group(0)
         attrs = re.findall(r'(\w+)="([^"]+)"', tag)
         attr_dict = dict(attrs)
-        
+
         if 'x' in attr_dict and 'y' in attr_dict and 'width' in attr_dict and 'height' in attr_dict:
             x, y, w, h = map(float, [attr_dict['x'], attr_dict['y'], attr_dict['width'], attr_dict['height']])
             x, y, w, h = enforce_safe_zone(x, y, w, h, viewbox_width, viewbox_height)
             for key, val in {'x': x, 'y': y, 'width': w, 'height': h}.items():
                 tag = re.sub(f'{key}="[^"]+"', f'{key}="{val:.2f}"', tag)
-        
+
         return tag
-    
+
     svg_code = re.sub(r"<(rect|image|text)[^>]*>", adjust_coords, svg_code)
-    
+
     return svg_code
 
 def inject_bidi_attributes(svg_code):
@@ -572,17 +572,17 @@ def inject_bidi_attributes(svg_code):
             # 1. Force RTL
             if "direction" not in tag_content:
                 tag_content = tag_content.replace("<text", '<text direction="rtl" unicode-bidi="embed"')
-            
+
             # 2. Flip Anchors (Start -> End) for proper RTL alignment
             if 'text-anchor="start"' in tag_content:
                 tag_content = tag_content.replace('text-anchor="start"', 'text-anchor="end"')
             elif 'text-anchor="end"' in tag_content:
                 tag_content = tag_content.replace('text-anchor="end"', 'text-anchor="start"')
-                
+
             # 3. Ensure Font Fallback (Optional but recommended)
             if "font-family" not in tag_content:
                 tag_content = tag_content.replace("<text", '<text font-family="Arial, sans-serif"')
-                
+
         return tag_content
 
     # Apply to <text> and <tspan> tags
@@ -595,7 +595,7 @@ def inject_bidi_attributes(svg_code):
 
 def validate_plan_content(plan):
     if not isinstance(plan, dict): return False, "Invalid JSON Object."
-    
+
     contract = plan.get("design_contract")
     if not isinstance(contract, dict): return False, "Missing 'design_contract'."
 
@@ -659,15 +659,15 @@ def generate():
         data = request.json
         user_msg = data.get('message', '')
         cat_name = data.get('category', 'general')
-        
+
         # Default V16 Dimensions
         width, height = int(data.get('width', 1080)), int(data.get('height', 1080))
-        
+
         recipe = get_recipe_data(cat_name, user_msg)
-        
+
         # Prepare Context
         indexed_rules = [f"{k}: {v}" for k,v in ALMONJEZ_CONSTITUTION.items()]
-        
+
         # ✅ FIX 2: THE LITERAL CONTRACT (Updated for V16)
         plan_template = f"""
 REQUIRED JSON PLAN FORMAT:
@@ -713,10 +713,10 @@ ROLE: Almonjez V16 Engineering Architect.
     used_model = "unknown"
     extracted_plan = None
     fail_reason = ""
-    
+
     # Models Queue
     models = ["gemini-2.0-pro-exp-02-05", "gemini-2.0-flash"]
-    
+
     for attempt in range(max_attempts):
         model = models[0] if attempt == 0 else models[-1]
         try:
@@ -732,12 +732,12 @@ ROLE: Almonjez V16 Engineering Architect.
                     temperature=0.6 if attempt==0 else 0.4
                 )
             )
-            
+
             raw = response.text or ""
-            
+
             # 1. Sanitize & Extract Plan
             plan = sanitize_json_payload(raw)
-            
+
             # 2. Validate Plan
             is_plan_ok, p_reason = validate_plan_content(plan)
             if not is_plan_ok:
@@ -764,7 +764,7 @@ ROLE: Almonjez V16 Engineering Architect.
             extracted_plan = plan
             used_model = model
             break
-            
+
         except Exception as e:
             fail_reason = str(e)
             logger.error(f"System Error on attempt {attempt+1}: {e}")
@@ -779,17 +779,17 @@ ROLE: Almonjez V16 Engineering Architect.
     # ======================================================
     # 🔨 POST-PROCESSING: APPLYING ENGINEERING PROTOCOLS
     # ======================================================
-    
+
     # 1. Enforce Geo Protocol (Rounding, Opacity, Safe Zones, Paths)
     final_svg = enforce_geo_protocol(final_svg, width, height)
-    
+
     # 2. Inject BiDi/Arabic Attributes
     final_svg = inject_bidi_attributes(final_svg)
-    
+
     # 3. Namespace & Filter Injection (Standard Fixes)
     if 'xmlns=' not in final_svg: 
         final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
-    
+
     return jsonify({
         "response": final_svg,
         "meta": {
