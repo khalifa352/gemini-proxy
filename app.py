@@ -229,7 +229,7 @@ REQUIRED JSON PLAN FORMAT:
 }}
 
 """
-    sys_instructions = f"""
+sys_instructions = f"""
     ROLE: Almonjez V16 Engineering Architect.
     
     --- 🏛️ CONSTITUTION (STRICT) ---
@@ -348,5 +348,5 @@ except Exception as e:
 
 if name == 'main':
 # Running on standard port
-app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000)
 
