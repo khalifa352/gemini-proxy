@@ -288,7 +288,7 @@ REQUIRED JSON PLAN FORMAT:
   }}
 }}
 """
-sys_instructions = f"""
+            sys_instructions = f"""
     ROLE: Almonjez V16 Engineering Architect.
     
     --- CONSTITUTION (STRICT) ---
