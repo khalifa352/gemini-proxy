@@ -275,17 +275,21 @@ def generate():
         recipe = get_recipe_data(cat_name, user_msg)
         indexed_rules = [f"{k}: {v}" for k,v in ALMONJEZ_CONSTITUTION.items()]
          plan_template = f"""
+plan_template = """
 REQUIRED JSON PLAN FORMAT:
 ```json
-{{
-  "design_contract": {{
+{
+  "design_contract": {
     "arabic_position": "top_right",
     "contrast_verified": "YES",
     "layout_variant": "hero",
-    "opacity_tiers_used": ["0.12", "0.45", "1.0"],
+    "opacity_tiers_used": [0.12, 0.45, 1.0],
+    "safe_zone_px": 50,
+    "coord_rounding_decimals": 2,
     "main_rules_applied": ["1_Hierarchy", "3_Arabic_BiDi", "4_Geo_Safety"]
-  }}
-}}
+  }
+}
+```
 """
         sys_instructions = f"""
         ROLE: Almonjez V16 Engineering Architect.
@@ -380,6 +384,5 @@ REQUIRED JSON PLAN FORMAT:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Fix for 'No open HTTP ports detected'
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
