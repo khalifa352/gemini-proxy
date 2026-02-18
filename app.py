@@ -143,7 +143,7 @@ def generate():
 
         # 4. اختيار الموديل (أنت تدفع، إذن نستخدم الأقوى)
         # 1.5 Pro: الأفضل في فهم التعليمات المعقدة والالتزام بالوصفات
-        model_name = "gemini-1.5-pro" 
+        model_name = "gemini-2.0-flash" 
         
         response = client.models.generate_content(
             model=model_name,
