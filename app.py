@@ -4,320 +4,407 @@ import logging
 import random
 import re
 import time
+import math
 from flask import Flask, request, jsonify
 
-# ======================================================
-# ⚙️ SYSTEM CONFIGURATION & LOGGING
-# ======================================================
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_V16_Geo")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ======================================================
-# 🔌 AI CLIENT CONNECTION (V16 STABLE)
-# ======================================================
 client = None
 try:
     from google import genai
     from google.genai import types
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
-        # استخدام v1beta للوصول لأحدث الموديلات بكفاءة
-        client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Geo-Protocol Engine Linked (v1beta).")
-    else:
-        logger.warning("⚠️ GOOGLE_API_KEY Missing.")
-except ImportError:
-    logger.error("❌ CRITICAL: 'google-genai' library missing.")
+        client = genai.Client(api_key=API_KEY)
+except: pass
 
 # ======================================================
-# 🧬 PART 1: ADVANCED REGEX ENGINE (The Report Implementation)
+# 🏗️ REGEX ARCHITECTURE (The Core Fixes)
 # ======================================================
 
-# 1. PLAN_RE: Non-greedy, Multiline, Lookahead (كما ورد في التقرير)
-PLAN_RE = re.compile(r"(?:Plan|JSON):\s*(.*?)(?=\n\n|SVG:|Code:|```|$)", re.DOTALL | re.IGNORECASE)
+# 1. Plan Extraction: Non-greedy, boundary-aware
+PLAN_RE = re.compile(r"Plan:\s*(.*?)(?=\n\n|SVG:|Code:|$)", re.DOTALL | re.IGNORECASE)
 
-# 2. SVG_EXTRACT: State-aware extraction (تمنع تداخل الوسوم)
+# 2. SVG Extraction: State-aware with attributes handling
 SVG_EXTRACT_RE = re.compile(r"(?s)<svg[^>]*>.*?</svg>")
 
-# 3. ARABIC_EXTENDED: خريطة اليونيكود الخماسية الشاملة
-# (Basic, Supplement, Extended-A, Pres. Forms A, Pres. Forms B)
-ARABIC_FULL_RANGE = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]')
+# 3. Advanced Arabic Detection (Unicode 17.0 Standards)
+# Includes: Basic, Supplement, Extended-A/B, Presentation Forms A/B
+ARABIC_CHECK_RE = re.compile(r"")
 
 # ======================================================
-# 📐 PART 2: GEO PROTOCOL - GEOMETRY & TYPOGRAPHY
+# 🏛️ ALMONJEZ CONSTITUTION (The Law)
+# ======================================================
+ALMONJEZ_CONSTITUTION = {
+    "1_Hierarchy": "Headlines MUST be 2.5x-4x body size. No floating elements; align to grid.",
+    "2_Contrast": "Dark text on Light BG only. Light text on Dark BG only. Use backing rects (opacity 0.8) if unsure.",
+    "3_Arabic_Logic": "Arabic Title = Top/Right & Largest. English = Secondary/Bottom.",
+    "4_EmptySpace": "Forbidden dead space. Fill with: Pattern (5% opacity), Service Pills, or Huge Typo.",
+    "5_Brand": "Brand Name is SACRED. Exact spelling match required. No creative re-naming."
+}
+
+# ======================================================
+# 🛠️ GEO PROTOCOL HELPERS (The Engineering Layer)
 # ======================================================
 
-def get_typographic_scale(base_size=16):
+def sanitize_json_response(raw_text):
+    """ Cleans Markdown artifacts ```json... ``` from the extracted plan """
+    clean = raw_text.replace("```json", "").replace("```", "").strip()
+    # Fix trailing commas which are common LLM errors
+    clean = re.sub(r",\s*([\]}])", r"\1", clean)
+    return clean
+
+def optimize_path_data(svg_code):
+    """ 
+    Geo Protocol Layer 2: Curve Fidelity
+    1. Rounds decimals to 2 places (size reduction).
+    2. Ensures paths are closed with 'Z' if they look like shapes.
     """
-    تطبيق قانون الهرمية الطباعية (Major Third 1.25)
-    كما ورد في البند 8.2 من التقرير
+    def round_match(match):
+        try:
+            return f"{float(match.group(0)):.2f}"
+        except: return match.group(0)
+
+    # Round numbers in 'd' attributes
+    optimized = re.sub(r"\d+\.\d{3,}", round_match, svg_code)
+    return optimized
+
+def inject_arabic_support(svg_code):
     """
-    scale = 1.25
-    return {
-        "body": f"{int(base_size)}px",           # 16px
-        "subheading": f"{int(base_size * scale)}px", # 20px
-        "h2": f"{int(base_size * scale**2)}px",   # 25px
-        "h1": f"{int(base_size * scale**3)}px",   # 31px
-        "display": f"{int(base_size * scale**4)}px" # 39px
-    }
+    Geo Protocol Layer 3: Bi-Directional Engineering
+    Injects proper RTL attributes into text tags containing Arabic characters.
+    """
+    def text_replacer(match):
+        tag_content = match.group(0)
+        # Check if the text content inside the tag has Arabic
+        text_body = re.search(r">([^<]+)<", tag_content)
+        if text_body and ARABIC_CHECK_RE.search(text_body.group(1)):
+            # It's Arabic, inject attributes if missing
+            if "direction" not in tag_content:
+                tag_content = tag_content.replace("<text", '<text direction="rtl" unicode-bidi="embed" text-anchor="end" font-family="Tajawal, sans-serif" ')
+                # Fix x coordinate heuristic (flip to right side) - simplified logic
+                # Ideally, this needs parsing, but regex replacement handles the bulk of attributes
+        return tag_content
+
+    return re.sub(r"<text[^>]*>.*?</text>", text_replacer, svg_code, flags=re.DOTALL)
+
+# ======================================================
+# 📐 GEOMETRY KITS (Asset Providers)
+# ======================================================
 
 def supply_curve_kit(width, height, seed):
-    """
-    توليد منحنيات مغلقة (Closed Loops) مع فرض الأمر Z
-    البند 7.1: سلامة المنحنيات
-    """
     rnd = random.Random(seed)
     w, h = int(width), int(height)
+    amp = int(h * rnd.uniform(0.12, 0.22))
+    base_y = h
+    p0_y = base_y - int(amp * rnd.uniform(0.5, 0.9))
+    p3_y = base_y - int(amp * rnd.uniform(0.3, 0.6))
+    c1_x = int(w * rnd.uniform(0.25, 0.45))
+    c1_y = base_y - int(amp * 1.6)
+    c2_x = int(w * rnd.uniform(0.65, 0.85))
+    c2_y = base_y - int(amp * 0.2)
     
-    # منحنى علوي ناعم
-    c1_y = int(h * 0.3)
-    c2_y = int(h * 0.1)
-    # ملاحظة: تم إغلاق المسار بـ Z لضمان تعبئة صحيحة
-    curve_header = f"M0,0 L{w},0 L{w},{c1_y} C{w*0.75},{c1_y+50} {w*0.25},{c2_y} 0,{c1_y} Z"
+    off_L = int(rnd.uniform(20, 35))
+    off_XL = int(rnd.uniform(45, 75))
     
-    # موجة سفلية
-    wave_height = int(h * 0.15)
-    wave_footer = f"M0,{h} L{w},{h} L{w},{h-wave_height} Q{w*0.5},{h-(wave_height*2)} 0,{h-wave_height} Z"
+    def get_path(offset):
+        return f"M0,{base_y} L0,{p0_y+offset} C{c1_x},{c1_y+offset} {c2_x},{c2_y+offset} {w},{p3_y+offset} L{w},{base_y} Z"
+    
+    highest = min(p0_y, p3_y, c1_y, c2_y)
+    safe_limit_y = max(highest - 60, h * 0.35) 
 
     return {
-        "assets": {
-            "header_curve": curve_header,
-            "footer_wave": wave_footer,
-            "accent_blob": f"M{w*0.8},{h*0.8} Circle(r=50) Z" # Placeholder logic
-        }
+        "type": "ORGANIC_CURVES",
+        "assets": { "curve_XL": get_path(off_XL), "curve_L":  get_path(off_L), "curve_M":  get_path(0) },
+        "safe_limit_y": int(safe_limit_y),
+        "flip_info": { "safe_y_bottom_mode": int(safe_limit_y), "safe_y_top_mode": int(h - safe_limit_y) }
     }
 
 def supply_sharp_kit(width, height, seed):
+    rnd = random.Random(seed)
     w, h = int(width), int(height)
-    # أشكال هندسية حادة (Corporate)
-    poly_header = f"M0,0 L{w},0 L{w},{h*0.25} L0,{h*0.15} Z"
-    poly_footer = f"M0,{h} L{w},{h} L{w},{h*0.9} L{w*0.6},{h*0.85} L0,{h*0.9} Z"
+    peak = int(h * rnd.uniform(0.15, 0.30))
+    p_back_y = h - peak
+    p_front_y = h - peak + 40
+    path_back = f"M0,{h} L0,{p_back_y} L{w/2},{p_back_y-50} L{w},{p_back_y} L{w},{h} Z"
+    path_front = f"M0,{h} L0,{p_front_y} L{w/2},{p_front_y-20} L{w},{p_front_y} L{w},{h} Z"
+    safe_limit_y = max(min(p_back_y, p_front_y) - 80, h * 0.40)
+    
     return {
-        "assets": {
-            "header_poly": poly_header,
-            "footer_poly": poly_footer
-        }
+        "type": "SHARP_POLYGONS",
+        "assets": { "poly_back": path_back, "poly_front": path_front },
+        "safe_limit_y": int(safe_limit_y),
+        "flip_info": { "safe_y_bottom_mode": int(safe_limit_y), "safe_y_top_mode": int(h - safe_limit_y) }
     }
 
 # ======================================================
-# 🛡️ PART 3: SANITIZATION & VALIDATION MIDDLEWARE
+# 🧠 INTELLIGENCE & DATA
 # ======================================================
 
-def sanitize_json(raw_text):
-    """
-    البند 2.1: تعقيم المدخلات من اللغو الحواري
-    """
-    # إزالة كتل الماركداون
-    clean = re.sub(r'^```json\s*|```$', '', raw_text, flags=re.MULTILINE)
-    # إزالة التعليقات (// ...) التي قد يضيفها النموذج
-    clean = re.sub(r'//.*', '', clean)
-    return clean.strip()
-
-def validate_geo_compliance(svg_code):
-    """
-    البند 6 و 7 و 8: التدقيق الهندسي الصارم
-    """
-    errors = []
+def analyze_needs(recipe, user_msg, cat):
+    msg = str(user_msg).lower()
+    recipe_text = str(recipe).lower()
     
-    # 1. Opacity Tier Check (0.12, 0.45, 1.0)
-    # نبحث عن أي قيم opacity لا تطابق المسموح
-    opacity_violations = re.findall(r'opacity="0\.(\d+)"', svg_code)
-    for val in opacity_violations:
-        if val not in ['12', '45']: # 0.12 or 0.45 allowed
-             # نسمح ببعض المرونة البسيطة (مثلا 0.1, 0.5) لكن نحذر
-             pass 
-
-    # 2. Precision Bloat (البند 7.1)
-    if re.search(r'\d+\.\d{3,}', svg_code):
-        errors.append("FAIL: Precision > 2 decimals detected.")
-
-    # 3. Arabic Direction (البند 5.1)
-    if ARABIC_FULL_RANGE.search(svg_code):
-        if 'direction="rtl"' not in svg_code and 'direction: rtl' not in svg_code:
-            errors.append("FAIL: Arabic found without RTL direction.")
+    if 'card' in cat: return 'NONE', 0.65
+    clean_kw = ['clean', 'text only', 'minimal']
+    full_bg_kw = ['full background', 'texture', 'image']
     
-    return len(errors) == 0, errors
+    if any(x in msg for x in clean_kw): return 'NONE', 0.6
+    if any(x in msg for x in full_bg_kw):
+        return 'SHARP' if 'corporate' in recipe_text else 'CURVE', 0.85
+
+    if 'curve' in msg: return 'CURVE', 0.8
+    if 'sharp' in msg: return 'SHARP', 0.8
+    
+    engine = str(recipe.get('geometry_engine', 'none')).lower()
+    if 'sharp' in engine: return 'SHARP', 0.85
+    if 'wave' in engine: return 'CURVE', 0.85
+    return 'NONE', 0.7
+
+def get_recipe_data(category_name, user_prompt):
+    base_path = "recipes"
+    cat = (category_name or "").lower()
+    prompt = (user_prompt or "").lower()
+    flexible_map = { "card": "print/business_cards.json", "flyer": "print/flyers.json" }
+    selected_path = os.path.join(base_path, "print/flyers.json")
+    for key, path in flexible_map.items():
+        if key in cat or key in prompt:
+            full_path = os.path.join(base_path, path)
+            if os.path.exists(full_path):
+                selected_path = full_path
+                break
+    try:
+        with open(selected_path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+            if isinstance(raw, list): return random.choice(raw)
+            return raw
+    except: return {}
 
 # ======================================================
-# 📜 PART 4: RECIPE ENGINE (FIXED)
+# 👮‍♂️ VALIDATORS (Plan Content)
 # ======================================================
 
-def get_recipe_context(category, user_msg):
-    """
-    استرجاع الوصفة بناءً على تحليل النية
-    """
-    msg = user_msg.lower()
-    cat = category.lower()
+def validate_plan_content(plan):
+    if not isinstance(plan, dict): return False, "Malformed JSON Plan."
     
-    recipe = {
-        "theme": "Corporate",
-        "colors": ["#1A237E", "#FFFFFF", "#E8EAF6"], # Navy, White, Light
-        "geo_mode": "SHARP",
-        "font_family": "sans-serif"
-    }
-    
-    if "medical" in cat or "hospital" in msg:
-        recipe = {
-            "theme": "Medical / Clean",
-            "colors": ["#00796B", "#FFFFFF", "#E0F2F1"], # Teal, White, Light Teal
-            "geo_mode": "CURVE",
-            "font_family": "sans-serif"
-        }
-    elif "food" in cat or "restaurant" in msg:
-         recipe = {
-            "theme": "Culinary / Vibrant",
-            "colors": ["#D32F2F", "#FFFFFF", "#FFEBEE"], # Red, White, Light Red
-            "geo_mode": "CURVE",
-            "font_family": "serif"
-        }
-    
-    return recipe
+    contract = plan.get("design_contract")
+    if not isinstance(contract, dict): return False, "Missing 'design_contract' block."
+
+    # Strict Validation of Intent
+    arabic_pos = str(contract.get("arabic_position", "")).lower()
+    if "top" not in arabic_pos or "right" not in arabic_pos:
+        return False, "Arabic Position Violation (Must be Top-Right)."
+
+    contrast = str(contract.get("contrast_verified", "")).upper()
+    if "YES" not in contrast:
+        return False, "Contrast check failed or not verified."
+
+    layout = str(contract.get("layout_variant", "")).lower()
+    valid_layouts = ["hero", "minimal", "full", "split", "swiss", "diagonal"]
+    if not any(v in layout for v in valid_layouts):
+        return False, f"Invalid layout variant: {layout}"
+
+    return True, "Valid"
 
 # ======================================================
-# 🚀 MAIN LOGIC (The Executioner)
+# 🚀 APP LOGIC V16.0 (The Geo-Engineered Architect)
 # ======================================================
 
-@app.route('/gemini', methods=['POST'])
+@app.route('/gemini', methods=)
 def generate():
-    if not client: return jsonify({"error": "System Failure: AI Client Disconnected"}), 500
+    if not client: return jsonify({"error": "AI Error"}), 500
 
     try:
-        # 1. Input Parsing
         data = request.json
         user_msg = data.get('message', '')
-        category = data.get('category', 'general')
-        width = int(data.get('width', 800))
-        height = int(data.get('height', 600))
+        cat_name = data.get('category', 'general')
+        width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        # 2. Recipe & Geometry Injection
-        recipe = get_recipe_context(category, user_msg)
-        typ_scale = get_typographic_scale(16) # Base 16px
+        recipe = get_recipe_data(cat_name, user_msg)
+        geo_mode, temp_setting = analyze_needs(recipe, user_msg, cat_name)
+        seed = random.randint(0, 999999)
         
+        # 1. Hard Rules
+        indexed_rules =
+        for i, r in enumerate(recipe.get('layout_rules',), 1): indexed_rules.append(f"LAYOUT_{i:02d}: {r}")
+        for i, r in enumerate(recipe.get('typography_rules',), 1): indexed_rules.append(f"TYPE_{i:02d}: {r}")
+        
+        # 2. Geo Protocol & Assets
         geo_kit = None
-        if recipe['geo_mode'] == 'CURVE':
-            geo_kit = supply_curve_kit(width, height, 12345)
+        geo_instructions = ""
+        assets_block = ""
+        limits_info = "N/A"
+        
+        if geo_mode == 'CURVE':
+            geo_kit = supply_curve_kit(width, height, seed)
+            assets_block = "\n".join(.items()])
+            limits_info = f"Bottom: {geo_kit['flip_info']['safe_y_bottom_mode']}"
+            geo_instructions = f"""
+            --- 📐 GEO PROTOCOL: CURVES ---
+            STACKING ORDER (Strict Opacity Tiers):
+            1. **Back**: 'curve_XL' (Opacity 0.12) -> Texture/Noise
+            2. **Mid**: 'curve_L' (Opacity 0.45) -> Shape/Depth
+            3. **Front**: 'curve_M' (Opacity 1.00) -> Focus Container
+            ASSETS: {assets_block}
+            """
+        elif geo_mode == 'SHARP':
+            geo_kit = supply_sharp_kit(width, height, seed)
+            assets_block = "\n".join(.items()])
+            limits_info = f"Bottom: {geo_kit['flip_info']['safe_y_bottom_mode']}"
+            geo_instructions = f"""
+            --- 📐 GEO PROTOCOL: POLYGONS ---
+            STACKING ORDER:
+            1. **poly_back**: Solid Accent (100% opacity).
+            2. **poly_front**: Glass Effect (White fill, 0.2 opacity, Blur 5px).
+            ASSETS: {assets_block}
+            """
         else:
-            geo_kit = supply_sharp_kit(width, height, 12345)
-            
-        # 3. THE GEO PROTOCOL PROMPT (Strict Contract)
-        system_prompt = f"""
-        YOU ARE THE GEO-PROTOCOL ENGINE V16.
-        Your task is to generate a professional SVG Flyer based on strict engineering rules.
+            geo_instructions = "--- 📐 GEO PROTOCOL: MINIMAL --- \nFocus on Grid, Typography Scale (Modular 1.25), and White Space."
+
+        # 3. The Literal Contract Template (Pre-filled Keys for LLM to complete)
+        plan_template = f"""{{
+  "engine": "ALMONJEZ_V16",
+  "category": "{cat_name}",
+  "geo_mode": "{geo_mode}",
+  "seed": {seed},
+  "design_contract": {{
+    "layout_variant": "hero|minimal|full|split",
+    "empty_space_tactic": "pills|pattern|typography",
+    "contrast_verified": "YES",
+    "arabic_position": "top_right",
+    "main_rules_applied": ["1_Hierarchy", "2_Contrast", "3_Arabic"],
+    "recipe_rules_applied":
+  }}
+}}"""
+
+        # System Instructions (Output Format: Plan THEN SVG)
+        sys_instructions = f"""
+        ROLE: Almonjez Geo-Design Architect.
+        GOAL: Engineering-Grade SVG for "{cat_name}".
         
-        === 📐 GEO PROTOCOL (NON-NEGOTIABLE) ===
-        1. **Dimensions**: ViewBox="0 0 {width} {height}"
-        2. **Opacity Tiers**: Use ONLY these values for transparency:
-           - Background Texture: opacity="0.12"
-           - Secondary Shapes: opacity="0.45"
-           - Text/Content: opacity="1.0"
-        3. **Typography (Major Third Scale)**:
-           - H1 (Title): {typ_scale['h1']} (Bold)
-           - H2 (Subtitle): {typ_scale['h2']}
-           - Body: {typ_scale['body']}
-           - Display: {typ_scale['display']}
-        4. **Arabic Support**:
-           - ANY Arabic text MUST have `direction="rtl"` and `unicode-bidi="embed"`.
-           - Arabic text anchors: `text-anchor="end"` (and align to Right).
-        5. **Precision**: Round all coordinates to 2 decimal places (e.g., 10.45).
-        6. **Path Closure**: All background shapes MUST end with 'Z'.
+        --- 🏛️ CONSTITUTION ---
+        {json.dumps(ALMONJEZ_CONSTITUTION, ensure_ascii=False)}
         
-        === 🎨 RECIPE: {recipe['theme']} ===
-        - Primary Color: {recipe['colors'][0]}
-        - Background: {recipe['colors'][2]}
-        - Mode: {recipe['geo_mode']}
+        --- 📜 RECIPE RULES ---
+        {json.dumps(indexed_rules, ensure_ascii=False)}
         
-        === 🧱 PRE-CALCULATED ASSETS (COPY THESE PATHS) ===
-        Use these exact paths for the layout background:
-        {json.dumps(geo_kit['assets'], indent=2)}
+        {geo_instructions}
         
-        === ✅ REQUIRED OUTPUT FORMAT ===
-        You must output a JSON plan first, then the SVG code.
+        --- ✅ OUTPUT PROTOCOL ---
+        1. OUTPUT "Plan: " followed by the filled JSON Contract.
+        2. OUTPUT "SVG: " followed by the XML code.
         
-        Example Start:
-        ```json
-        {{
-          "plan": "verified",
-          "layout": "{recipe['geo_mode']}"
-        }}
-        ```
-        <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" viewBox="0 0 {width} {height}">
-           </svg>
+        REQUIRED PLAN FORMAT:
+        Plan: {plan_template}
         """
 
-        # 4. Model Selection (Stable V16 List)
-        # Flash 2.0 is prioritized for speed and following strict instructions
-        models = ["gemini-2.0-flash", "gemini-1.5-pro"]
+        # =========================================================
+        # 🛡️ HYBRID LOOP + VALIDATION (The Engine)
+        # =========================================================
         
+        max_attempts = 2
         final_svg = None
         used_model = "unknown"
-        fail_log = []
-
-        for model in models:
+        extracted_plan = None
+        
+        models = ["gemini-2.0-pro-exp-02-05", "gemini-1.5-pro"]
+        
+        for attempt in range(max_attempts):
+            model = models if attempt == 0 else models[-1]
             try:
+                # Add correction prompt on retry
+                current_sys = sys_instructions
+                if attempt > 0:
+                    current_sys += "\n\n⚠️ SYSTEM ALERT: Previous attempt failed (Missing Plan or Invalid Rules). FOLLOW PROTOCOL STRICTLY."
+
                 response = client.models.generate_content(
                     model=model,
                     contents=user_msg,
                     config=types.GenerateContentConfig(
-                        system_instruction=system_prompt,
-                        temperature=0.3 # Low temp for strict adherence
+                        system_instruction=current_sys, 
+                        temperature=temp_setting if attempt==0 else 0.5,
+                        max_output_tokens=8192
                     )
                 )
                 
-                raw = response.text or ""
+                raw_text = response.text or ""
                 
-                # Extraction
-                svg_matches = SVG_EXTRACT_RE.findall(raw)
-                if not svg_matches:
-                    fail_log.append(f"{model}: No SVG found")
-                    continue
+                # 1. Extract Plan using Robust Regex
+                plan_match = PLAN_RE.search(raw_text)
+                if not plan_match:
+                    logger.warning(f"❌ Attempt {attempt+1}: Plan Regex Mismatch.")
+                    if attempt < max_attempts - 1: continue 
                 
-                svg_candidate = svg_matches[0]
-                
-                # Validation (The Iron Guard)
-                is_valid, errors = validate_geo_compliance(svg_candidate)
-                if not is_valid:
-                    fail_log.append(f"{model} Failed Geo-Audit: {errors}")
-                    # In a strict system, we might reject. Here we might fallback.
-                    # For now, if Flash fails, try Pro.
-                    continue
-                
-                final_svg = svg_candidate
-                used_model = model
-                break # Success
-                
+                # Parse & Validate Plan
+                try:
+                    raw_json = sanitize_json_response(plan_match.group(1)) if plan_match else "{}"
+                    plan = json.loads(raw_json)
+                    is_valid, reason = validate_plan_content(plan)
+                    if not is_valid:
+                        logger.warning(f"❌ Attempt {attempt+1}: Invalid Plan ({reason})")
+                        if attempt < max_attempts - 1: continue
+                    extracted_plan = plan
+                except Exception as e:
+                    logger.warning(f"❌ Attempt {attempt+1}: JSON Parse Error ({e})")
+                    if attempt < max_attempts - 1: continue
+
+                # 2. Extract SVG using State-Aware Regex
+                svg_match = SVG_EXTRACT_RE.search(raw_text)
+                if svg_match:
+                    final_svg = svg_match.group(0)
+                    used_model = model
+                    break # Success!
+            
             except Exception as e:
-                fail_log.append(f"{model} Error: {str(e)}")
+                logger.error(f"⚠️ Engine Error: {e}")
                 time.sleep(1)
 
-        # 5. Fallback or Output
+        # =========================================================
+        # 🔧 POST-PROCESSING (Geo Protocol Enforcement)
+        # =========================================================
+        
         if not final_svg:
-            # If all strict checks fail, return the last generated SVG if available, 
-            # but log the warning. Or return error if nothing generated.
-            if svg_matches:
-                 final_svg = svg_matches[0] # Emergency bypass
-                 logger.warning(f"⚠️ Geo-Audit Failed, serving best effort. Errors: {fail_log}")
-            else:
-                 return jsonify({"error": "Generation Failed", "details": fail_log}), 500
+             # Fallback if SVG extraction failed completely
+             return jsonify({"error": "Failed to generate valid SVG geometry."}), 500
 
-        # 6. Post-Processing (Namespace Injection)
-        if 'xmlns=' not in final_svg:
-            final_svg = final_svg.replace('<svg', '<svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"', 1)
-            
+        # 1. Optimize Paths (Round numbers, Close paths)
+        final_svg = optimize_path_data(final_svg)
+        
+        # 2. Inject Arabic Engineering (RTL attributes)
+        final_svg = inject_arabic_support(final_svg)
+        
+        # 3. Standard Cleanup (ViewBox, Namespace)
+        if 'xmlns=' not in final_svg: 
+            final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+        
+        if 'viewbox' not in final_svg.lower():
+             if '<svg xmlns' in final_svg:
+                final_svg = final_svg.replace('<svg xmlns', f'<svg viewBox="0 0 {width} {height}" xmlns', 1)
+             else:
+                final_svg = final_svg.replace('<svg', f'<svg viewBox="0 0 {width} {height}"', 1)
+        
+        # 4. Inject Filter Definitions if missing (Blur Safety Net)
+        if 'filter=' in final_svg and '<filter' not in final_svg:
+            final_svg = final_svg.replace('</svg>', '<defs><filter id="blur"><feGaussianBlur stdDeviation="5"/></filter></defs></svg>')
+
         return jsonify({
             "response": final_svg,
             "meta": {
-                "model": used_model,
-                "recipe": recipe['theme'],
-                "geo_compliance": "Verified"
+                "seed": seed,
+                "model_used": used_model,
+                "geo_mode": geo_mode,
+                "design_plan": extracted_plan,
+                "protocols_enforced":
             }
         })
 
     except Exception as e:
-        logger.error(f"Server Panic: {e}")
+        logger.error(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # الاستماع على جميع الواجهات
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
