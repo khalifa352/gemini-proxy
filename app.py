@@ -623,7 +623,7 @@ FIRST LINE TEMPLATE (you MUST output this as the first line, but filled with fin
 """.strip()
 
         # 6) Model hierarchy + strict validation loop
-        models = ["gemini-2.0-pro-exp-02-05", "gemini-1.5-pro"]
+        models = ["gemini-2.0-pro-exp-02-05", "gemini-2.0-flash"]
         max_attempts = 2
 
         final_raw = None
