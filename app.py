@@ -13,31 +13,29 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # ======================================================
-# 🔌 AI CLIENT SETUP (Robust Import)
+# 🔌 AI CLIENT SETUP
 # ======================================================
 client = None
 try:
-    # المكتبة الجديدة (v1.0+)
     from google import genai
     from google.genai import types
     
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
-        client = genai.Client(api_key=API_KEY)
-        logger.info("✅ Google GenAI Client Connected Successfully.")
+        # استخدام الإصدار 'v1beta' صراحةً لأنه يدعم أحدث الموديلات
+        client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
+        logger.info("✅ Google GenAI Client Connected (v1beta).")
     else:
-        logger.warning("⚠️ GOOGLE_API_KEY not found in environment variables.")
+        logger.warning("⚠️ GOOGLE_API_KEY not found.")
 
 except ImportError:
-    logger.error("❌ Library Error: 'google-genai' not installed. Run: pip install google-genai")
+    logger.error("❌ Library Error: Run 'pip install google-genai'")
 except Exception as e:
-    logger.error(f"❌ AI Client Error: {e}")
+    logger.error(f"❌ Client Init Error: {e}")
 
 # ======================================================
 # 🛡️ V16 RECOGNITION & EXTRACTION
 # ======================================================
-
-# تحسين Regex لالتقاط JSON بمرونة أكبر
 PLAN_RE = re.compile(r"(?:Plan|JSON|RESPONSE):\s*(.*?)(?=\n\n|SVG:|Code:|```|$)", re.DOTALL | re.IGNORECASE)
 ARABIC_RANGE_RE = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]')
 SVG_EXTRACT_RE = re.compile(r"(?s)<svg[^>]*>.*?</svg>")
@@ -56,16 +54,13 @@ ALMONJEZ_CONSTITUTION = {
 # ======================================================
 # 👮‍♂️ GEO PROTOCOL VALIDATORS
 # ======================================================
-
 def extract_plan(raw_text):
     match = PLAN_RE.search(raw_text or "")
     content = match.group(1).strip() if match else ""
-    # تنظيف Markdown
     content = re.sub(r'^```json\s*|```$', '', content, flags=re.MULTILINE)
     try:
         return json.loads(content)
     except:
-        # محاولة التقاط أي كائن JSON
         bracket_match = re.search(r'(\{.*\})', raw_text or "", re.DOTALL)
         if bracket_match:
             try: return json.loads(bracket_match.group(1))
@@ -76,31 +71,16 @@ def validate_plan_content(plan):
     if not isinstance(plan, dict): return False, "Missing JSON Plan."
     contract = plan.get("design_contract")
     if not isinstance(contract, dict): return False, "Missing 'design_contract'."
-
     if str(contract.get("arabic_position", "")).lower() != "top_right":
         return False, "Arabic Position MUST be 'top_right'."
-    
-    # تحقق مخفف لتجنب الرفض الزائف
-    if str(contract.get("contrast_verified", "")).upper() not in ["YES", "TRUE"]:
-        return False, "Contrast verification failed."
-
     return True, "Valid"
 
 def validate_svg_quality(svg_code):
-    if not svg_code or "<svg" not in svg_code:
-        return False, "Invalid SVG code."
-
-    # 1. BiDi Check
+    if not svg_code or "<svg" not in svg_code: return False, "Invalid SVG code."
     if ARABIC_RANGE_RE.search(svg_code):
         if "direction: rtl" not in svg_code.lower() and "direction:rtl" not in svg_code.lower():
-            # نسمح بالمرور إذا كانت هناك محاولة style ولكن نفضل التحذير
-            if "style" not in svg_code:
-                return False, "Geo Error: Arabic detected without styling."
-
-    # 2. Precision Check (Geo Protocol)
-    if re.search(r'\d+\.\d{5,}', svg_code): # السماح حتى 4 منازل، رفض 5 فما فوق
-        return False, "Geo Error: Precision bloat (>4 decimals)."
-
+            if "style" not in svg_code: return False, "Geo Error: Arabic detected without styling."
+    if re.search(r'\d+\.\d{5,}', svg_code): return False, "Geo Error: Precision bloat (>4 decimals)."
     return True, "Quality OK"
 
 # ======================================================
@@ -126,30 +106,22 @@ def supply_sharp_kit(width, height, seed):
     path_front = f"M0,{h} L0,{p_y+40} L{w/2},{p_y+20} L{w},{p_y+40} L{w},{h} Z"
     return {"assets": {"poly_back": path_back, "poly_front": path_front}}
 
-def analyze_needs(user_msg):
-    msg = str(user_msg).lower()
-    if 'curve' in msg or 'soft' in msg: return 'CURVE'
-    if 'sharp' in msg or 'tech' in msg: return 'SHARP'
-    return 'NONE'
-
 # ======================================================
 # 🚀 APP LOGIC
 # ======================================================
-
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client: 
-        return jsonify({"error": "AI Client not initialized. Check logs/API Key."}), 500
+    if not client: return jsonify({"error": "AI Client not initialized."}), 500
 
     try:
         data = request.json
         user_msg = data.get('message', '')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        geo_mode = analyze_needs(user_msg)
-        seed = random.randint(0, 999999)
-        
         # Geometry Logic
+        msg_lower = str(user_msg).lower()
+        geo_mode = 'CURVE' if 'curve' in msg_lower else 'SHARP' if 'sharp' in msg_lower else 'NONE'
+        seed = random.randint(0, 999999)
         geo_kit = supply_curve_kit(width, height, seed) if geo_mode == 'CURVE' else supply_sharp_kit(width, height, seed) if geo_mode == 'SHARP' else None
         geo_instr = f"ASSETS: {json.dumps(geo_kit['assets'])}" if geo_kit else "Focus on Typography & Layout."
 
@@ -179,68 +151,61 @@ def generate():
         {plan_template}
         """
 
-        # ✅ قائمة الموديلات المحدثة (Gemini 2.0 Flash First)
-        # نضع Flash أولاً للسرعة، ثم Pro 2.0 التجريبي للجودة، ثم 1.5 Pro للاستقرار
-        models = [
-            "gemini-2.0-flash",           # الأسرع والأحدث
-            "gemini-2.0-pro-exp-02-05",   # الأقوى (تجريبي)
-            "gemini-1.5-pro"              # المستقر
-        ]
+        # ✅ FIXED MODEL LIST (V16.2 Stable)
+        # 1. Flash 2.0: السرعة والكفاءة (يوصى به)
+        # 2. Pro 1.5: الاستقرار والذكاء العالي
+        models = ["gemini-2.0-flash", "gemini-1.5-pro"]
         
-        max_attempts = 2
         final_svg, used_model, extracted_plan, fail_reason = None, "unknown", None, ""
 
-        for attempt in range(max_attempts):
-            # محاولة استخدام الموديل الأول، ثم الموديل الاحتياطي
-            model = models[0] if attempt == 0 else models[1] 
-            
+        for attempt in range(len(models)):
+            model = models[attempt]
             try:
-                # تكوين الطلب
-                config = types.GenerateContentConfig(
-                    system_instruction=sys_instructions,
-                    temperature=0.7 if attempt == 0 else 0.4
-                )
-                
-                # إضافة تلميح للإصلاح في المحاولة الثانية
-                prompt_content = user_msg
-                if attempt > 0:
-                    prompt_content += f"\n\n⚠️ PREVIOUS ERROR: {fail_reason}. Please fix format."
-
+                # محاولة الاستدعاء
                 response = client.models.generate_content(
                     model=model,
-                    contents=prompt_content,
-                    config=config
+                    contents=user_msg,
+                    config=types.GenerateContentConfig(
+                        system_instruction=sys_instructions,
+                        temperature=0.7
+                    )
                 )
                 
                 raw = response.text or ""
-                plan = extract_plan(raw)
                 
-                # Validation Loop
+                # 1. استخراج الخطة
+                plan = extract_plan(raw)
                 is_plan_ok, p_reason = validate_plan_content(plan)
                 if not is_plan_ok:
-                    fail_reason = f"Plan Error: {p_reason}"
-                    continue
-
-                svg_matches = SVG_EXTRACT_RE.findall(raw)
-                svg_code = svg_matches[0] if svg_matches else ""
+                    fail_reason = f"Plan Error ({model}): {p_reason}"
+                    # لا نتوقف هنا، نحاول استخراج SVG حتى لو الخطة فيها مشكلة بسيطة
+                    # إلا إذا كان strict mode مطلوباً. هنا سنكمل للمرونة.
                 
+                # 2. استخراج SVG
+                svg_matches = SVG_EXTRACT_RE.findall(raw)
+                if not svg_matches:
+                    fail_reason = f"No SVG found ({model})"
+                    continue
+                    
+                svg_code = svg_matches[0]
                 is_svg_ok, s_reason = validate_svg_quality(svg_code)
                 if not is_svg_ok:
-                    fail_reason = f"Geo Quality: {s_reason}"
+                    fail_reason = f"Geo Quality ({model}): {s_reason}"
                     continue
 
+                # نجاح!
                 final_svg, extracted_plan, used_model = svg_code, plan, model
                 break
 
             except Exception as e:
-                fail_reason = str(e)
-                logger.error(f"Attempt {attempt} failed with {model}: {e}")
+                error_msg = str(e)
+                logger.warning(f"⚠️ Attempt failed with {model}: {error_msg}")
+                fail_reason = f"API Error: {error_msg}"
                 time.sleep(1)
 
         if not final_svg:
-             return jsonify({"error": f"Failed Geo-Audit: {fail_reason}"}), 500
+             return jsonify({"error": f"All models failed. Last error: {fail_reason}"}), 500
 
-        # Post-processing
         if 'xmlns=' not in final_svg: 
             final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
 
