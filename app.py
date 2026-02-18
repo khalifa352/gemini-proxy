@@ -310,7 +310,7 @@ def generate():
         used_model = "unknown"
         extracted_plan = None
         
-        models = ["gemini-2.0-pro-exp-02-05", "gemini-1.5-pro"]
+        models = ["gemini-2.0-flash", "gemini-1.5-pro"]
         
         for attempt in range(max_attempts):
             model = models if attempt == 0 else models[-1]
