@@ -274,8 +274,7 @@ def generate():
         
         recipe = get_recipe_data(cat_name, user_msg)
         indexed_rules = [f"{k}: {v}" for k,v in ALMONJEZ_CONSTITUTION.items()]
-        
-        plan_template = f"""
+         plan_template = f"""
 REQUIRED JSON PLAN FORMAT:
 ```json
 {{
@@ -288,98 +287,99 @@ REQUIRED JSON PLAN FORMAT:
   }}
 }}
 """
-            sys_instructions = f"""
-    ROLE: Almonjez V16 Engineering Architect.
-    
-    --- CONSTITUTION (STRICT) ---
-    {json.dumps(indexed_rules, indent=2)}
-    
-    --- GEO PROTOCOL ---
-    1. Opacity Tiers: Background=0.12, Shapes=0.45, Text=1.0. NO exceptions.
-    2. Precision: All coordinates must be rounded to 2 decimals.
-    3. Safe Zone: Keep important content 50px inside borders.
-    
-    --- ARABIC BIDI RULES ---
-    1. IF Arabic text detected: Add `direction="rtl"` to parent tag.
-    2. Set `text-anchor="end"` for Arabic headers (align right).
-    
-    --- OUTPUT PROTOCOL ---
-    1. Generate the JSON Plan (Strict Format).
-    2. Generate the SVG Code (Clean, Valid XML).
-    {plan_template}
-    """
+        sys_instructions = f"""
+        ROLE: Almonjez V16 Engineering Architect.
+        
+        --- CONSTITUTION (STRICT) ---
+        {json.dumps(indexed_rules, indent=2)}
+        
+        --- GEO PROTOCOL ---
+        1. Opacity Tiers: Background=0.12, Shapes=0.45, Text=1.0. NO exceptions.
+        2. Precision: All coordinates must be rounded to 2 decimals.
+        3. Safe Zone: Keep important content 50px inside borders.
+        
+        --- ARABIC BIDI RULES ---
+        1. IF Arabic text detected: Add `direction="rtl"` to parent tag.
+        2. Set `text-anchor="end"` for Arabic headers (align right).
+        
+        --- OUTPUT PROTOCOL ---
+        1. Generate the JSON Plan (Strict Format).
+        2. Generate the SVG Code (Clean, Valid XML).
+        {plan_template}
+        """
 
-    max_attempts = 2
-    final_svg = None
-    used_model = "unknown"
-    extracted_plan = None
-    fail_reason = ""
-    
-    # Using stable models
-    models = ["gemini-2.0-flash", "gemini-1.5-pro"]
-    
-    for attempt in range(max_attempts):
-        model = models[0] if attempt == 0 else models[-1]
-        try:
-            current_sys = sys_instructions
-            if attempt > 0:
-                current_sys += f"\n\nPREVIOUS FAILURE: {fail_reason}. COMPLY WITH GEO PROTOCOL."
+        max_attempts = 2
+        final_svg = None
+        used_model = "unknown"
+        extracted_plan = None
+        fail_reason = ""
+        
+        # Using stable models
+        models = ["gemini-2.0-flash", "gemini-1.5-pro"]
+        
+        for attempt in range(max_attempts):
+            model = models[0] if attempt == 0 else models[-1]
+            try:
+                current_sys = sys_instructions
+                if attempt > 0:
+                    current_sys += f"\n\nPREVIOUS FAILURE: {fail_reason}. COMPLY WITH GEO PROTOCOL."
 
-            response = client.models.generate_content(
-                model=model,
-                contents=user_msg,
-                config=types.GenerateContentConfig(
-                    system_instruction=current_sys, 
-                    temperature=0.6 if attempt==0 else 0.4
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_msg,
+                    config=types.GenerateContentConfig(
+                        system_instruction=current_sys, 
+                        temperature=0.6 if attempt==0 else 0.4
+                    )
                 )
-            )
-            
-            raw = response.text or ""
-            plan = sanitize_json_payload(raw)
-            
-            is_plan_ok, p_reason = validate_plan_content(plan)
-            if not is_plan_ok:
-                fail_reason = f"Plan Error: {p_reason}"
-                continue
+                
+                raw = response.text or ""
+                plan = sanitize_json_payload(raw)
+                
+                is_plan_ok, p_reason = validate_plan_content(plan)
+                if not is_plan_ok:
+                    fail_reason = f"Plan Error: {p_reason}"
+                    continue
 
-            svg_match = SVG_EXTRACT_RE.search(raw)
-            if not svg_match:
-                fail_reason = "No valid SVG block found."
-                continue
-            svg_code = svg_match.group(0)
+                svg_match = SVG_EXTRACT_RE.search(raw)
+                if not svg_match:
+                    fail_reason = "No valid SVG block found."
+                    continue
+                svg_code = svg_match.group(0)
 
-            is_svg_ok, s_reason = validate_svg_quality(svg_code)
-            if not is_svg_ok:
-                fail_reason = f"SVG Quality Error: {s_reason}"
-                continue
+                is_svg_ok, s_reason = validate_svg_quality(svg_code)
+                if not is_svg_ok:
+                    fail_reason = f"SVG Quality Error: {s_reason}"
+                    continue
 
-            final_svg = svg_code
-            extracted_plan = plan
-            used_model = model
-            break
-            
-        except Exception as e:
-            fail_reason = str(e)
-            time.sleep(1)
+                final_svg = svg_code
+                extracted_plan = plan
+                used_model = model
+                break
+                
+            except Exception as e:
+                fail_reason = str(e)
+                time.sleep(1)
 
-    if not final_svg:
-         return jsonify({"error": "V16 Compliance Failure", "details": fail_reason}), 500
+        if not final_svg:
+             return jsonify({"error": "V16 Compliance Failure", "details": fail_reason}), 500
 
-    final_svg = enforce_geo_protocol(final_svg, width, height)
-    final_svg = inject_bidi_attributes(final_svg)
-    
-    if 'xmlns=' not in final_svg: 
-        final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
-    
-    return jsonify({
-        "response": final_svg,
-        "meta": {"model": used_model, "plan": extracted_plan}
-    })
+        final_svg = enforce_geo_protocol(final_svg, width, height)
+        final_svg = inject_bidi_attributes(final_svg)
+        
+        if 'xmlns=' not in final_svg: 
+            final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+        
+        return jsonify({
+            "response": final_svg,
+            "meta": {"model": used_model, "plan": extracted_plan}
+        })
 
-except Exception as e:
-    logger.critical(f"Fatal System Error: {e}")
-    return jsonify({"error": str(e)}), 500
-if name == 'main':
-# Fix for 'No open HTTP ports detected'
-port = int(os.environ.get('PORT', 10000))
+    except Exception as e:
+        logger.critical(f"Fatal System Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == '__main__':
+    # Fix for 'No open HTTP ports detected'
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
