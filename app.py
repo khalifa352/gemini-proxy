@@ -14,10 +14,13 @@ logger = logging.getLogger("Almonjez_Flash_Engine")
 
 app = Flask(__name__)
 
-# المسارات الحيوية على سيرفر Render
+# ------------------------------------------------------
+# 🔧 المسارات الحيوية على سيرفر Render (تم التصحيح)
+# ------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CORE_PATH = os.path.join(BASE_DIR, 'core')
-PRINT_PATH = os.path.join(BASE_DIR, 'recipes', 'print')
+RECIPES_DIR = os.path.join(BASE_DIR, 'recipes')       # الدخول لمجلد الوصفات
+CORE_PATH = os.path.join(RECIPES_DIR, 'core')         # استهداف مجلد core
+PRINT_PATH = os.path.join(RECIPES_DIR, 'print')
 
 # ======================================================
 # 🔌 AI CLIENT (GEMINI 2.0 FLASH ONLY)
@@ -31,6 +34,8 @@ try:
         # استخدام v1beta للوصول الكامل لخصائص Flash 2.0
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
         logger.info("✅ Gemini 2.0 Flash Engine Initialized.")
+    else:
+        logger.warning("⚠️ GOOGLE_API_KEY Missing.")
 except Exception as e:
     logger.error(f"❌ AI Init Error: {e}")
 
@@ -46,21 +51,32 @@ class AssetVault:
         self.refresh_library()
 
     def refresh_library(self):
-        """قراءة الملفات الحقيقية من المجلدات المرفوعة"""
+        """قراءة الملفات الحقيقية من المجلدات المرفوعة مع التحقق من المسار"""
         try:
-            # تحميل Layout Sets
-            with open(os.path.join(CORE_PATH, 'layout_sets.json'), 'r', encoding='utf-8') as f:
-                self.layouts = json.load(f)
-            # تحميل Shape Library
-            with open(os.path.join(CORE_PATH, 'shape_library.json'), 'r', encoding='utf-8') as f:
-                self.shapes = json.load(f)
-            # تحميل الألوان
-            with open(os.path.join(CORE_PATH, 'colors.json'), 'r', encoding='utf-8') as f:
-                self.colors = json.load(f)
-            # تحميل الخطوط
-            with open(os.path.join(CORE_PATH, 'typography.json'), 'r', encoding='utf-8') as f:
-                self.typography = json.load(f)
-            logger.info("📚 Library Synchronized Successfully.")
+            layout_file = os.path.join(CORE_PATH, 'layout_sets.json')
+            shape_file = os.path.join(CORE_PATH, 'shape_library.json')
+            colors_file = os.path.join(CORE_PATH, 'colors.json')
+            typo_file = os.path.join(CORE_PATH, 'typography.json')
+
+            if os.path.exists(layout_file):
+                with open(layout_file, 'r', encoding='utf-8') as f:
+                    self.layouts = json.load(f)
+            else:
+                logger.error(f"❌ Missing File: {layout_file}")
+
+            if os.path.exists(shape_file):
+                with open(shape_file, 'r', encoding='utf-8') as f:
+                    self.shapes = json.load(f)
+
+            if os.path.exists(colors_file):
+                with open(colors_file, 'r', encoding='utf-8') as f:
+                    self.colors = json.load(f)
+
+            if os.path.exists(typo_file):
+                with open(typo_file, 'r', encoding='utf-8') as f:
+                    self.typography = json.load(f)
+
+            logger.info(f"📚 Library Synced: {len(self.layouts)} Layouts found.")
         except Exception as e:
             logger.error(f"❌ Library Sync Error: {e}")
 
@@ -95,7 +111,10 @@ class GeometryResolver:
         # 1. حقن الألوان
         for i, color in enumerate(palette, 1):
             svg_skeleton = svg_skeleton.replace(f"{{{{COLOR_{i}}}}}", color)
-            svg_skeleton = svg_skeleton.replace(f"{{{{ACCENT}}}}", palette[-1])
+            
+        # إضافة لون التمييز Accent إذا طلب في القالب
+        accent_color = palette[-1] if palette else "#FF0000"
+        svg_skeleton = svg_skeleton.replace("{{ACCENT}}", accent_color)
         
         # 2. حقن القياسات الهندسية
         for key, val in params.items():
@@ -114,6 +133,9 @@ def generate():
         data = request.json
         user_msg = data.get('message', '')
         
+        if not GLOBAL_VAULT.layouts:
+            return jsonify({"error": "Library layout_sets.json is empty or not found."}), 500
+            
         # --- الخطوة 1: اختيار الوصفة والألوان (المنطق البشري المدفوع بالبايثون) ---
         layout = GLOBAL_VAULT.find_best_match(user_msg)
         palette = GLOBAL_VAULT.get_random_palette()
@@ -125,33 +147,51 @@ def generate():
         
         layers_html = ""
         for layer in layout['structure'].get('layers', []):
-            d = layer.get('d_base', '')
+            element_type = layer.get('element', 'path') # يدعم المسار كافتراضي
+            
             fill = layer.get('fill', '#000')
             opacity = layer.get('opacity', 1.0)
-            layers_html += f'<path d="{d}" fill="{fill}" opacity="{opacity}" />\n'
+            
+            if element_type == 'path':
+                d = layer.get('d_base', '')
+                stroke = layer.get('stroke', '')
+                stroke_width = layer.get('stroke_width', '')
+                dash = layer.get('stroke_dasharray', '')
+                
+                path_str = f'<path d="{d}" fill="{fill}" opacity="{opacity}"'
+                if stroke: path_str += f' stroke="{stroke}" stroke-width="{stroke_width}" stroke-dasharray="{dash}"'
+                path_str += ' />\n'
+                layers_html += path_str
+                
+            elif element_type == 'circle': # يدعم رسم الدوائر مثل قالب letterhead_official
+                cx = layer.get('cx', '0')
+                cy = layer.get('cy', '0')
+                r = layer.get('r', '0')
+                layers_html += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" opacity="{opacity}" />\n'
 
-        # الهيكل الهيكلي الخام
+        # الهيكل الهيكلي الخام (نترك تعليقاً لجميني ليعرف أين يضع محتواه)
         skeleton = f'<svg viewBox="{viewBox}"><defs>{defs}</defs>{layers_html}</svg>'
         
         # معالجة الهيكل (حقن القيم)
         processed_skeleton = GeometryResolver.inject_assets(skeleton, params, palette)
         
         # --- الخطوة 2: التوجيه الإبداعي لـ Flash 2.0 ---
-        safe_area = layout['logic'].get('text_safe_area', {})
+        safe_area = layout.get('logic', {}).get('text_safe_area', {})
         
         system_instruction = f"""
         ROLE: Senior Typographer (Almonjez Pro System).
         MODEL: Gemini 2.0 Flash (Execution Mode).
 
         === 🏛️ ARCHITECTURAL FRAMEWORK (FIXED) ===
-        I have already resolved the professional geometry for '{layout['id']}'.
-        DO NOT alter the background paths. You are responsible for the CONTENT LAYER.
+        I have already resolved the professional geometry for '{layout.get('id', 'layout')}'.
+        DO NOT alter the background paths or circles. You are responsible for the CONTENT LAYER.
+        Place your text and foreground elements where `` is located in the SVG.
 
         === 📐 DESIGN CONSTRAINTS (HIERARCHY & CONTRAST) ===
-        1. Safe Area: Top={safe_area.get('top')}px, Sides={safe_area.get('left', 40)}px.
+        1. Safe Area: Top={safe_area.get('top', 50)}px, Bottom={safe_area.get('bottom', 50)}px, Left/Right={safe_area.get('left', 40)}px.
         2. Hierarchy: Title must be massive and contrast perfectly with background colors.
         3. Alignment: For Arabic text, use `direction="rtl"` and `text-anchor="end"`.
-        4. Typography: Use fonts from the library: {json.dumps(GLOBAL_VAULT.typography.get('rtl_default', []))}.
+        4. Typography: Use fonts from the library: {json.dumps(GLOBAL_VAULT.typography.get('rtl_default', ['Arial']))}.
 
         === 🎨 COLOR CONTEXT ===
         Background Colors used: {json.dumps(palette)}.
@@ -184,7 +224,7 @@ def generate():
         return jsonify({
             "response": final_svg,
             "meta": {
-                "layout_id": layout['id'],
+                "layout_id": layout.get('id', 'fallback'),
                 "engine": "V18.5_Core_Architect",
                 "model": "Gemini_2.0_Flash"
             }
@@ -195,5 +235,4 @@ def generate():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # تهيئة المكتبة قبل تشغيل السيرفر
     app.run(host='0.0.0.0', port=10000)
