@@ -11,17 +11,21 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# ======================================================
+# 🔌 AI CLIENT SETUP (V1 Beta for Flash 2.0)
+# ======================================================
 client = None
 try:
     from google import genai
     from google.genai import types
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
-        # ✅ سد ثغرة الاتصال: إضافة v1beta لضمان دعم موديلات 2.0
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-except: pass
+        logger.info("✅ GenAI Enterprise Connected (Flash 2.0)")
+except Exception as e: 
+    logger.error(f"Init Error: {e}")
 
-# ✅ سد ثغرة 1: تعبير نمطي قوي لالتقاط كود JSON الفعلي
+# ✅ FIX 1: Robust Regex for JSON Plan Extraction
 PLAN_RE = re.compile(r'```json\s*(.*?)\s*```', re.DOTALL | re.IGNORECASE)
 
 # ======================================================
@@ -38,11 +42,10 @@ ALMONJEZ_CONSTITUTION = {
 # ======================================================
 # 👮‍♂️ VALIDATORS (Plan & SVG Quality)
 # ======================================================
-
 def extract_plan(raw_text):
     match = PLAN_RE.search(raw_text or "")
     if not match: 
-        # محاولة احتياطية إذا لم يضع جيميني وسوم Markdown
+        # Fallback if markdown tags are missing
         alt_match = re.search(r'(\{.*\})', raw_text or "", re.DOTALL)
         if not alt_match: return None
         try: return json.loads(alt_match.group(1))
@@ -77,10 +80,12 @@ def validate_svg_quality(svg_code):
     if not svg_code or "<svg" not in svg_code:
         return False, "Invalid SVG code."
 
+    # Check for Arabic RTL support (Flexible for Swift)
     if "direction: rtl" not in svg_code.lower() and "direction:rtl" not in svg_code.lower():
-        if "ar" in svg_code.lower(): 
-            return False, "Arabic text detected without 'direction: rtl' style."
+        if "ar" in svg_code.lower() and "<foreignobject" not in svg_code.lower(): 
+            return False, "Arabic text detected without RTL styling."
 
+    # Check for heavy dividers
     thick_strokes = re.findall(r'stroke-width=["\']([2-9]|\d{2,})["\']', svg_code)
     if thick_strokes:
         return False, "Amateur mistake: Heavy stroke-width (>1.5px) detected on elements."
@@ -90,7 +95,6 @@ def validate_svg_quality(svg_code):
 # ======================================================
 # 📐 GEOMETRY & UTILS (نفس المنطق القوي السابق)
 # ======================================================
-
 def supply_curve_kit(width, height, seed):
     rnd = random.Random(seed)
     w, h = int(width), int(height)
@@ -128,15 +132,25 @@ def analyze_needs(recipe, user_msg, cat):
     return 'NONE', 0.7
 
 def get_recipe_data(cat, prompt):
+    # Dummy logic for example stability (You can replace this with file loading if needed)
     return {"id": "flyer_pro_01", "layout_rules": ["Use Swiss Grid"], "typography_rules": ["Bold H1"]}
 
 # ======================================================
-# 🚀 APP LOGIC V16.0 (The Iron Guard)
+# 🌐 HEALTH CHECK (فحص عمل السيرفر في المتصفح)
 # ======================================================
+@app.route('/', methods=['GET'])
+def index():
+    return jsonify({
+        "status": "Online 🎉",
+        "message": "Almonjez Iron Guard Server is Active and waiting for iOS requests."
+    })
 
+# ======================================================
+# 🚀 APP LOGIC V16.0 (The Iron Guard - Full version)
+# ======================================================
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client: return jsonify({"error": "AI Error"}), 500
+    if not client: return jsonify({"error": "AI Client Offline"}), 500
 
     try:
         data = request.json
@@ -155,7 +169,6 @@ def generate():
         geo_kit = supply_curve_kit(width, height, seed) if geo_mode == 'CURVE' else supply_sharp_kit(width, height, seed) if geo_mode == 'SHARP' else None
         geo_instr = f"ASSETS: {json.dumps(geo_kit['assets'])}" if geo_kit else "Focus on Typography."
 
-        # ✅ سد ثغرة 2: القالب يجب أن يحتوي على الهيكل المطلوب لكي يعبر من الفلتر
         plan_template = """
         Your response MUST start with this JSON format exactly:
         ```json
@@ -178,9 +191,9 @@ def generate():
         {json.dumps(indexed_rules, ensure_ascii=False)}
         {geo_instr}
         
-        --- 📱 iOS APP COMPATIBILITY ---
-        You MUST use <foreignObject> for all text blocks to allow auto-wrapping.
-        Inside <foreignObject>, use <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl;">.
+        --- 📱 iOS APP COMPATIBILITY (CRITICAL) ---
+        You MUST use <foreignObject> for all text blocks to allow auto-wrapping in iOS WebKit.
+        Inside <foreignObject>, use standard HTML <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl;">.
         
         --- ✅ OUTPUT RULE ---
         1. FIRST LINE: The Plan JSON comment exactly.
@@ -188,37 +201,38 @@ def generate():
         {plan_template}
         """
 
-        max_attempts = 2
+        max_attempts = 2  # حلقة التفتيش الصارمة (لن تتجاوز 20 ثانية بفضل Flash)
         final_svg = None
         used_model = "unknown"
         extracted_plan = None
         fail_reason = ""
         
-        # ✅ سد ثغرة 3: استخدام موديل فلاش الثابت بدلاً من التجريبي المفقود
-        models = ["gemini-2.0-flash", "gemini-1.5-pro"]
+        # نعتمد كلياً على Flash 2.0 لسرعته وملاءمته لسيرفر Render
+        models = ["gemini-2.0-flash", "gemini-2.0-flash"]
         
         for attempt in range(max_attempts):
-            model = models[0] if attempt == 0 else models[-1]
+            model = models[attempt]
             try:
                 current_sys = sys_instructions
                 if attempt > 0:
-                    current_sys += f"\n\n⚠️ FIX REQUIRED: {fail_reason}. Stick to the Plan and the Constitution."
+                    current_sys += f"\n\n⚠️ FIX REQUIRED: {fail_reason}. Stick strictly to the Plan, Constitution, and iOS rules."
 
                 response = client.models.generate_content(
                     model=model,
                     contents=user_msg,
-                    config=types.GenerateContentConfig(system_instruction=current_sys, temperature=temp_setting if attempt==0 else 0.5)
+                    config=types.GenerateContentConfig(system_instruction=current_sys, temperature=temp_setting if attempt==0 else 0.4)
                 )
                 
                 raw = response.text or ""
                 plan = extract_plan(raw)
                 
+                # 1. Validate Plan
                 is_plan_ok, p_reason = validate_plan_content(plan)
                 if not is_plan_ok:
                     fail_reason = f"Plan Error: {p_reason}"
                     continue
 
-                # ✅ سد ثغرة 4: استخراج آمن للكود يمنع انهيار الـ slicing
+                # 2. Extract & Validate SVG Safely
                 svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw)
                 svg_code = svg_match.group(0) if svg_match else ""
                 
@@ -227,6 +241,7 @@ def generate():
                     fail_reason = f"SVG Quality Error: {s_reason}"
                     continue
 
+                # Success!
                 final_svg = svg_code
                 extracted_plan = plan
                 used_model = model
@@ -236,9 +251,9 @@ def generate():
                 time.sleep(1)
 
         if not final_svg:
-             return jsonify({"error": f"Failed quality check: {fail_reason}"}), 500
+             return jsonify({"error": f"Failed quality check after {max_attempts} attempts: {fail_reason}"}), 500
 
-        # Post-processing (Namespaces & Filters)
+        # Post-processing (سد ثغرات Namespaces ليعمل <foreignObject> في iOS)
         if 'xmlns=' not in final_svg: final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
         if '<foreignObject' in final_svg and 'xmlns:xhtml' not in final_svg:
              final_svg = final_svg.replace('<svg', '<svg xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
@@ -252,6 +267,7 @@ def generate():
         })
 
     except Exception as e:
+        logger.error(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
