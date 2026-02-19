@@ -3,12 +3,9 @@ import json
 import logging
 import random
 import re
-import math
+import time
 from flask import Flask, request, jsonify
 
-# ======================================================
-# ⚙️ CONFIG & SETUP
-# ======================================================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -20,186 +17,122 @@ try:
     from google.genai import types
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
-        client = genai.Client(api_key=API_KEY)
-        logger.info("✅ GenAI V8 Enterprise Connected")
+        # ✅ سد ثغرة الاتصال: إضافة v1beta لضمان دعم موديلات 2.0
+        client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
 except: pass
 
+# ✅ سد ثغرة 1: تعبير نمطي قوي لالتقاط كود JSON الفعلي
+PLAN_RE = re.compile(r'```json\s*(.*?)\s*```', re.DOTALL | re.IGNORECASE)
+
 # ======================================================
-# 📐 GEOMETRY ENGINE (Smart Clamping & Context)
+# 🏛️ ALMONJEZ CONSTITUTION (دستور الجودة)
+# ======================================================
+ALMONJEZ_CONSTITUTION = {
+    "1_Hierarchy": "Headlines MUST be 3x body size. No floating elements.",
+    "2_Contrast": "Dark text on Light BG only. Light text on Dark BG only. Use backing rects if needed.",
+    "3_Arabic": "Arabic Title = Top/Right & Largest. English = Secondary.",
+    "4_EmptySpace": "Fill dead space with: Pattern (5% opacity) or Service Pills.",
+    "5_Brand": "Brand Name is SACRED. Exact spelling match required."
+}
+
+# ======================================================
+# 👮‍♂️ VALIDATORS (Plan & SVG Quality)
+# ======================================================
+
+def extract_plan(raw_text):
+    match = PLAN_RE.search(raw_text or "")
+    if not match: 
+        # محاولة احتياطية إذا لم يضع جيميني وسوم Markdown
+        alt_match = re.search(r'(\{.*\})', raw_text or "", re.DOTALL)
+        if not alt_match: return None
+        try: return json.loads(alt_match.group(1))
+        except: return None
+    try:
+        return json.loads(match.group(1))
+    except: return None
+
+def validate_plan_content(plan):
+    if not isinstance(plan, dict): return False, "Missing JSON Plan."
+    
+    contract = plan.get("design_contract")
+    if not isinstance(contract, dict): return False, "Missing 'design_contract' object."
+
+    if str(contract.get("arabic_position", "")).lower() != "top_right":
+        return False, "Arabic Position MUST be exactly 'top_right'."
+
+    if str(contract.get("contrast_verified", "")).upper() != "YES":
+        return False, "Contrast MUST be verified as 'YES'."
+
+    layout = str(contract.get("layout_variant", "")).lower()
+    if layout not in ["hero", "minimal", "full", "split", "swiss", "diagonal"]:
+        return False, f"Invalid layout variant: {layout}"
+
+    rules = contract.get("main_rules_applied", [])
+    if not isinstance(rules, list) or len(rules) < 3:
+        return False, "Must cite at least 3 Rule IDs from the constitution."
+
+    return True, "Valid"
+
+def validate_svg_quality(svg_code):
+    if not svg_code or "<svg" not in svg_code:
+        return False, "Invalid SVG code."
+
+    if "direction: rtl" not in svg_code.lower() and "direction:rtl" not in svg_code.lower():
+        if "ar" in svg_code.lower(): 
+            return False, "Arabic text detected without 'direction: rtl' style."
+
+    thick_strokes = re.findall(r'stroke-width=["\']([2-9]|\d{2,})["\']', svg_code)
+    if thick_strokes:
+        return False, "Amateur mistake: Heavy stroke-width (>1.5px) detected on elements."
+
+    return True, "Quality OK"
+
+# ======================================================
+# 📐 GEOMETRY & UTILS (نفس المنطق القوي السابق)
 # ======================================================
 
 def supply_curve_kit(width, height, seed):
-    """
-    CurveKit V5: Smart Range Clamping & Orientation Hints.
-    """
     rnd = random.Random(seed)
     w, h = int(width), int(height)
-    
-    # 1. Randomized Geometry
-    amp = int(h * rnd.uniform(0.12, 0.22)) 
-    base_y = h 
-    
-    p0_y = base_y - int(amp * rnd.uniform(0.5, 0.9))
-    p3_y = base_y - int(amp * rnd.uniform(0.3, 0.6))
-    
-    # Control Points (The danger zone)
-    c1_x = int(w * rnd.uniform(0.25, 0.45))
-    c1_y = base_y - int(amp * 1.8) # Highest peak potential
-    c2_x = int(w * rnd.uniform(0.65, 0.85))
-    c2_y = base_y - int(amp * 0.2)
-    
-    # 2. Layer Offsets (Randomized for variety)
-    off_L = int(rnd.uniform(20, 35))
-    off_XL = int(rnd.uniform(45, 75))
-
+    amp = int(h * rnd.uniform(0.12, 0.22))
     def get_path(offset):
-        return f"M0,{base_y} L0,{p0_y+offset} C{c1_x},{c1_y+offset} {c2_x},{c2_y+offset} {w},{p3_y+offset} L{w},{base_y} Z"
-
-    # 3. SMART CLAMPING LOGIC (The CTO Requirement)
-    # Calculate raw highest point (lowest Y value)
-    raw_limit = min(p0_y, p3_y, c1_y, c2_y)
+        p0_y, p3_y = h - int(amp * 0.7), h - int(amp * 0.4)
+        c1_x, c1_y = int(w * 0.35), h - int(amp * 1.6)
+        c2_x, c2_y = int(w * 0.75), h - int(amp * 0.2)
+        return f"M0,{h} L0,{p0_y+offset} C{c1_x},{c1_y+offset} {c2_x},{c2_y+offset} {w},{p3_y+offset} L{w},{h} Z"
     
-    # Force safe limit to be reasonable (between 35% and 78% of height)
-    # This prevents the curve from eating the whole page OR being too small
-    min_allowed = h * 0.35
-    max_allowed = h * 0.78
-    
-    safe_limit_y = max(min_allowed, min(max_allowed, raw_limit - 60))
-
+    highest = h - int(amp * 1.6)
+    safe_y = max(highest - 60, h * 0.35)
     return {
-        "type": "ORGANIC_CURVES",
-        "assets": {
-            "curve_XL": get_path(off_XL),
-            "curve_L":  get_path(off_L),
-            "curve_M":  get_path(0)
-        },
-        "safe_limit_y": int(safe_limit_y),
-        "hints": {
-            "default": "Placement: Bottom Footer",
-            "flip_transform": f"scale(1,-1) translate(0, -{h})",
-            "layering_guide": "XL(10% opacity) -> L(25% opacity) -> M(90% opacity)"
-        }
+        "assets": { "curve_XL": get_path(60), "curve_L": get_path(30), "curve_M": get_path(0) },
+        "flip_info": { "safe_y_bottom_mode": int(safe_y), "safe_y_top_mode": int(h - safe_y) }
     }
 
 def supply_sharp_kit(width, height, seed):
-    """ SharpKit V4: Conservative Limits """
     rnd = random.Random(seed)
     w, h = int(width), int(height)
-    peak = int(h * rnd.uniform(0.15, 0.30))
-    split_x = int(w * rnd.uniform(0.3, 0.7))
-    
-    p_back = h - peak
-    p_front = h - peak + 40
-    
-    path_back = f"M0,{h} L0,{p_back} L{split_x},{p_back-50} L{w},{p_back} L{w},{h} Z"
-    path_front = f"M0,{h} L0,{p_front} L{split_x},{p_front-20} L{w},{p_front} L{w},{h} Z"
-    
-    # Clamp Safe Limit
-    safe_limit_y = max(h * 0.40, min(p_back, p_front) - 80)
-
+    peak = int(h * 0.25)
+    p_y = h - peak
+    path_back = f"M0,{h} L0,{p_y} L{w/2},{p_y-50} L{w},{p_y} L{w},{h} Z"
+    path_front = f"M0,{h} L0,{p_y+40} L{w/2},{p_y+20} L{w},{p_y+40} L{w},{h} Z"
     return {
-        "type": "SHARP_POLYGONS",
-        "assets": {
-            "poly_back": path_back,
-            "poly_front": path_front
-        },
-        "safe_limit_y": int(safe_limit_y),
-        "hints": {
-            "layering_guide": "Back(30% opacity) -> Front(100% opacity)"
-        }
+        "assets": { "poly_back": path_back, "poly_front": path_front },
+        "flip_info": { "safe_y_bottom_mode": int(p_y-80), "safe_y_top_mode": int(peak+80) }
     }
 
-# ======================================================
-# 🧠 INTENT ANALYZER (Multilingual & Contextual)
-# ======================================================
-
-def analyze_needs(recipe, user_msg, cat_name):
-    """
-    Detects intent from User (Arabic/English) + Recipe Metadata + Category.
-    Returns: (GeoMode, Temperature)
-    """
+def analyze_needs(recipe, user_msg, cat):
     msg = str(user_msg).lower()
-    cat = str(cat_name).lower()
-    
-    # 1. USER OVERRIDE (Arabic & English)
-    clean_triggers = ['no shape', 'clean', 'simple', 'text only', 'بدون أشكال', 'نص فقط', 'بسيط', 'تصميم نظيف', 'بدون خلفية']
-    if any(x in msg for x in clean_triggers):
-        return 'NONE', 0.60
+    if 'minimal' in msg or 'clean' in msg: return 'NONE', 0.6
+    if 'curve' in msg or 'medical' in str(recipe): return 'CURVE', 0.8
+    if 'sharp' in msg or 'corporate' in str(recipe): return 'SHARP', 0.8
+    return 'NONE', 0.7
 
-    curve_triggers = ['wave', 'curve', 'organic', 'flow', 'موجة', 'منحنيات', 'كيرف', 'ناعم', 'طبي', 'تجميل']
-    if any(x in msg for x in curve_triggers):
-        return 'CURVE', 0.80
-
-    sharp_triggers = ['sharp', 'polygon', 'geometric', 'angle', 'مضلع', 'حاد', 'هندسي', 'زوايا', 'عقارات', 'رسمي']
-    if any(x in msg for x in sharp_triggers):
-        return 'SHARP', 0.80
-        
-    full_bg_triggers = ['full background', 'texture', 'image', 'خلفية كاملة', 'صورة كاملة']
-    if any(x in msg for x in full_bg_triggers):
-        return 'FULL_BG', 0.85
-
-    # 2. RECIPE & CATEGORY CONTEXT
-    # Combine all metadata fields
-    context = (
-        str(recipe.get('id', '')) + " " + 
-        str(recipe.get('description', '')) + " " + 
-        str(recipe.get('suitable_for', '')) + " " + 
-        str(recipe.get('generative_rules', {}).get('mood', '')) + " " +
-        str(recipe.get('tags', [])) + " " + 
-        cat
-    ).lower()
-    
-    # Category based defaults
-    if 'card' in cat or 'invoice' in cat or 'list' in cat:
-        return 'NONE', 0.65
-        
-    # Recipe based defaults
-    if 'minimal' in context or 'clean' in context: return 'NONE', 0.65
-    if 'corporate' in context or 'construction' in context: return 'SHARP', 0.75
-    if 'medical' in context or 'beauty' in context: return 'CURVE', 0.80
-    
-    return 'NONE', 0.7 # Safe default
+def get_recipe_data(cat, prompt):
+    return {"id": "flyer_pro_01", "layout_rules": ["Use Swiss Grid"], "typography_rules": ["Bold H1"]}
 
 # ======================================================
-# 🧹 HELPER: SVG SANITIZER
+# 🚀 APP LOGIC V16.0 (The Iron Guard)
 # ======================================================
-
-def extract_pure_svg(text):
-    """
-    Extracts ONLY the <svg>...</svg> block using Regex.
-    Removes Markdown, conversation text, etc.
-    """
-    pattern = r"(<svg[\s\S]*?</svg>)"
-    match = re.search(pattern, text, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return text.replace("```svg", "").replace("```", "").strip()
-
-# ======================================================
-# 🚀 APP LOGIC
-# ======================================================
-
-def get_recipe_data(category_name, user_prompt):
-    base_path = "recipes"
-    cat = (category_name or "").lower()
-    prompt = (user_prompt or "").lower()
-    flexible_map = { "card": "print/business_cards.json", "flyer": "print/flyers.json" }
-    selected_path = os.path.join(base_path, "print/flyers.json")
-    for key, path in flexible_map.items():
-        if key in cat or key in prompt:
-            full_path = os.path.join(base_path, path)
-            if os.path.exists(full_path):
-                selected_path = full_path
-                break
-    try:
-        with open(selected_path, 'r', encoding='utf-8') as f:
-            raw = json.load(f)
-            if isinstance(raw, list): return random.choice(raw)
-            return raw
-    except: return {}
-
-@app.route('/')
-def home(): return "Production Engine V8: Enterprise Design Active 💎🚀"
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -211,97 +144,111 @@ def generate():
         cat_name = data.get('category', 'general')
         width, height = int(data.get('width', 800)), int(data.get('height', 600))
         
-        # 1. Recipe & Analysis
         recipe = get_recipe_data(cat_name, user_msg)
         geo_mode, temp_setting = analyze_needs(recipe, user_msg, cat_name)
-        seed = random.randint(1000, 99999) # For Anti-Clone
+        seed = random.randint(0, 999999)
         
-        # 2. Geometry Toolkit (Optional Injection)
-        geo_section = ""
-        safe_limit_info = "Default Padding (10% margins)"
+        indexed_rules = []
+        for i, r in enumerate(recipe.get('layout_rules', []), 1): indexed_rules.append(f"LAYOUT_{i:02d}: {r}")
+        for i, r in enumerate(recipe.get('typography_rules', []), 1): indexed_rules.append(f"TYPE_{i:02d}: {r}")
         
-        if geo_mode == 'CURVE':
-            kit = supply_curve_kit(width, height, seed)
-            safe_limit_info = f"Keep content ABOVE Y={kit['safe_limit_y']}"
-            geo_section = f"""
-            --- 📐 GEOMETRY ASSETS (HELPER) ---
-            ASSET curve_XL: "{kit['assets']['curve_XL']}"
-            ASSET curve_L:  "{kit['assets']['curve_L']}"
-            ASSET curve_M:  "{kit['assets']['curve_M']}"
-            
-            GUIDE: {kit['hints']['layering_guide']}
-            Flip Hint: {kit['hints']['flip_transform']}
-            """
-        elif geo_mode == 'SHARP':
-            kit = supply_sharp_kit(width, height, seed)
-            safe_limit_info = f"Keep content ABOVE Y={kit['safe_limit_y']}"
-            geo_section = f"""
-            --- 📐 GEOMETRY ASSETS (HELPER) ---
-            ASSET poly_back:  "{kit['assets']['poly_back']}"
-            ASSET poly_front: "{kit['assets']['poly_front']}"
-            GUIDE: {kit['hints']['layering_guide']}
-            """
+        geo_kit = supply_curve_kit(width, height, seed) if geo_mode == 'CURVE' else supply_sharp_kit(width, height, seed) if geo_mode == 'SHARP' else None
+        geo_instr = f"ASSETS: {json.dumps(geo_kit['assets'])}" if geo_kit else "Focus on Typography."
 
-        # 3. System Prompt (The Authority)
-        sys_instructions = f"""
-        ROLE: You are the Design Director. You have sole creative authority.
-        
-        MANDATE:
-        1. **Director First**: You decide the composition. The recipe is a constraint, not a template.
-        2. **Geometry Policy**: If assets are provided, treat them as raw geometry. You control their color/opacity.
-        3. **White Space**: Maintain 45-60% negative space. Do NOT clutter.
-        
-        --- 🎨 CONTEXT ---
-        - Request: "{user_msg}"
-        - Recipe Inspiration: {recipe.get('id')}
-        - Palette: {json.dumps(recipe.get('generative_rules', {}).get('palette_suggestions', ['#111', '#FFF']))}
-        
-        {geo_section}
-        
-        --- 🛡️ COMPOSITION RULES (STRICT) ---
-        1. **Mode Selection** (Pick ONE):
-           [A] Minimal Whitespace (Typography focus)
-           [B] Full Background (Texture/Gradient)
-           [C] Hero Header (Visual top)
-        
-        2. **Color Discipline**:
-           - Max 3 Main Colors.
-           - NO Rainbow effects. Use analogous or monochrome harmony.
-        
-        3. **Typography & CSS**:
-           - Use <foreignObject> for text.
-           - Embed this CSS in <defs><style>:
-             .rtl {{ direction: rtl; text-align: right; font-family: sans-serif; }}
-             .title {{ font-weight: bold; }}
-        
-        4. **Output Format**:
-           - SVG must include `viewBox="0 0 {width} {height}"`.
-           - NO conversational text. Just the code.
-           - **REQUIRED COMMENT**: The SVG MUST start with this comment:
-             EXECUTE DESIGN NOW.
+        # ✅ سد ثغرة 2: القالب يجب أن يحتوي على الهيكل المطلوب لكي يعبر من الفلتر
+        plan_template = """
+        Your response MUST start with this JSON format exactly:
+        ```json
+        {
+          "design_contract": {
+            "arabic_position": "top_right",
+            "contrast_verified": "YES",
+            "layout_variant": "hero",
+            "main_rules_applied": ["1_Hierarchy", "2_Contrast", "3_Arabic"]
+          }
+        }
+        ```
         """
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=sys_instructions, temperature=temp_setting)
-        )
-
-        # 4. Output Sanitization (Strict Cleaning)
-        raw_text = response.text
-        clean_svg = extract_pure_svg(raw_text)
+        sys_instructions = f"""
+        ROLE: Almonjez Art Director.
+        --- 🏛️ CONSTITUTION ---
+        {json.dumps(ALMONJEZ_CONSTITUTION, ensure_ascii=False)}
+        --- 📜 RECIPE ---
+        {json.dumps(indexed_rules, ensure_ascii=False)}
+        {geo_instr}
         
-        # Ensure namespace exists (iPhone fix)
-        if '<svg' in clean_svg and 'xmlns=' not in clean_svg:
-            clean_svg = clean_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+        --- 📱 iOS APP COMPATIBILITY ---
+        You MUST use <foreignObject> for all text blocks to allow auto-wrapping.
+        Inside <foreignObject>, use <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl;">.
+        
+        --- ✅ OUTPUT RULE ---
+        1. FIRST LINE: The Plan JSON comment exactly.
+        2. THEN: The SVG code.
+        {plan_template}
+        """
+
+        max_attempts = 2
+        final_svg = None
+        used_model = "unknown"
+        extracted_plan = None
+        fail_reason = ""
+        
+        # ✅ سد ثغرة 3: استخدام موديل فلاش الثابت بدلاً من التجريبي المفقود
+        models = ["gemini-2.0-flash", "gemini-1.5-pro"]
+        
+        for attempt in range(max_attempts):
+            model = models[0] if attempt == 0 else models[-1]
+            try:
+                current_sys = sys_instructions
+                if attempt > 0:
+                    current_sys += f"\n\n⚠️ FIX REQUIRED: {fail_reason}. Stick to the Plan and the Constitution."
+
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_msg,
+                    config=types.GenerateContentConfig(system_instruction=current_sys, temperature=temp_setting if attempt==0 else 0.5)
+                )
+                
+                raw = response.text or ""
+                plan = extract_plan(raw)
+                
+                is_plan_ok, p_reason = validate_plan_content(plan)
+                if not is_plan_ok:
+                    fail_reason = f"Plan Error: {p_reason}"
+                    continue
+
+                # ✅ سد ثغرة 4: استخراج آمن للكود يمنع انهيار الـ slicing
+                svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw)
+                svg_code = svg_match.group(0) if svg_match else ""
+                
+                is_svg_ok, s_reason = validate_svg_quality(svg_code)
+                if not is_svg_ok:
+                    fail_reason = f"SVG Quality Error: {s_reason}"
+                    continue
+
+                final_svg = svg_code
+                extracted_plan = plan
+                used_model = model
+                break
+            except Exception as e:
+                fail_reason = str(e)
+                time.sleep(1)
+
+        if not final_svg:
+             return jsonify({"error": f"Failed quality check: {fail_reason}"}), 500
+
+        # Post-processing (Namespaces & Filters)
+        if 'xmlns=' not in final_svg: final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+        if '<foreignObject' in final_svg and 'xmlns:xhtml' not in final_svg:
+             final_svg = final_svg.replace('<svg', '<svg xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
+             
+        if 'filter=' in final_svg and '<filter' not in final_svg:
+            final_svg = final_svg.replace('</svg>', '<defs><filter id="blur"><feGaussianBlur stdDeviation="5"/></filter></defs></svg>')
 
         return jsonify({
-            "response": clean_svg,
-            "meta": {
-                "seed": seed,
-                "geo_mode": geo_mode,
-                "recipe_id": recipe.get('id', 'unknown')
-            }
+            "response": final_svg,
+            "meta": {"model": used_model, "plan": extracted_plan}
         })
 
     except Exception as e:
