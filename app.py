@@ -15,11 +15,11 @@ logger = logging.getLogger("Almonjez_Flash_Engine")
 app = Flask(__name__)
 
 # ------------------------------------------------------
-# 🔧 المسارات الحيوية على سيرفر Render (تم التصحيح)
+# 🔧 المسارات الحيوية على سيرفر Render
 # ------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RECIPES_DIR = os.path.join(BASE_DIR, 'recipes')       # الدخول لمجلد الوصفات
-CORE_PATH = os.path.join(RECIPES_DIR, 'core')         # استهداف مجلد core
+RECIPES_DIR = os.path.join(BASE_DIR, 'recipes')       
+CORE_PATH = os.path.join(RECIPES_DIR, 'core')         
 PRINT_PATH = os.path.join(RECIPES_DIR, 'print')
 
 # ======================================================
@@ -31,7 +31,6 @@ try:
     from google.genai import types
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
-        # استخدام v1beta للوصول الكامل لخصائص Flash 2.0
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
         logger.info("✅ Gemini 2.0 Flash Engine Initialized.")
     else:
@@ -40,7 +39,7 @@ except Exception as e:
     logger.error(f"❌ AI Init Error: {e}")
 
 # ======================================================
-# 📂 1. THE ASSET VAULT (مدير المكتبة الاحترافية)
+# 📂 1. THE ASSET VAULT
 # ======================================================
 class AssetVault:
     def __init__(self):
@@ -51,7 +50,6 @@ class AssetVault:
         self.refresh_library()
 
     def refresh_library(self):
-        """قراءة الملفات الحقيقية من المجلدات المرفوعة مع التحقق من المسار"""
         try:
             layout_file = os.path.join(CORE_PATH, 'layout_sets.json')
             shape_file = os.path.join(CORE_PATH, 'shape_library.json')
@@ -81,10 +79,9 @@ class AssetVault:
             logger.error(f"❌ Library Sync Error: {e}")
 
     def find_best_match(self, user_msg):
-        """مطابقة ذكية للـ Vibes بناءً على وصف المستخدم"""
         msg = user_msg.lower()
         candidates = [l for l in self.layouts if any(v in msg for v in l.get('vibes', []))]
-        return random.choice(candidates if candidates else self.layouts)
+        return random.choice(candidates if candidates else self.layouts) if self.layouts else {}
 
     def get_random_palette(self):
         return random.choice(self.colors) if self.colors else ["#000000", "#FFFFFF"]
@@ -92,38 +89,44 @@ class AssetVault:
 GLOBAL_VAULT = AssetVault()
 
 # ======================================================
-# 📐 2. THE GEOMETRY RESOLVER (المعالج الهندسي الحتمي)
+# 📐 2. THE GEOMETRY RESOLVER
 # ======================================================
 class GeometryResolver:
     @staticmethod
     def resolve(layout_set):
-        """تحويل الـ Params من نطاق (min/max) إلى أرقام صلبة لضمان الدقة"""
         resolved = {}
         params = layout_set.get('params', {})
         for key, limits in params.items():
-            # توليد رقم عشوائي منضبط لكسر التكرار مع الحفاظ على التوازن
             resolved[key] = random.randint(limits['min'], limits['max'])
         return resolved
 
     @staticmethod
     def inject_assets(svg_skeleton, params, palette):
-        """حقن الأرقام والألوان في هيكل الـ SVG"""
-        # 1. حقن الألوان
         for i, color in enumerate(palette, 1):
             svg_skeleton = svg_skeleton.replace(f"{{{{COLOR_{i}}}}}", color)
             
-        # إضافة لون التمييز Accent إذا طلب في القالب
         accent_color = palette[-1] if palette else "#FF0000"
         svg_skeleton = svg_skeleton.replace("{{ACCENT}}", accent_color)
         
-        # 2. حقن القياسات الهندسية
         for key, val in params.items():
             svg_skeleton = svg_skeleton.replace(f"{{{{{key}}}}}", str(val))
         
         return svg_skeleton
 
 # ======================================================
-# 🚀 3. THE PRODUCTION ENGINE (V18.5)
+# 🌐 3. HEALTH CHECK (لرؤية النتيجة فور فتح الرابط)
+# ======================================================
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "Online 🎉",
+        "engine": "Almonjez_V18.5_Core_Architect",
+        "library_loaded": len(GLOBAL_VAULT.layouts) > 0,
+        "message": "The server is running perfectly. Send a POST request to /gemini to generate SVG."
+    })
+
+# ======================================================
+# 🚀 4. THE PRODUCTION ENGINE (POST ROUTE)
 # ======================================================
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -136,19 +139,16 @@ def generate():
         if not GLOBAL_VAULT.layouts:
             return jsonify({"error": "Library layout_sets.json is empty or not found."}), 500
             
-        # --- الخطوة 1: اختيار الوصفة والألوان (المنطق البشري المدفوع بالبايثون) ---
         layout = GLOBAL_VAULT.find_best_match(user_msg)
         palette = GLOBAL_VAULT.get_random_palette()
         params = GeometryResolver.resolve(layout)
         
-        # بناء هيكل الطبقات الأساسي
-        viewBox = layout['structure'].get('viewBox', '0 0 595 842')
-        defs = "".join(layout['structure'].get('defs', []))
+        viewBox = layout.get('structure', {}).get('viewBox', '0 0 595 842')
+        defs = "".join(layout.get('structure', {}).get('defs', []))
         
         layers_html = ""
-        for layer in layout['structure'].get('layers', []):
-            element_type = layer.get('element', 'path') # يدعم المسار كافتراضي
-            
+        for layer in layout.get('structure', {}).get('layers', []):
+            element_type = layer.get('element', 'path')
             fill = layer.get('fill', '#000')
             opacity = layer.get('opacity', 1.0)
             
@@ -163,19 +163,15 @@ def generate():
                 path_str += ' />\n'
                 layers_html += path_str
                 
-            elif element_type == 'circle': # يدعم رسم الدوائر مثل قالب letterhead_official
+            elif element_type == 'circle':
                 cx = layer.get('cx', '0')
                 cy = layer.get('cy', '0')
                 r = layer.get('r', '0')
                 layers_html += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" opacity="{opacity}" />\n'
 
-        # الهيكل الهيكلي الخام (نترك تعليقاً لجميني ليعرف أين يضع محتواه)
         skeleton = f'<svg viewBox="{viewBox}"><defs>{defs}</defs>{layers_html}</svg>'
-        
-        # معالجة الهيكل (حقن القيم)
         processed_skeleton = GeometryResolver.inject_assets(skeleton, params, palette)
         
-        # --- الخطوة 2: التوجيه الإبداعي لـ Flash 2.0 ---
         safe_area = layout.get('logic', {}).get('text_safe_area', {})
         
         system_instruction = f"""
@@ -201,23 +197,20 @@ def generate():
         Return ONLY the final SVG code. Integrate the user's message into a compelling design.
         """
 
-        # --- الخطوة 3: التوليد ---
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[f"User Request: {user_msg}\n\nProcessed Skeleton:\n{processed_skeleton}"],
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.4 # درجة حرارة منخفضة لضمان الانضباط بالقواعد
+                temperature=0.4 
             )
         )
         
         final_svg = response.text
-        # تنظيف المستخرج
         svg_match = re.search(r"(?s)<svg[^>]*>.*?</svg>", final_svg)
         if svg_match:
             final_svg = svg_match.group(0)
 
-        # ضمان الـ Namespace
         if 'xmlns=' not in final_svg:
             final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
 
@@ -235,4 +228,6 @@ def generate():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    # تم تصحيح المنفذ ليتوافق مع Render ديناميكياً
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
