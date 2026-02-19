@@ -3,16 +3,18 @@ import json
 import logging
 import random
 import re
-import time
 from flask import Flask, request, jsonify
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ======================================================
+# ⚙️ CONFIGURATION & SYSTEM SETUP (ALMONJEZ V20)
+# ======================================================
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("Almonjez_Blueprint_Engine")
 
 app = Flask(__name__)
 
 # ======================================================
-# 🔌 AI CLIENT SETUP (V1 Beta for Flash 2.0)
+# 🔌 AI CLIENT (GEMINI 2.0 FLASH - FAST & SMART)
 # ======================================================
 client = None
 try:
@@ -21,253 +23,235 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ GenAI Enterprise Connected (Flash 2.0)")
-except Exception as e: 
-    logger.error(f"Init Error: {e}")
-
-# ✅ FIX 1: Robust Regex for JSON Plan Extraction
-PLAN_RE = re.compile(r'```json\s*(.*?)\s*```', re.DOTALL | re.IGNORECASE)
-
-# ======================================================
-# 🏛️ ALMONJEZ CONSTITUTION (دستور الجودة)
-# ======================================================
-ALMONJEZ_CONSTITUTION = {
-    "1_Hierarchy": "Headlines MUST be 3x body size. No floating elements.",
-    "2_Contrast": "Dark text on Light BG only. Light text on Dark BG only. Use backing rects if needed.",
-    "3_Arabic": "Arabic Title = Top/Right & Largest. English = Secondary.",
-    "4_EmptySpace": "Fill dead space with: Pattern (5% opacity) or Service Pills.",
-    "5_Brand": "Brand Name is SACRED. Exact spelling match required."
-}
+        logger.info("✅ V20 Engine Connected (Gemini 2.0 Flash).")
+    else:
+        logger.warning("⚠️ GOOGLE_API_KEY Missing.")
+except Exception as e:
+    logger.error(f"❌ AI Init Error: {e}")
 
 # ======================================================
-# 👮‍♂️ VALIDATORS (Plan & SVG Quality)
+# 🧹 1. THE SANITIZER LAYER (حماية الـ JSON)
 # ======================================================
-def extract_plan(raw_text):
-    match = PLAN_RE.search(raw_text or "")
-    if not match: 
-        # Fallback if markdown tags are missing
-        alt_match = re.search(r'(\{.*\})', raw_text or "", re.DOTALL)
-        if not alt_match: return None
-        try: return json.loads(alt_match.group(1))
-        except: return None
-    try:
-        return json.loads(match.group(1))
-    except: return None
-
-def validate_plan_content(plan):
-    if not isinstance(plan, dict): return False, "Missing JSON Plan."
-    
-    contract = plan.get("design_contract")
-    if not isinstance(contract, dict): return False, "Missing 'design_contract' object."
-
-    if str(contract.get("arabic_position", "")).lower() != "top_right":
-        return False, "Arabic Position MUST be exactly 'top_right'."
-
-    if str(contract.get("contrast_verified", "")).upper() != "YES":
-        return False, "Contrast MUST be verified as 'YES'."
-
-    layout = str(contract.get("layout_variant", "")).lower()
-    if layout not in ["hero", "minimal", "full", "split", "swiss", "diagonal"]:
-        return False, f"Invalid layout variant: {layout}"
-
-    rules = contract.get("main_rules_applied", [])
-    if not isinstance(rules, list) or len(rules) < 3:
-        return False, "Must cite at least 3 Rule IDs from the constitution."
-
-    return True, "Valid"
-
-def validate_svg_quality(svg_code):
-    if not svg_code or "<svg" not in svg_code:
-        return False, "Invalid SVG code."
-
-    # Check for Arabic RTL support (Flexible for Swift)
-    if "direction: rtl" not in svg_code.lower() and "direction:rtl" not in svg_code.lower():
-        if "ar" in svg_code.lower() and "<foreignobject" not in svg_code.lower(): 
-            return False, "Arabic text detected without RTL styling."
-
-    # Check for heavy dividers
-    thick_strokes = re.findall(r'stroke-width=["\']([2-9]|\d{2,})["\']', svg_code)
-    if thick_strokes:
-        return False, "Amateur mistake: Heavy stroke-width (>1.5px) detected on elements."
-
-    return True, "Quality OK"
+class Sanitizer:
+    @staticmethod
+    def parse_json(raw_text):
+        """استخراج وتعقيم JSON من أي مخرج عشوائي لجيميني"""
+        try:
+            # 1. البحث عن أول { وآخر }
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if not match: return None
+            
+            json_str = match.group(0)
+            
+            # 2. إزالة الفواصل الزائدة (Trailing commas) التي تكسر الـ Parser
+            json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+            
+            return json.loads(json_str)
+        except Exception as e:
+            logger.error(f"Sanitizer Failed: {e}")
+            return None
 
 # ======================================================
-# 📐 GEOMETRY & UTILS (نفس المنطق القوي السابق)
+# 🔤 2. THE TEXT ENGINE (محرك النصوص الصارم لـ iOS)
 # ======================================================
-def supply_curve_kit(width, height, seed):
-    rnd = random.Random(seed)
-    w, h = int(width), int(height)
-    amp = int(h * rnd.uniform(0.12, 0.22))
-    def get_path(offset):
-        p0_y, p3_y = h - int(amp * 0.7), h - int(amp * 0.4)
-        c1_x, c1_y = int(w * 0.35), h - int(amp * 1.6)
-        c2_x, c2_y = int(w * 0.75), h - int(amp * 0.2)
-        return f"M0,{h} L0,{p0_y+offset} C{c1_x},{c1_y+offset} {c2_x},{c2_y+offset} {w},{p3_y+offset} L{w},{h} Z"
-    
-    highest = h - int(amp * 1.6)
-    safe_y = max(highest - 60, h * 0.35)
-    return {
-        "assets": { "curve_XL": get_path(60), "curve_L": get_path(30), "curve_M": get_path(0) },
-        "flip_info": { "safe_y_bottom_mode": int(safe_y), "safe_y_top_mode": int(h - safe_y) }
-    }
-
-def supply_sharp_kit(width, height, seed):
-    rnd = random.Random(seed)
-    w, h = int(width), int(height)
-    peak = int(h * 0.25)
-    p_y = h - peak
-    path_back = f"M0,{h} L0,{p_y} L{w/2},{p_y-50} L{w},{p_y} L{w},{h} Z"
-    path_front = f"M0,{h} L0,{p_y+40} L{w/2},{p_y+20} L{w},{p_y+40} L{w},{h} Z"
-    return {
-        "assets": { "poly_back": path_back, "poly_front": path_front },
-        "flip_info": { "safe_y_bottom_mode": int(p_y-80), "safe_y_top_mode": int(peak+80) }
-    }
-
-def analyze_needs(recipe, user_msg, cat):
-    msg = str(user_msg).lower()
-    if 'minimal' in msg or 'clean' in msg: return 'NONE', 0.6
-    if 'curve' in msg or 'medical' in str(recipe): return 'CURVE', 0.8
-    if 'sharp' in msg or 'corporate' in str(recipe): return 'SHARP', 0.8
-    return 'NONE', 0.7
-
-def get_recipe_data(cat, prompt):
-    # Dummy logic for example stability (You can replace this with file loading if needed)
-    return {"id": "flyer_pro_01", "layout_rules": ["Use Swiss Grid"], "typography_rules": ["Bold H1"]}
+class TextEngine:
+    @staticmethod
+    def build_foreign_object(x, y, w, h, text, font_size, max_lines, color, weight="normal"):
+        """
+        توليد صندوق نصي آمن (ForeignObject) مع CSS Clamping.
+        مستحيل أن يخرج النص عن الـ Box أو يتمدد، مما يحمي الـ Layout تماماً.
+        """
+        # الهروب من الأقواس المعقوفة في f-string
+        return f"""
+        <foreignObject x="{x}" y="{y}" width="{w}" height="{h}">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="
+                direction: rtl; 
+                text-align: right; 
+                color: {color}; 
+                font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif;
+                font-size: {font_size}px;
+                font-weight: {weight};
+                line-height: 1.4;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: {max_lines};
+                -webkit-box-orient: vertical;
+            ">
+                {text}
+            </div>
+        </foreignObject>
+        """
 
 # ======================================================
-# 🌐 HEALTH CHECK (فحص عمل السيرفر في المتصفح)
+# 📐 3. THE GEOMETRY ENGINE (محرك المخططات - Blueprint)
+# ======================================================
+class GeometryEngine:
+    @staticmethod
+    def get_blueprint(mode, w, h, seed):
+        """
+        توليد المخطط الهندسي: يحتوي على الأشكال الجاهزة + مناطق النصوص الدقيقة (Text Zones)
+        """
+        rnd = random.Random(seed)
+        blueprint = {
+            "viewBox": f"0 0 {w} {h}",
+            "paths": [],
+            "text_zones": {}
+        }
+        
+        safe_margin = int(w * 0.08) # 8% margin
+        
+        if mode == "CURVE":
+            # انحناءات طبية/ناعمة (Bottom Anchored)
+            amp = int(h * rnd.uniform(0.12, 0.22))
+            c1_y = h - int(amp * 1.6)
+            
+            p_back = f"M0,{h} L0,{h*0.4} C{w*0.3},{h*0.3} {w*0.7},{h*0.6} {w},{h*0.5} L{w},{h} Z"
+            p_front = f"M0,{h} L0,{h*0.6} C{w*0.4},{h*0.5} {w*0.6},{h*0.8} {w},{h*0.7} L{w},{h} Z"
+            
+            blueprint["paths"] = [
+                {"d": p_back, "fill": "{{PRIMARY}}", "opacity": 0.15},
+                {"d": p_front, "fill": "{{PRIMARY}}", "opacity": 1.0}
+            ]
+            
+            # Text Zones (أعلى الكيرف)
+            blueprint["text_zones"] = {
+                "title": {"x": safe_margin, "y": safe_margin, "w": w - (safe_margin*2), "h": int(h*0.15), "size": int(w*0.08), "lines": 2, "weight": "bold", "color": "{{PRIMARY}}"},
+                "body":  {"x": safe_margin, "y": safe_margin + int(h*0.16), "w": w - (safe_margin*2), "h": int(h*0.25), "size": int(w*0.04), "lines": 5, "weight": "normal", "color": "#333333"}
+            }
+            
+        else:
+            # مضلعات حادة/رسمية (Corporate Sharp)
+            peak = int(h * 0.25)
+            p_header = f"M0,0 L{w},0 L{w},{peak} L0,{peak-50} Z"
+            p_footer = f"M0,{h} L0,{h-80} L{w},{h-peak} L{w},{h} Z"
+            
+            blueprint["paths"] = [
+                {"d": p_header, "fill": "{{PRIMARY}}", "opacity": 1.0},
+                {"d": p_footer, "fill": "{{ACCENT}}", "opacity": 1.0}
+            ]
+            
+            # Text Zones (في المساحة البيضاء بالمنتصف)
+            blueprint["text_zones"] = {
+                "title": {"x": safe_margin, "y": peak + 40, "w": w - (safe_margin*2), "h": int(h*0.12), "size": int(w*0.07), "lines": 2, "weight": "bold", "color": "{{PRIMARY}}"},
+                "body":  {"x": safe_margin, "y": peak + 40 + int(h*0.14), "w": w - (safe_margin*2), "h": int(h*0.3), "size": int(w*0.035), "lines": 6, "weight": "normal", "color": "#111111"}
+            }
+
+        return blueprint
+
+# ======================================================
+# 🚀 4. THE PRODUCTION ROUTE (التجميع النهائي)
 # ======================================================
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({
-        "status": "Online 🎉",
-        "message": "Almonjez Iron Guard Server is Active and waiting for iOS requests."
-    })
+    return jsonify({"status": "Almonjez V20 Blueprint Engine is Online 🍏"})
 
-# ======================================================
-# 🚀 APP LOGIC V16.0 (The Iron Guard - Full version)
-# ======================================================
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client: return jsonify({"error": "AI Client Offline"}), 500
+    if not client: return jsonify({"error": "AI Offline"}), 500
 
     try:
         data = request.json
         user_msg = data.get('message', '')
-        cat_name = data.get('category', 'general')
-        width, height = int(data.get('width', 800)), int(data.get('height', 600))
+        width = int(data.get('width', 595))
+        height = int(data.get('height', 842))
         
-        recipe = get_recipe_data(cat_name, user_msg)
-        geo_mode, temp_setting = analyze_needs(recipe, user_msg, cat_name)
-        seed = random.randint(0, 999999)
+        # 1. تحديد النمط الهندسي برمجياً (Python Logic)
+        msg_lower = user_msg.lower()
+        mode = "CURVE" if any(w in msg_lower for w in ['طبي', 'تجميل', 'ناعم', 'منحنى', 'medical']) else "SHARP"
+        seed = random.randint(1000, 9999)
         
-        indexed_rules = []
-        for i, r in enumerate(recipe.get('layout_rules', []), 1): indexed_rules.append(f"LAYOUT_{i:02d}: {r}")
-        for i, r in enumerate(recipe.get('typography_rules', []), 1): indexed_rules.append(f"TYPE_{i:02d}: {r}")
+        # 2. توليد المخطط (The Blueprint)
+        blueprint = GeometryEngine.get_blueprint(mode, width, height, seed)
         
-        geo_kit = supply_curve_kit(width, height, seed) if geo_mode == 'CURVE' else supply_sharp_kit(width, height, seed) if geo_mode == 'SHARP' else None
-        geo_instr = f"ASSETS: {json.dumps(geo_kit['assets'])}" if geo_kit else "Focus on Typography."
-
-        plan_template = """
-        Your response MUST start with this JSON format exactly:
-        ```json
-        {
-          "design_contract": {
-            "arabic_position": "top_right",
-            "contrast_verified": "YES",
-            "layout_variant": "hero",
-            "main_rules_applied": ["1_Hierarchy", "2_Contrast", "3_Arabic"]
-          }
-        }
-        ```
+        # 3. توجيه جيميني لكتابة الـ JSON فقط (بدون أي SVG)
+        system_instruction = f"""
+        ROLE: Expert Arabic Copywriter & Color Strategist.
+        TASK: Extract intent from the user request and return strictly a JSON object.
+        
+        === 📏 TEXT BUDGET (STRICT CONTRACT) ===
+        - "title": Max {blueprint['text_zones']['title']['lines'] * 4} words. Punchy and attractive.
+        - "body": Max {blueprint['text_zones']['body']['lines'] * 8} words. Professional details.
+        
+        === 🎨 PALETTE ===
+        - "primary": A hex color code suitable for the theme (e.g., #1A237E).
+        - "accent": A complementary hex color code (e.g., #FF5252).
+        
+        === ✅ OUTPUT FORMAT ===
+        Return ONLY valid JSON matching this schema exactly. No markdown, no conversation:
+        {{
+            "primary": "#HEX",
+            "accent": "#HEX",
+            "title": "العنوان هنا",
+            "body": "التفاصيل هنا..."
+        }}
         """
 
-        sys_instructions = f"""
-        ROLE: Almonjez Art Director.
-        --- 🏛️ CONSTITUTION ---
-        {json.dumps(ALMONJEZ_CONSTITUTION, ensure_ascii=False)}
-        --- 📜 RECIPE ---
-        {json.dumps(indexed_rules, ensure_ascii=False)}
-        {geo_instr}
+        # 4. استدعاء جيميني (سريع جداً لأنه يولد نصوصاً فقط)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=user_msg,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.4 # درجة حرارة منخفضة لضمان هيكل الـ JSON
+            )
+        )
         
-        --- 📱 iOS APP COMPATIBILITY (CRITICAL) ---
-        You MUST use <foreignObject> for all text blocks to allow auto-wrapping in iOS WebKit.
-        Inside <foreignObject>, use standard HTML <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl;">.
+        # 5. التعقيم والتحليل (Sanitize & Parse)
+        ai_data = Sanitizer.parse_json(response.text)
+        if not ai_data:
+            return jsonify({"error": "Failed to parse AI Design Contract."}), 500
+            
+        # 6. التجميع الهندسي (SVG Assembly بواسطة Python)
+        # أ. تجميع الأشكال الجاهزة
+        paths_svg = ""
+        for path in blueprint["paths"]:
+            d = path["d"]
+            fill = path["fill"].replace("{{PRIMARY}}", ai_data.get("primary", "#333")).replace("{{ACCENT}}", ai_data.get("accent", "#666"))
+            opacity = path["opacity"]
+            paths_svg += f'<path d="{d}" fill="{fill}" opacity="{opacity}" />\n'
+            
+        # ب. تجميع صناديق النصوص
+        texts_svg = ""
+        tz_title = blueprint["text_zones"]["title"]
+        texts_svg += TextEngine.build_foreign_object(
+            x=tz_title["x"], y=tz_title["y"], w=tz_title["w"], h=tz_title["h"],
+            text=ai_data.get("title", "بدون عنوان"),
+            font_size=tz_title["size"], max_lines=tz_title["lines"],
+            color=tz_title["color"].replace("{{PRIMARY}}", ai_data.get("primary", "#000")),
+            weight=tz_title["weight"]
+        )
         
-        --- ✅ OUTPUT RULE ---
-        1. FIRST LINE: The Plan JSON comment exactly.
-        2. THEN: The SVG code.
-        {plan_template}
-        """
-
-        max_attempts = 2  # حلقة التفتيش الصارمة (لن تتجاوز 20 ثانية بفضل Flash)
-        final_svg = None
-        used_model = "unknown"
-        extracted_plan = None
-        fail_reason = ""
+        tz_body = blueprint["text_zones"]["body"]
+        texts_svg += TextEngine.build_foreign_object(
+            x=tz_body["x"], y=tz_body["y"], w=tz_body["w"], h=tz_body["h"],
+            text=ai_data.get("body", "لا توجد تفاصيل"),
+            font_size=tz_body["size"], max_lines=tz_body["lines"],
+            color=tz_body["color"], weight=tz_body["weight"]
+        )
         
-        # نعتمد كلياً على Flash 2.0 لسرعته وملاءمته لسيرفر Render
-        models = ["gemini-2.0-flash", "gemini-2.0-flash"]
-        
-        for attempt in range(max_attempts):
-            model = models[attempt]
-            try:
-                current_sys = sys_instructions
-                if attempt > 0:
-                    current_sys += f"\n\n⚠️ FIX REQUIRED: {fail_reason}. Stick strictly to the Plan, Constitution, and iOS rules."
+        # ج. إصدار الكود النهائي
+        # حقن namespaces الأساسية لدعم iOS
+        final_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" viewBox="{blueprint['viewBox']}" width="100%" height="100%">
+            {paths_svg}
+            {texts_svg}
+        </svg>"""
 
-                response = client.models.generate_content(
-                    model=model,
-                    contents=user_msg,
-                    config=types.GenerateContentConfig(system_instruction=current_sys, temperature=temp_setting if attempt==0 else 0.4)
-                )
-                
-                raw = response.text or ""
-                plan = extract_plan(raw)
-                
-                # 1. Validate Plan
-                is_plan_ok, p_reason = validate_plan_content(plan)
-                if not is_plan_ok:
-                    fail_reason = f"Plan Error: {p_reason}"
-                    continue
-
-                # 2. Extract & Validate SVG Safely
-                svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw)
-                svg_code = svg_match.group(0) if svg_match else ""
-                
-                is_svg_ok, s_reason = validate_svg_quality(svg_code)
-                if not is_svg_ok:
-                    fail_reason = f"SVG Quality Error: {s_reason}"
-                    continue
-
-                # Success!
-                final_svg = svg_code
-                extracted_plan = plan
-                used_model = model
-                break
-            except Exception as e:
-                fail_reason = str(e)
-                time.sleep(1)
-
-        if not final_svg:
-             return jsonify({"error": f"Failed quality check after {max_attempts} attempts: {fail_reason}"}), 500
-
-        # Post-processing (سد ثغرات Namespaces ليعمل <foreignObject> في iOS)
-        if 'xmlns=' not in final_svg: final_svg = final_svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
-        if '<foreignObject' in final_svg and 'xmlns:xhtml' not in final_svg:
-             final_svg = final_svg.replace('<svg', '<svg xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
-             
-        if 'filter=' in final_svg and '<filter' not in final_svg:
-            final_svg = final_svg.replace('</svg>', '<defs><filter id="blur"><feGaussianBlur stdDeviation="5"/></filter></defs></svg>')
+        # تنظيف نهائي للـ Whitespaces لتقليل حجم الـ Payload
+        final_svg = re.sub(r'>\s+<', '><', final_svg.strip())
 
         return jsonify({
             "response": final_svg,
-            "meta": {"model": used_model, "plan": extracted_plan}
+            "meta": {
+                "engine": "V20_Deterministic_Blueprint",
+                "mode": mode,
+                "ai_contract": ai_data
+            }
         })
 
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Assembly Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
