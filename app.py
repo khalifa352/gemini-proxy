@@ -3,13 +3,14 @@ import json
 import logging
 import random
 import re
+import time
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ CONFIGURATION & SYSTEM SETUP (ALMONJEZ V21)
+# ⚙️ CONFIGURATION & SYSTEM SETUP (ALMONJEZ V22 - AI ARTIST)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Dynamic_Blueprint")
+logger = logging.getLogger("Almonjez_AI_Artist")
 
 app = Flask(__name__)
 
@@ -18,7 +19,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CORE_PATH = os.path.join(BASE_DIR, 'recipes', 'core')
 
 # ======================================================
-# 🔌 AI CLIENT (GEMINI 2.0 FLASH)
+# 🔌 AI CLIENT (GEMINI 2.0 FLASH ONLY)
 # ======================================================
 client = None
 try:
@@ -27,170 +28,70 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ V21 Dynamic Engine Connected.")
+        logger.info("✅ V22 AI Artist Engine Connected (Flash 2.0).")
 except Exception as e:
     logger.error(f"❌ AI Init Error: {e}")
 
 # ======================================================
-# 📂 1. THE ASSET VAULT (مدير المكتبة)
+# 📂 1. THE ASSET VAULT (لقراءة الإلهام والألوان)
 # ======================================================
 class AssetVault:
     def __init__(self):
         self.layouts = []
+        self.colors = []
+        self.typography = {}
         self.refresh_library()
 
     def refresh_library(self):
-        """قراءة قوالبك الحقيقية من layout_sets.json"""
         try:
             layout_file = os.path.join(CORE_PATH, 'layout_sets.json')
+            colors_file = os.path.join(CORE_PATH, 'colors.json')
+            typo_file = os.path.join(CORE_PATH, 'typography.json')
+
             if os.path.exists(layout_file):
                 with open(layout_file, 'r', encoding='utf-8') as f:
                     self.layouts = json.load(f)
-                logger.info(f"📚 Loaded {len(self.layouts)} dynamic layouts.")
-            else:
-                logger.error("❌ layout_sets.json not found! Using fallback.")
-                self.layouts = self.get_fallback_layout()
+            
+            if os.path.exists(colors_file):
+                with open(colors_file, 'r', encoding='utf-8') as f:
+                    self.colors = json.load(f)
+                    
+            if os.path.exists(typo_file):
+                with open(typo_file, 'r', encoding='utf-8') as f:
+                    self.typography = json.load(f)
+
         except Exception as e:
             logger.error(f"❌ Library Sync Error: {e}")
-            self.layouts = self.get_fallback_layout()
 
     def find_best_match(self, user_msg):
-        """مطابقة ذكية للـ Vibes لضمان التنوع"""
         msg = user_msg.lower()
         candidates = [l for l in self.layouts if any(v in msg for v in l.get('vibes', []))]
-        return random.choice(candidates if candidates else self.layouts)
-        
-    def get_fallback_layout(self):
-        return [{
-            "id": "fallback", "logic": {"text_safe_area": {"top": 100, "left": 40, "right": 40, "bottom": 100}},
-            "structure": {"viewBox": "0 0 595 842", "layers": [{"d_base": "M0 0 L595 0 L595 200 C300 300 100 100 0 200 Z", "fill": "{{COLOR_1}}", "opacity": 1.0}]},
-            "params": {}
-        }]
+        return random.choice(candidates if candidates else self.layouts) if self.layouts else {}
+
+    def get_random_palette(self):
+        return random.choice(self.colors) if self.colors else ["#1A237E", "#E8EAF6", "#FF5252"]
 
 GLOBAL_VAULT = AssetVault()
 
 # ======================================================
-# 🧹 2. THE SANITIZER LAYER (حماية الـ JSON)
+# 🧹 2. EXTRACTION HELPERS
 # ======================================================
-class Sanitizer:
-    @staticmethod
-    def parse_json(raw_text):
-        try:
-            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-            if not match: return None
-            json_str = re.sub(r',\s*([\]}])', r'\1', match.group(0))
-            return json.loads(json_str)
-        except: return None
+def extract_pure_svg(raw_text):
+    match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
+    return match.group(0) if match else None
 
-# ======================================================
-# 🔤 3. THE TEXT ENGINE (محرك النصوص الصارم لـ iOS)
-# ======================================================
-class TextEngine:
-    @staticmethod
-    def build_foreign_object(x, y, w, h, text, font_size, max_lines, color, weight="normal"):
-        return f"""
-        <foreignObject x="{x}" y="{y}" width="{w}" height="{h}">
-            <div xmlns="http://www.w3.org/1999/xhtml" style="
-                direction: rtl; 
-                text-align: right; 
-                color: {color}; 
-                font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif;
-                font-size: {font_size}px;
-                font-weight: {weight};
-                line-height: 1.4;
-                margin: 0;
-                padding: 0;
-                overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: {max_lines};
-                -webkit-box-orient: vertical;
-            ">
-                {text}
-            </div>
-        </foreignObject>
-        """
+def extract_plan(raw_text):
+    match = re.search(r'```json\s*(.*?)\s*```', raw_text, re.DOTALL | re.IGNORECASE)
+    if not match: return {}
+    try: return json.loads(match.group(1))
+    except: return {}
 
 # ======================================================
-# 📐 4. THE GEOMETRY RESOLVER (محرك التنوع الهندسي)
-# ======================================================
-class GeometryResolver:
-    @staticmethod
-    def build_layout(layout, ai_data):
-        """
-        هنا يحدث التنوع الحقيقي!
-        يقوم بحل الـ min/max عشوائياً ويطبق ألوان الذكاء الاصطناعي.
-        """
-        # 1. التنوع الهندسي (حل الـ Params)
-        params = {}
-        for key, limits in layout.get('params', {}).items():
-            params[key] = str(random.randint(limits.get('min', 0), limits.get('max', 100)))
-
-        # 2. حقن الألوان والـ Params في الطبقات
-        viewBox = layout.get('structure', {}).get('viewBox', '0 0 595 842')
-        defs = "".join(layout.get('structure', {}).get('defs', []))
-        
-        # استبدال الألوان في Defs (التدرجات)
-        defs = defs.replace("{{COLOR_1}}", ai_data.get("primary", "#1A237E"))
-        defs = defs.replace("{{COLOR_2}}", ai_data.get("accent", "#FF5252"))
-
-        paths_svg = ""
-        for layer in layout.get('structure', {}).get('layers', []):
-            element_type = layer.get('element', 'path')
-            fill = layer.get('fill', '#000')
-            fill = fill.replace("{{COLOR_1}}", ai_data.get("primary", "#1A237E"))
-            fill = fill.replace("{{COLOR_2}}", ai_data.get("accent", "#FF5252"))
-            opacity = layer.get('opacity', 1.0)
-            
-            if element_type == 'path':
-                d = layer.get('d_base', '')
-                for p_key, p_val in params.items():
-                    d = d.replace(f"{{{{{p_key}}}}}", p_val)
-                paths_svg += f'<path d="{d}" fill="{fill}" opacity="{opacity}" />\n'
-            elif element_type == 'circle':
-                cx, cy, r = layer.get('cx', '0'), layer.get('cy', '0'), layer.get('r', '0')
-                paths_svg += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" opacity="{opacity}" />\n'
-
-        # 3. حساب مناطق النصوص بناءً على Safe Area
-        safe_area = layout.get('logic', {}).get('text_safe_area', {})
-        top = safe_area.get('top', 100)
-        left = safe_area.get('left', 40)
-        right = safe_area.get('right', 40)
-        
-        # العرض الفعلي مأخوذ من viewBox 0 0 W H
-        w_match = re.search(r'0 0 (\d+) (\d+)', viewBox)
-        canvas_w = int(w_match.group(1)) if w_match else 595
-        canvas_h = int(w_match.group(2)) if w_match else 842
-        
-        text_w = canvas_w - left - right
-        
-        # توزيع مساحات النصوص
-        texts_svg = ""
-        texts_svg += TextEngine.build_foreign_object(
-            x=left, y=top, w=text_w, h=100,
-            text=ai_data.get("title", "عنوان التصميم"),
-            font_size=42, max_lines=2, color=ai_data.get("text_color_title", "#111111"), weight="bold"
-        )
-        texts_svg += TextEngine.build_foreign_object(
-            x=left, y=top + 120, w=text_w, h=canvas_h - top - 180,
-            text=ai_data.get("body", "التفاصيل..."),
-            font_size=22, max_lines=15, color=ai_data.get("text_color_body", "#444444"), weight="normal"
-        )
-
-        # 4. التجميع النهائي للـ SVG
-        final_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" viewBox="{viewBox}" width="100%" height="100%">
-            <defs>{defs}</defs>
-            {paths_svg}
-            {texts_svg}
-        </svg>"""
-
-        return re.sub(r'>\s+<', '><', final_svg.strip())
-
-# ======================================================
-# 🚀 5. THE PRODUCTION ROUTE
+# 🚀 3. THE PRODUCTION ROUTE
 # ======================================================
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V21 Dynamic Engine Online 🍏", "layouts": len(GLOBAL_VAULT.layouts)})
+    return jsonify({"status": "Almonjez V22 AI Artist Online 🎨", "message": "Gemini has full drawing control."})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -199,62 +100,87 @@ def generate():
     try:
         data = request.json
         user_msg = data.get('message', '')
+        width = int(data.get('width', 595))
+        height = int(data.get('height', 842))
         
-        # 1. اختيار القالب الديناميكي من مكتبتك
-        layout = GLOBAL_VAULT.find_best_match(user_msg)
+        # 1. إعطاء جيميني "الإلهام" من مكتبتك بدلاً من إجباره على الكود
+        layout_inspiration = GLOBAL_VAULT.find_best_match(user_msg)
+        palette = GLOBAL_VAULT.get_random_palette()
+        safe_area = layout_inspiration.get('logic', {}).get('text_safe_area', {'top': 50, 'bottom': 50, 'left': 40, 'right': 40})
+        vibes = layout_inspiration.get('vibes', ['modern', 'creative'])
         
-        # 2. توجيه جيميني لكتابة الـ JSON فقط (بدون أي SVG)
+        # 2. بناء "توجيه المدير الفني"
         system_instruction = f"""
-        ROLE: Expert Art Director & Copywriter.
-        TASK: Extract intent and return strictly a JSON object.
+        ROLE: Master SVG Artist & UI/UX Designer.
+        MODEL: Gemini 2.0 Flash (Creative Mode).
+
+        === 🎨 CREATIVE FREEDOM (YOU DRAW EVERYTHING) ===
+        You are completely responsible for drawing the SVG. I want BEAUTIFUL, highly professional, and creative shapes.
+        - If the vibe is 'organic' or 'medical', draw smooth, elegant bezier curves (<path d="M... C...">).
+        - If the vibe is 'corporate' or 'tech', draw sharp, dynamic polygons or sleek gradients.
+        - DO NOT make it look ugly or generic. Use your artistic intelligence.
+        - Make full use of `<defs>` for stunning gradients or shadows.
         
-        === 🎨 COLOR STRATEGY ===
-        - "primary": Main hex color based on request vibes.
-        - "accent": Complementary hex color.
-        - "text_color_title": Hex color (must contrast with background, e.g. #FFFFFF or #111111).
-        - "text_color_body": Hex color for readable body text.
+        === 🎯 DESIGN INSPIRATION ===
+        - Requested Vibe: {', '.join(vibes)}
+        - Color Palette: {json.dumps(palette)} (Use these creatively for backgrounds, accents, and text).
+        - Canvas Size: {width}x{height}
         
-        === 📝 TEXT BUDGET ===
-        - "title": Punchy title (max 6 words).
-        - "body": Professional details (max 40 words).
+        === 📱 iOS STRICT REQUIREMENT (NON-NEGOTIABLE) ===
+        Because this design will render in an iOS WKWebView, you MUST handle text like this:
+        1. Keep all text within this Safe Area: Top {safe_area.get('top')}px, Bottom {safe_area.get('bottom')}px, Left/Right {safe_area.get('left')}px.
+        2. **FOREIGN OBJECTS ONLY**: You MUST use `<foreignObject>` for all text to allow auto-wrapping.
+        3. Inside `<foreignObject>`, use `<div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl; text-align:right;">`.
         
-        === ✅ OUTPUT FORMAT (JSON ONLY) ===
-        {{
-            "primary": "#HEX",
-            "accent": "#HEX",
-            "text_color_title": "#HEX",
-            "text_color_body": "#HEX",
-            "title": "...",
-            "body": "..."
-        }}
+        Example of correct text:
+        <foreignObject x="40" y="100" width="{width - 80}" height="200">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="direction:rtl; text-align:right; color:#FFFFFF; font-family:'Cairo', sans-serif;">
+                <h1 style="font-size:36px; margin:0;">العنوان الجميل</h1>
+                <p style="font-size:18px; line-height:1.5;">التفاصيل هنا مع التفاف تلقائي للنص...</p>
+            </div>
+        </foreignObject>
+
+        === ✅ OUTPUT FORMAT ===
+        1. First, output a brief JSON plan (```json ... ```) summarizing your color and shape choices.
+        2. Then, output the complete, beautiful `<svg>...</svg>` code.
         """
 
-        # 3. استدعاء جيميني (سريع جداً!)
+        # 3. دع جيميني يبدع (حرارة 0.6 تعطي إبداعاً أفضل في الأشكال)
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=user_msg,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.7) # حرارة 0.7 لضمان تنوع الألوان والنصوص
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.6 
+            )
         )
         
-        # 4. التعقيم (Sanitize)
-        ai_data = Sanitizer.parse_json(response.text)
-        if not ai_data:
-            return jsonify({"error": "Failed to parse AI Contract."}), 500
-            
-        # 5. التجميع الديناميكي (Geometry + AI Colors/Texts)
-        final_svg = GeometryResolver.build_layout(layout, ai_data)
+        raw_text = response.text or ""
+        
+        # 4. استخراج الكود
+        final_svg = extract_pure_svg(raw_text)
+        plan = extract_plan(raw_text)
+
+        if not final_svg:
+             return jsonify({"error": "Gemini failed to generate a valid SVG."}), 500
+
+        # 5. تنظيف ومعالجة لضمان عمله على iOS
+        if 'xmlns=' not in final_svg: 
+            final_svg = final_svg.replace('<svg', f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%"', 1)
+        if '<foreignObject' in final_svg and 'xmlns:xhtml' not in final_svg:
+             final_svg = final_svg.replace('<svg', '<svg xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
 
         return jsonify({
             "response": final_svg,
             "meta": {
-                "engine": "V21_Dynamic_Assembler",
-                "layout_id": layout.get('id', 'unknown'),
-                "ai_contract": ai_data
+                "engine": "V22_AI_Artist",
+                "vibes": vibes,
+                "plan": plan
             }
         })
 
     except Exception as e:
-        logger.error(f"Assembly Error: {e}")
+        logger.error(f"Execution Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
