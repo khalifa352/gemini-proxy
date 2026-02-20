@@ -5,10 +5,10 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V28 - PERFECT CLONE & BEAUTIFUL UI)
+# ⚙️ SMART DOCUMENT ENGINE (V30 - PURE HTML/CSS EDITION)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_Pro")
+logger = logging.getLogger("Almonjez_Docs_HTML")
 
 app = Flask(__name__)
 
@@ -19,23 +19,16 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V28 Connected (Perfect Layout & Typography)")
+        logger.info("✅ Document Engine V30 Connected (Pure HTML Engine)")
 except Exception as e:
-    logger.error(f"❌ API Error: {}")
-
-def ensure_namespaces(svg_code):
-    if 'xmlns="http://www.w3.org/2000/svg"' not in svg_code:
-        svg_code = svg_code.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
-    if 'xmlns:xhtml' not in svg_code:
-        svg_code = svg_code.replace('<foreignObject', '<foreignObject xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
-    return svg_code
+    logger.error(f"❌ API Error: {e}")
 
 # ======================================================
 # 🚀 ROUTE 1: THE GENERATION ROUTE
 # ======================================================
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V28 is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V30 (HTML Engine) is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -44,112 +37,117 @@ def generate():
     try:
         data = request.json
         user_msg = data.get('message', '')
-        width = int(data.get('width', 595))
-        height = int(data.get('height', 842))
         
         logo_b64 = data.get('logo_image')
         reference_b64 = data.get('reference_image')
         letterhead_b64 = data.get('letterhead_image')
         
-        # 1. إعدادات الورق الرسمي (تحديد مساحة العمل)
+        # 1. إعدادات الورق الرسمي (Background CSS)
         if letterhead_b64:
-            bg_css = "background: transparent;"
-            fo_x, fo_y = width * 0.08, height * 0.15
-            fo_w, fo_h = width * 0.84, height * 0.70
-            page_logic = f"Page 1: `<foreignObject x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\">`."
+            letterhead_css = f"""
+            background-image: url('data:image/jpeg;base64,{letterhead_b64}');
+            background-size: cover;
+            background-position: top center;
+            background-repeat: no-repeat;
+            /* حماية الهيدر والفوتر بزيادة المساحات الفارغة */
+            padding-top: 15% !important;
+            padding-bottom: 15% !important;
+            """
         else:
-            bg_css = "background: white;"
-            fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
-            page_logic = f"Page 1: `<foreignObject x=\"0\" y=\"0\" width=\"{}\" height=\"{}\">`."
+            letterhead_css = "background-color: white;"
 
         # 2. الشعار والمحاكاة
-        logo_hint = f"\n- LOGO INCLUDED: Place this tag at the top layout: `<img src=\"data:image/jpeg;base64,{}\" style=\"max-height: 85px; object-fit: contain;\" />`" if logo_b64 else ""
+        logo_hint = f"\n- LOGO INCLUDED: Place this tag exactly at the top of the document content: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; object-fit: contain; margin-bottom: 20px;\" />`" if logo_b64 else ""
         
         ref_hint = ""
         if reference_b64:
             ref_hint = """
-            === 📸 PREMIUM EXACT CLONE MODE ===
-            - Visually analyze the attached reference document meticulously.
-            - Replicate its visual hierarchy, alignments, and structure EXACTLY using CSS Flexbox/Grid.
-            - DO NOT skip any fields, signatures, or columns.
-            - If it's a table/invoice, keep the exact same number of empty rows/cells.
-            - Eliminate unnatural empty gaps. Distribute elements elegantly using logical margins and padding.
+            === 📸 PREMIUM CLONE MODE ===
+            - Visually analyze the attached document.
+            - Replicate its layout, tables, and data EXACTLY using HTML/CSS.
+            - Upgrade the aesthetics (use beautiful table borders, subtle background colors for headers).
+            - Keep the exact same number of rows for forms/invoices.
             """
 
-        # 3. دستور المنجز (التنسيق الجمالي، الخطوط، الجداول، وتعدد الصفحات)
+        # 3. التعليمات الصارمة (HTML النقي)
         system_instruction = f"""
-        ROLE: Master Document Typesetter & UI Expert.
-        TASK: Generate a strictly formatted, visually perfect document SVG.
+        ROLE: World-Class Frontend Developer & Document Designer.
+        TASK: Generate a COMPLETE, stunning, standalone HTML5 document. DO NOT USE SVG.
+        {logo_hint}
+        {ref_hint}
 
-        {}
-        {}
+        === 🎨 AESTHETICS & TYPOGRAPHY ===
+        - MUST use Google Fonts for Arabic (e.g., Cairo): `<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">`
+        - Base font size should be `14px` or `16px`. Titles should be `24px` to `28px`.
+        - Make tables look highly professional: `border-collapse: collapse; width: 100%;`. Add padding `12px` to cells. Give table headers a soft background (e.g., `#f8f9fa` or similar).
 
-        === 🌍 BILINGUAL & TEXT DIRECTION FIX (CRITICAL) ===
-        - You will write mixed Arabic (RTL) and French/English (LTR).
-        - To prevent text inversion and broken sentences, you MUST wrap distinct language phrases in `<bdi>` tags or use `dir="auto"`.
-        - Example: `<td><bdi>الكمية</bdi> / <bdi>Quantité</bdi></td>`
+        === 🌍 BILINGUAL (BIDI) RULES ===
+        - The whole document MUST have `dir="rtl"`.
+        - Wrap distinct French/English words or numbers in `<bdi>` to prevent text inversion. Example: `<td><bdi>Quantité</bdi> / <bdi>الكمية</bdi></td>`
 
-        === 📏 UNIVERSAL TYPOGRAPHY & AESTHETICS (STRICT CSS) ===
-        You MUST use beautiful, modern CSS inside the `<style>` tag or inline:
-        1. Typography: Base font-size MUST be 14px to 16px. Main Titles: 22px-26px. NEVER shrink text below 13px under any circumstance. Ensure perfect readability.
-        2. Tables (CRITICAL): Tables must look professional. 
-           - CSS: `border-collapse: collapse; width: 100%; margin: 20px 0;`
-           - Cells (`th`, `td`): `border: 1px solid #777; padding: 10px 12px; text-align: center; font-size: 14px;`
-           - Headers (`th`): `background-color: #f0f4f8; font-weight: bold; color: #333;`
-        3. Layout: Use `display: flex; justify-content: space-between; align-items: flex-start;` for headers (like logo on one side, details on the other).
-        4. Colors: Use deep professional colors (e.g., `#1a202c` for text, `#2d3748` for subtext).
+        === 📄 A4 PAGE SIMULATION (CSS ARCHITECTURE) ===
+        You must structure the HTML exactly like this:
+        ```html
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link href="[https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap](https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap)" rel="stylesheet">
+            <style>
+                body {{
+                    background-color: transparent; /* Native App Background */
+                    margin: 0;
+                    padding: 20px;
+                    display: flex;
+                    justify-content: center;
+                    font-family: 'Cairo', sans-serif;
+                    color: #111;
+                }}
+                .a4-page {{
+                    width: 210mm;
+                    min-height: 297mm;
+                    {letterhead_css}
+                    padding: 40px 50px;
+                    box-sizing: border-box;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                    border-radius: 4px;
+                    background-color: white; /* Fallback */
+                    overflow: hidden;
+                }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                th, td {{ border: 1px solid #ddd; padding: 12px; text-align: right; }}
+                th {{ background-color: #f4f6f8; font-weight: 600; }}
+            </style>
+        </head>
+        <body>
+            <div class="a4-page">
+                </div>
+        </body>
+        </html>
+        ```
 
-        === 📐 PAGINATION & OVERFLOW ===
-        - NEVER shrink the text to fit the page. 
-        - If the text, tables, or layout needs more vertical space, simply MULTIPLY the SVG `viewBox` height and `<foreignObject>` height. 
-        - Example for 2 pages: `viewBox="0 0 {} {height * 2}"` and `<foreignObject height="{height * 2}">`.
-        - Do not compress elements. Let them breathe with proper spacing (`line-height: 1.6; padding: 10px;`).
-
-        === 🏗️ ARCHITECTURE ===
-        Use pure HTML/CSS inside `<foreignObject>`.
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="100%" height="100%">
-          <foreignObject x="{}" y="{}" width="{}" height="{}">
-            <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; min-height: 100%; {} padding: 30px; box-sizing: border-box; direction: rtl; text-align: right; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; color: #1a202c; line-height: 1.6;">
-              <!-- Inject beautifully styled HTML here (Flexbox, styled Tables, BDI tags) -->
-            </div>
-          </foreignObject>
-        </svg>
-
-        RETURN ONLY THE RAW SVG CODE. NO MARKDOWN. NO EXPLANATIONS.
+        RETURN ONLY THE RAW HTML CODE. Do not use Markdown block ticks.
         """
 
-        contents = [user_msg] if user_msg else ["قم بتصميم/محاكاة هذا المستند بأعلى جودة بصرية، واحرص على جمالية الجداول وحجم الخط المقروء وعدم انعكاس اللغات."]
+        contents = [user_msg] if user_msg else ["قم بتصميم هذا المستند بأعلى جودة واحرص على تنسيق الجداول بشكل فاخر."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.25)
         )
         
         raw_text = response.text or ""
-        svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
-        final_svg = svg_match.group(0) if svg_match else raw_text
+        # تنظيف استخراج الـ HTML
+        clean_html = raw_text.replace("```html", "").replace("```", "").strip()
 
-        # 4. تكرار الورق الرسمي لكل الصفحات (لو فتح صفحة جديدة بناءً على الـ ViewBox)
-        if letterhead_b64 and '<svg' in final_svg:
-            vb_match = re.search(r'viewBox="0\s+0\s+\d+\s+(\d+)"', final_svg)
-            svg_total_height = int(vb_match.group(1)) if vb_match else height
-            pages = max(1, svg_total_height // height)
-            
-            bg_images = ""
-            for p in range(pages):
-                y_pos = p * height
-                bg_images += f'<image href="data:image/jpeg;base64,{}" x="0" y="{}" width="{}" height="{}" preserveAspectRatio="none" />\n'
-            
-            final_svg = final_svg.replace('<foreignObject', f'\n{}<foreignObject', 1)
-
-        final_svg = ensure_namespaces(final_svg)
-        return jsonify({"response": final_svg})
+        return jsonify({"response": clean_html})
 
     except Exception as e:
-        logger.error(f"Generate Error: {}")
+        logger.error(f"Generate Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ======================================================
@@ -161,26 +159,26 @@ def modify():
 
     try:
         data = request.json
-        current_svg = data.get('current_svg', '')
+        current_html = data.get('current_svg', '') # احتفظنا بنفس اسم المتغير لتجنب تعديل كل شيء في Swift
         instruction = data.get('instruction', '')
 
         system_prompt = """
-        ROLE: Friendly Document AI Assistant & UI Expert.
-        TASK: Modify the existing document SVG based on user instruction.
+        ROLE: Friendly Document AI Assistant & Expert Web Developer.
+        TASK: Modify the existing HTML document based on user instruction.
         
         RULES:
-        1. Maintain the HIGH-QUALITY CSS styling: beautiful tables (`border-collapse`, padded cells, colored headers), appropriate font sizes (min 13px), and logical Flexbox/Grid layouts.
-        2. Keep the Arabic/French bidi fixes (`<bdi>`, `dir="auto"`).
-        3. If the user asks for more content and it doesn't fit, DO NOT shrink the text. Instead, increase the SVG `viewBox` height and `<foreignObject>` height.
+        1. Keep the overall HTML/CSS structure (the `.a4-page` class, Google Fonts, etc.) intact.
+        2. Apply the modifications requested (e.g. change colors, fix typos, add table rows).
         
         OUTPUT FORMAT (STRICT JSON):
         {
-          "message": "رد عربي ودود قصير يوضح ما تم تعديله",
-          "response": "<svg>...updated code...</svg>"
+            "message": "رد عربي ودود قصير يخبر العميل بالنتيجة",
+            "response": "<!DOCTYPE html><html>...updated code...</html>"
         }
+        NO MARKDOWN TICKS. JUST JSON.
         """
 
-        prompt_text = f"CURRENT SVG:\n{}\n\nINSTRUCTION:\n{}"
+        prompt_text = f"CURRENT HTML:\n{current_html}\n\nINSTRUCTION:\n{instruction}"
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
@@ -192,16 +190,16 @@ def modify():
         json_str = raw_text.replace("```json", "").replace("```", "").strip()
         result_data = json.loads(json_str)
         
-        updated_svg = ensure_namespaces(result_data.get("response", ""))
-        ai_message = result_data.get("message", "تم التعديل بنجاح وبأفضل تنسيق ممكن!")
+        updated_html = result_data.get("response", "").replace("```html", "").replace("```", "").strip()
+        ai_message = result_data.get("message", "تم التعديل بنجاح!")
 
         return jsonify({
-            "response": updated_svg,
+            "response": updated_html,
             "message": ai_message
         })
 
     except Exception as e:
-        logger.error(f"Modify Error: {}")
+        logger.error(f"Modify Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
