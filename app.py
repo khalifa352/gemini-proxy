@@ -5,7 +5,7 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V37 - ADAPTIVE & LARGE FONTS)
+# ⚙️ SMART DOCUMENT ENGINE (V38 - THE MILITARY CLONE)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("Almonjez_Docs_SVG")
@@ -19,7 +19,7 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V37 Connected (Adaptive Layout & Large Fonts)")
+        logger.info("✅ Document Engine V38 Connected (Military Clone Edition)")
 except Exception as e:
     logger.error(f"❌ API Error: {e}")
 
@@ -41,7 +41,7 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V37 is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V38 is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -65,8 +65,20 @@ def generate():
             bg_css = "background: white;"
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
 
-        logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; margin-bottom: 20px;\" />`" if logo_b64 else ""
-        ref_hint = "\n=== 📸 PREMIUM CLONE MODE ===\nReplicate the layout intelligently. Do not force tables if the original is just text." if reference_b64 else ""
+        logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; margin-bottom: 15px;\" />`" if logo_b64 else ""
+        
+        # ⚠️ القواعد العسكرية الصارمة للمحاكاة
+        ref_hint = ""
+        if reference_b64:
+            ref_hint = """
+            === 📸 MILITARY CLONE MODE (ABSOLUTE OBEDIENCE) ===
+            You MUST replicate the attached image EXACTLY. DO NOT summarize. DO NOT be lazy.
+            1. **CUSTOMER INFO (DOTTED LINES):** Use flexbox with `border-bottom: 2px dotted #555;` to recreate the fill-in-the-blank lines (e.g., Date: ............ التاريخ). DO NOT split them to left/right.
+            2. **TABLE COLUMNS:** You MUST respect column proportions! The "Désignation" (Item) column MUST be `width: 50%;`. The "Quantité" (Qty) MUST be `width: 10%;`. The Prices `20%` each.
+            3. **TABLE ROWS (DO NOT BE LAZY):** You MUST generate EXACTLY 16 empty `<tr>` rows for the items. DO NOT stop at 5. I REPEAT, generate 16 empty rows so the table reaches the bottom of the page.
+            4. **THE TOTAL ROW:** The "Total =" row MUST be inside the table, using `<td colspan="3">Total =</td>` and an empty `<td>` for the amount.
+            5. **THE FOOTER BOX:** The notice at the bottom ("Les marchandises...") MUST be enclosed in a solid border box: `<div style="border: 2px solid #111; padding: 10px; text-align: center; border-radius: 5px;">...</div>`.
+            """
 
         system_instruction = f"""
         ROLE: Master UI/UX Designer & Document Typesetter.
@@ -74,20 +86,14 @@ def generate():
         {logo_hint}
         {ref_hint}
 
-        === 📏 ADAPTIVE LAYOUT (NO FORCED PRISONS) ===
-        - You must ADAPT to the document type:
-          1. FOR INVOICES/RECEIPTS: Use a `<table>`. If the table is short, make the last empty row very tall (`<tr style="height: 100%;"><td colspan="10"></td></tr>`) to push totals down.
-          2. FOR LETTERS/CERTIFICATES/TEXT: DO NOT use tables for layout! Use elegant `<p>` tags with `line-height: 1.8`. 
-        - Use `display: flex; flex-direction: column; min-height: 100%;` on the main container. Put `margin-bottom: auto;` on the main body content so the signature/footer is pushed to the bottom elegantly.
-
         === 🌍 BILINGUAL & ARABIC PRIORITY ===
-        - If text is bilingual (Arabic + French/English), the Arabic text MUST ALWAYS be placed ABOVE the other languages.
-        - French/English text MUST be wrapped in `<span dir="ltr">` and aligned left if separate.
-
+        - French/English MUST be wrapped in `<span dir="ltr">`.
+        - Arabic text MUST be ABOVE French text in table headers.
+        
         === 🎨 TYPOGRAPHY (LARGE & CLEAR) ===
-        - Make the text large, bold, and highly readable.
-        - Main Titles: 22pt to 28pt.
-        - Body Text, Paragraphs & Table Cells: 15pt to 18pt. (NEVER use tiny text).
+        - Main Titles: 24pt to 28pt.
+        - Table Headers & Body Text: 16pt to 18pt. 
+        - DO NOT use small text.
 
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
@@ -100,14 +106,14 @@ def generate():
         RETURN ONLY RAW SVG CODE.
         """
 
-        contents = [user_msg] if user_msg else ["صمم المستند بخطوط كبيرة وواضحة، ولا تضع جداول إلا إذا كان المستند فاتورة أو نموذجاً مجدولاً."]
+        contents = [user_msg] if user_msg else ["انسخ هذه الفاتورة بحذافيرها مع تطبيق أوامر المحاكاة العسكرية."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.25)
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.1) # حرارة 0.1 لطاعة عمياء
         )
         
         raw_text = response.text or ""
@@ -137,15 +143,14 @@ def modify():
 
         system_prompt = """
         ROLE: Expert Document AI.
-        TASK: Modify SVG document.
-        RULES: Keep the large typography (15pt-18pt base). If bilingual, keep Arabic ABOVE French. Keep the flexible layout.
+        TASK: Modify SVG document. Keep the layout strict, keep the 16 rows if it's an invoice, keep the footer box.
         OUTPUT (JSON): {"message": "رد عربي", "response": "<svg>...</svg>"}
         """
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
-            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.2)
+            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.1)
         )
 
         result_data = extract_safe_json(response.text if response.text else "")
