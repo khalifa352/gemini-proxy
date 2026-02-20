@@ -5,7 +5,7 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V27 - UNIVERSAL RULES & BIDI FIX)
+# ⚙️ SMART DOCUMENT ENGINE (V28 - PERFECT CLONE & BEAUTIFUL UI)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("Almonjez_Docs_Pro")
@@ -19,9 +19,9 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V27 Connected (Universal Rules & Bidi Text)")
+        logger.info("✅ Document Engine V28 Connected (Perfect Layout & Typography)")
 except Exception as e:
-    logger.error(f"❌ API Error: {e}")
+    logger.error(f"❌ API Error: {}")
 
 def ensure_namespaces(svg_code):
     if 'xmlns="http://www.w3.org/2000/svg"' not in svg_code:
@@ -35,7 +35,7 @@ def ensure_namespaces(svg_code):
 # ======================================================
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V27 is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V28 is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -56,92 +56,100 @@ def generate():
             bg_css = "background: transparent;"
             fo_x, fo_y = width * 0.08, height * 0.15
             fo_w, fo_h = width * 0.84, height * 0.70
-            page_logic = f"Page 1: `<foreignObject x=\"{fo_x}\" y=\"{fo_y}\" width=\"{fo_w}\" height=\"{fo_h}\">`. Page 2: `<foreignObject x=\"{fo_x}\" y=\"{height + fo_y}\" ...>`"
+            page_logic = f"Page 1: `<foreignObject x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\">`."
         else:
             bg_css = "background: white;"
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
-            page_logic = f"Page 1: `<foreignObject x=\"0\" y=\"0\" width=\"{width}\" height=\"{height}\">`. Page 2: `<foreignObject x=\"0\" y=\"{height}\" ...>`"
+            page_logic = f"Page 1: `<foreignObject x=\"0\" y=\"0\" width=\"{}\" height=\"{}\">`."
 
         # 2. الشعار والمحاكاة
-        logo_hint = f"\n- LOGO INCLUDED: Place this tag at the top: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 85px; object-fit: contain;\" />`" if logo_b64 else ""
+        logo_hint = f"\n- LOGO INCLUDED: Place this tag at the top layout: `<img src=\"data:image/jpeg;base64,{}\" style=\"max-height: 85px; object-fit: contain;\" />`" if logo_b64 else ""
         
         ref_hint = ""
         if reference_b64:
             ref_hint = """
-            === 📸 PREMIUM CLONE MODE ===
-            - Visually analyze the attached reference document.
-            - Replicate its structure, tables, columns, and data EXACTLY.
-            - Upgrade aesthetics (clean borders, elegant spacing) but keep the exact same number of empty rows if it's an invoice or form.
+            === 📸 PREMIUM EXACT CLONE MODE ===
+            - Visually analyze the attached reference document meticulously.
+            - Replicate its visual hierarchy, alignments, and structure EXACTLY using CSS Flexbox/Grid.
+            - DO NOT skip any fields, signatures, or columns.
+            - If it's a table/invoice, keep the exact same number of empty rows/cells.
+            - Eliminate unnatural empty gaps. Distribute elements elegantly using logical margins and padding.
             """
 
-        # 3. دستور المنجز (الخطوط، الاتجاهات، وتعدد الصفحات)
+        # 3. دستور المنجز (التنسيق الجمالي، الخطوط، الجداول، وتعدد الصفحات)
         system_instruction = f"""
         ROLE: Master Document Typesetter & UI Expert.
-        TASK: Generate a strictly formatted, elegant document SVG.
-        {logo_hint}
-        {ref_hint}
+        TASK: Generate a strictly formatted, visually perfect document SVG.
+
+        {}
+        {}
 
         === 🌍 BILINGUAL & TEXT DIRECTION FIX (CRITICAL) ===
         - You will write mixed Arabic (RTL) and French/English (LTR).
         - To prevent text inversion and broken sentences, you MUST wrap distinct language phrases in `<bdi>` tags or use `dir="auto"`.
         - Example: `<td><bdi>الكمية</bdi> / <bdi>Quantité</bdi></td>`
-        - Example: `<p dir="auto">Date: 12/05/2026 التاريخ</p>`
 
-        === 📏 UNIVERSAL TYPOGRAPHY & PAGINATION ===
-        - Apply these sizing rules to ALL documents:
-          * Main Titles: 20pt to 24pt.
-          * Headers/Subtitles: 14pt to 16pt (Bold).
-          * Body Text & Cells: 12pt to 14pt.
-        - NEVER shrink text below 12pt just to make it fit on one page, UNLESS the user explicitly commands: "صغر الخط" (shrink the text).
-        - IF text overflows at these standard sizes: 
-          1. Increase the SVG `viewBox` height (e.g., `viewBox="0 0 {width} {height * 2}"`).
-          2. Add a NEW `<foreignObject>` for the next page.
-          {page_logic}
-          3. Draw a separator line between pages: `<line x1="0" y1="{height}" x2="{width}" y2="{height}" stroke="#ccc" stroke-dasharray="10,10"/>`.
+        === 📏 UNIVERSAL TYPOGRAPHY & AESTHETICS (STRICT CSS) ===
+        You MUST use beautiful, modern CSS inside the `<style>` tag or inline:
+        1. Typography: Base font-size MUST be 14px to 16px. Main Titles: 22px-26px. NEVER shrink text below 13px under any circumstance. Ensure perfect readability.
+        2. Tables (CRITICAL): Tables must look professional. 
+           - CSS: `border-collapse: collapse; width: 100%; margin: 20px 0;`
+           - Cells (`th`, `td`): `border: 1px solid #777; padding: 10px 12px; text-align: center; font-size: 14px;`
+           - Headers (`th`): `background-color: #f0f4f8; font-weight: bold; color: #333;`
+        3. Layout: Use `display: flex; justify-content: space-between; align-items: flex-start;` for headers (like logo on one side, details on the other).
+        4. Colors: Use deep professional colors (e.g., `#1a202c` for text, `#2d3748` for subtext).
 
-        === 📐 ARCHITECTURE ===
+        === 📐 PAGINATION & OVERFLOW ===
+        - NEVER shrink the text to fit the page. 
+        - If the text, tables, or layout needs more vertical space, simply MULTIPLY the SVG `viewBox` height and `<foreignObject>` height. 
+        - Example for 2 pages: `viewBox="0 0 {} {height * 2}"` and `<foreignObject height="{height * 2}">`.
+        - Do not compress elements. Let them breathe with proper spacing (`line-height: 1.6; padding: 10px;`).
+
+        === 🏗️ ARCHITECTURE ===
         Use pure HTML/CSS inside `<foreignObject>`.
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
-            <foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; min-height: 100%; padding: 40px; box-sizing: border-box; {bg_css} direction: rtl; text-align: right; font-family: 'Arial', sans-serif; color: #111;">
-                    </div>
-            </foreignObject>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="100%" height="100%">
+          <foreignObject x="{}" y="{}" width="{}" height="{}">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; min-height: 100%; {} padding: 30px; box-sizing: border-box; direction: rtl; text-align: right; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; color: #1a202c; line-height: 1.6;">
+              <!-- Inject beautifully styled HTML here (Flexbox, styled Tables, BDI tags) -->
+            </div>
+          </foreignObject>
         </svg>
 
-        RETURN ONLY THE RAW SVG CODE.
+        RETURN ONLY THE RAW SVG CODE. NO MARKDOWN. NO EXPLANATIONS.
         """
 
-        contents = [user_msg] if user_msg else ["قم بتصميم/محاكاة هذا المستند بأعلى جودة واحرص على عدم انعكاس اللغات."]
+        contents = [user_msg] if user_msg else ["قم بتصميم/محاكاة هذا المستند بأعلى جودة بصرية، واحرص على جمالية الجداول وحجم الخط المقروء وعدم انعكاس اللغات."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.25)
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
         )
         
         raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
-        # 4. تكرار الورق الرسمي لكل الصفحات (لو فتح صفحة جديدة)
+        # 4. تكرار الورق الرسمي لكل الصفحات (لو فتح صفحة جديدة بناءً على الـ ViewBox)
         if letterhead_b64 and '<svg' in final_svg:
-            vb_match = re.search(r'viewBox="0 0 \d+ (\d+)"', final_svg)
-            pages = max(1, int(vb_match.group(1)) // height) if vb_match else 1
+            vb_match = re.search(r'viewBox="0\s+0\s+\d+\s+(\d+)"', final_svg)
+            svg_total_height = int(vb_match.group(1)) if vb_match else height
+            pages = max(1, svg_total_height // height)
             
             bg_images = ""
             for p in range(pages):
                 y_pos = p * height
-                bg_images += f'<image href="data:image/jpeg;base64,{letterhead_b64}" x="0" y="{y_pos}" width="{width}" height="{height}" preserveAspectRatio="none" />\n'
+                bg_images += f'<image href="data:image/jpeg;base64,{}" x="0" y="{}" width="{}" height="{}" preserveAspectRatio="none" />\n'
             
-            final_svg = final_svg.replace('<foreignObject', f'{bg_images}\n<foreignObject', 1)
+            final_svg = final_svg.replace('<foreignObject', f'\n{}<foreignObject', 1)
 
         final_svg = ensure_namespaces(final_svg)
         return jsonify({"response": final_svg})
 
     except Exception as e:
-        logger.error(f"Generate Error: {e}")
+        logger.error(f"Generate Error: {}")
         return jsonify({"error": str(e)}), 500
 
 # ======================================================
@@ -161,18 +169,18 @@ def modify():
         TASK: Modify the existing document SVG based on user instruction.
         
         RULES:
-        1. Keep the elegant CSS styling and Arabic/French bidi fixes (`<bdi>`, `dir="auto"`).
-        2. If the user explicitly asks to shrink the text ("صغر الخط"), you may reduce the font sizes to fit everything on one page. Otherwise, maintain readability.
-        3. If the user asks to "open a new page" or the text naturally overflows at standard sizes, double the SVG viewBox height and add a new `<foreignObject>`.
+        1. Maintain the HIGH-QUALITY CSS styling: beautiful tables (`border-collapse`, padded cells, colored headers), appropriate font sizes (min 13px), and logical Flexbox/Grid layouts.
+        2. Keep the Arabic/French bidi fixes (`<bdi>`, `dir="auto"`).
+        3. If the user asks for more content and it doesn't fit, DO NOT shrink the text. Instead, increase the SVG `viewBox` height and `<foreignObject>` height.
         
         OUTPUT FORMAT (STRICT JSON):
         {
-            "message": "رد عربي ودود قصير",
-            "response": "<svg>...updated code...</svg>"
+          "message": "رد عربي ودود قصير يوضح ما تم تعديله",
+          "response": "<svg>...updated code...</svg>"
         }
         """
 
-        prompt_text = f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}"
+        prompt_text = f"CURRENT SVG:\n{}\n\nINSTRUCTION:\n{}"
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
@@ -185,7 +193,7 @@ def modify():
         result_data = json.loads(json_str)
         
         updated_svg = ensure_namespaces(result_data.get("response", ""))
-        ai_message = result_data.get("message", "تم التعديل بنجاح!")
+        ai_message = result_data.get("message", "تم التعديل بنجاح وبأفضل تنسيق ممكن!")
 
         return jsonify({
             "response": updated_svg,
@@ -193,7 +201,7 @@ def modify():
         })
 
     except Exception as e:
-        logger.error(f"Modify Error: {e}")
+        logger.error(f"Modify Error: {}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
