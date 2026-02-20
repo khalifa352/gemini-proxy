@@ -5,23 +5,25 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V38 - THE MILITARY CLONE)
+# ⚙️ SMART DOCUMENT ENGINE (V39 - OPENAI GPT-4o EDITION)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_SVG")
+logger = logging.getLogger("Almonjez_Docs_OpenAI")
 
 app = Flask(__name__)
 
+# تهيئة عميل OpenAI
 client = None
 try:
-    from google import genai
-    from google.genai import types
-    API_KEY = os.environ.get('GOOGLE_API_KEY')
-    if API_KEY:
-        client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V38 Connected (Military Clone Edition)")
+    from openai import OpenAI
+    OPENAI_KEY = os.environ.get('OPENAI_API_KEY')
+    if OPENAI_KEY:
+        client = OpenAI(api_key=OPENAI_KEY)
+        logger.info("✅ Document Engine V39 Connected (OpenAI GPT-4o is ONLINE! 🧠)")
+    else:
+        logger.warning("⚠️ OPENAI_API_KEY is missing in environment variables.")
 except Exception as e:
-    logger.error(f"❌ API Error: {e}")
+    logger.error(f"❌ OpenAI API Error: {e}")
 
 def extract_safe_json(text):
     try:
@@ -41,11 +43,12 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V38 is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V39 (GPT-4o Engine) is Online 📄🪄"})
 
+# أبقينا اسم المسار gemini لكي لا نضطر لتعديل كود تطبيق الآيفون (Swift)
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client: return jsonify({"error": "AI Offline"}), 500
+    if not client: return jsonify({"error": "OpenAI API Offline"}), 500
 
     try:
         data = request.json
@@ -67,17 +70,17 @@ def generate():
 
         logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; margin-bottom: 15px;\" />`" if logo_b64 else ""
         
-        # ⚠️ القواعد العسكرية الصارمة للمحاكاة
+        # الأوامر العسكرية الصارمة لـ GPT-4
         ref_hint = ""
         if reference_b64:
             ref_hint = """
             === 📸 MILITARY CLONE MODE (ABSOLUTE OBEDIENCE) ===
-            You MUST replicate the attached image EXACTLY. DO NOT summarize. DO NOT be lazy.
-            1. **CUSTOMER INFO (DOTTED LINES):** Use flexbox with `border-bottom: 2px dotted #555;` to recreate the fill-in-the-blank lines (e.g., Date: ............ التاريخ). DO NOT split them to left/right.
-            2. **TABLE COLUMNS:** You MUST respect column proportions! The "Désignation" (Item) column MUST be `width: 50%;`. The "Quantité" (Qty) MUST be `width: 10%;`. The Prices `20%` each.
-            3. **TABLE ROWS (DO NOT BE LAZY):** You MUST generate EXACTLY 16 empty `<tr>` rows for the items. DO NOT stop at 5. I REPEAT, generate 16 empty rows so the table reaches the bottom of the page.
-            4. **THE TOTAL ROW:** The "Total =" row MUST be inside the table, using `<td colspan="3">Total =</td>` and an empty `<td>` for the amount.
-            5. **THE FOOTER BOX:** The notice at the bottom ("Les marchandises...") MUST be enclosed in a solid border box: `<div style="border: 2px solid #111; padding: 10px; text-align: center; border-radius: 5px;">...</div>`.
+            You MUST replicate the attached image EXACTLY. 
+            1. **CUSTOMER INFO:** Recreate the fill-in-the-blank lines (e.g., Date: ............ التاريخ) using `border-bottom: 2px dotted #555;`.
+            2. **TABLE COLUMNS:** Respect column proportions! "Désignation" MUST be `width: 50%;`. "Quantité" `width: 10%;`. Prices `20%` each.
+            3. **TABLE ROWS:** You MUST generate EXACTLY 16 empty `<tr>` rows for the items. DO NOT stop at 5. I REPEAT, generate 16 empty rows.
+            4. **THE TOTAL ROW:** The "Total =" row MUST be inside the table at the very bottom.
+            5. **THE FOOTER BOX:** The notice at the bottom MUST be enclosed in a solid border box.
             """
 
         system_instruction = f"""
@@ -93,7 +96,6 @@ def generate():
         === 🎨 TYPOGRAPHY (LARGE & CLEAR) ===
         - Main Titles: 24pt to 28pt.
         - Table Headers & Body Text: 16pt to 18pt. 
-        - DO NOT use small text.
 
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
@@ -103,20 +105,37 @@ def generate():
             </foreignObject>
         </svg>
 
-        RETURN ONLY RAW SVG CODE.
+        RETURN ONLY RAW SVG CODE. DO NOT WRAP IN MARKDOWN.
         """
 
-        contents = [user_msg] if user_msg else ["انسخ هذه الفاتورة بحذافيرها مع تطبيق أوامر المحاكاة العسكرية."]
-        if reference_b64:
-            contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
+        # بناء محتوى الرسالة لـ OpenAI
+        user_content = []
+        if user_msg:
+            user_content.append({"type": "text", "text": user_msg})
+        else:
+            user_content.append({"type": "text", "text": "انسخ هذه الفاتورة بحذافيرها مع تطبيق أوامر المحاكاة."})
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.1) # حرارة 0.1 لطاعة عمياء
+        if reference_b64:
+            user_content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{reference_b64}",
+                    "detail": "high" # نطلب دقة عالية لقراءة الفاتورة بوضوح
+                }
+            })
+
+        messages = [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_content}
+        ]
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0.1 # حرارة منخفضة جداً لطاعة عمياء
         )
         
-        raw_text = response.text or ""
+        raw_text = response.choices[0].message.content or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
@@ -134,7 +153,7 @@ def generate():
 
 @app.route('/modify', methods=['POST'])
 def modify():
-    if not client: return jsonify({"error": "AI Offline"}), 500
+    if not client: return jsonify({"error": "OpenAI API Offline"}), 500
 
     try:
         data = request.json
@@ -144,16 +163,26 @@ def modify():
         system_prompt = """
         ROLE: Expert Document AI.
         TASK: Modify SVG document. Keep the layout strict, keep the 16 rows if it's an invoice, keep the footer box.
-        OUTPUT (JSON): {"message": "رد عربي", "response": "<svg>...</svg>"}
+        OUTPUT STRICT JSON FORMAT:
+        {
+            "message": "رد عربي",
+            "response": "<svg>...</svg>"
+        }
         """
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
-            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.1)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}"}
+        ]
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0.1
         )
 
-        result_data = extract_safe_json(response.text if response.text else "")
+        raw_text = response.choices[0].message.content or ""
+        result_data = extract_safe_json(raw_text)
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
 
         return jsonify({
