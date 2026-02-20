@@ -5,7 +5,7 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V36 - CSS GRID FORCED LAYOUT)
+# ⚙️ SMART DOCUMENT ENGINE (V37 - ADAPTIVE & LARGE FONTS)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("Almonjez_Docs_SVG")
@@ -19,7 +19,7 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V36 Connected (CSS Grid Layout)")
+        logger.info("✅ Document Engine V37 Connected (Adaptive Layout & Large Fonts)")
 except Exception as e:
     logger.error(f"❌ API Error: {e}")
 
@@ -41,7 +41,7 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V36 is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V37 is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -65,8 +65,8 @@ def generate():
             bg_css = "background: white;"
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
 
-        logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; margin-bottom: 15px;\" />`" if logo_b64 else ""
-        ref_hint = "\n=== 📸 PREMIUM CLONE MODE ===\nReplicate the layout EXACTLY. You MUST output a fully expanded table." if reference_b64 else ""
+        logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; margin-bottom: 20px;\" />`" if logo_b64 else ""
+        ref_hint = "\n=== 📸 PREMIUM CLONE MODE ===\nReplicate the layout intelligently. Do not force tables if the original is just text." if reference_b64 else ""
 
         system_instruction = f"""
         ROLE: Master UI/UX Designer & Document Typesetter.
@@ -74,28 +74,25 @@ def generate():
         {logo_hint}
         {ref_hint}
 
-        === 📏 FORCED FULL-PAGE LAYOUT (CRITICAL) ===
-        - You MUST stretch the content to fill the {fo_h}px height. 
-        - The container uses CSS Grid: `grid-template-rows: auto 1fr auto;`.
-        - You MUST organize your HTML inside the container into 3 parts:
-          1. `<header>` (Info, Dates, Logos)
-          2. `<main style="height: 100%; min-height: 300px;">` (The Table) - Make sure the table stretches! 
-             - Add an empty `<tr><td colspan="10" style="height: 100%;"></td></tr>` at the end of the table if it is too short, to push the footer down!
-          3. `<footer>` (Totals, Signatures, Notes)
+        === 📏 ADAPTIVE LAYOUT (NO FORCED PRISONS) ===
+        - You must ADAPT to the document type:
+          1. FOR INVOICES/RECEIPTS: Use a `<table>`. If the table is short, make the last empty row very tall (`<tr style="height: 100%;"><td colspan="10"></td></tr>`) to push totals down.
+          2. FOR LETTERS/CERTIFICATES/TEXT: DO NOT use tables for layout! Use elegant `<p>` tags with `line-height: 1.8`. 
+        - Use `display: flex; flex-direction: column; min-height: 100%;` on the main container. Put `margin-bottom: auto;` on the main body content so the signature/footer is pushed to the bottom elegantly.
 
-        === 🌍 STRICT BILINGUAL ALIGNMENT ===
-        - You MUST use this exact snippet for bilingual table headers:
-          `<th> <div style="display: flex; justify-content: space-between; align-items: center;"> <span dir="ltr">French</span> <span>عربي</span> </div> </th>`
-        - All French text MUST be wrapped in `<span dir="ltr">`.
+        === 🌍 BILINGUAL & ARABIC PRIORITY ===
+        - If text is bilingual (Arabic + French/English), the Arabic text MUST ALWAYS be placed ABOVE the other languages.
+        - French/English text MUST be wrapped in `<span dir="ltr">` and aligned left if separate.
 
-        === 🎨 TYPOGRAPHY ===
-        - Main Titles: 20pt to 24pt.
-        - Body & Cells: 13pt to 15pt.
+        === 🎨 TYPOGRAPHY (LARGE & CLEAR) ===
+        - Make the text large, bold, and highly readable.
+        - Main Titles: 22pt to 28pt.
+        - Body Text, Paragraphs & Table Cells: 15pt to 18pt. (NEVER use tiny text).
 
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
             <foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; height: 100%; box-sizing: border-box; padding: 30px; {bg_css} display: grid; grid-template-rows: auto 1fr auto; gap: 20px; direction: rtl; font-family: -apple-system, Arial, sans-serif; color: #111;">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; padding: 30px; {bg_css} display: flex; flex-direction: column; direction: rtl; font-family: -apple-system, Arial, sans-serif; color: #111;">
                     </div>
             </foreignObject>
         </svg>
@@ -103,14 +100,14 @@ def generate():
         RETURN ONLY RAW SVG CODE.
         """
 
-        contents = [user_msg] if user_msg else ["صمم المستند ليملأ الورقة، استخدم CSS Grid وتأكد من فصل اللغات."]
+        contents = [user_msg] if user_msg else ["صمم المستند بخطوط كبيرة وواضحة، ولا تضع جداول إلا إذا كان المستند فاتورة أو نموذجاً مجدولاً."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.25)
         )
         
         raw_text = response.text or ""
@@ -141,7 +138,7 @@ def modify():
         system_prompt = """
         ROLE: Expert Document AI.
         TASK: Modify SVG document.
-        RULES: Keep the CSS Grid layout (`grid-template-rows: auto 1fr auto;`). Keep French left (`dir="ltr"`) and Arabic right. 
+        RULES: Keep the large typography (15pt-18pt base). If bilingual, keep Arabic ABOVE French. Keep the flexible layout.
         OUTPUT (JSON): {"message": "رد عربي", "response": "<svg>...</svg>"}
         """
 
