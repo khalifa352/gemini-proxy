@@ -5,7 +5,7 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V30 - PURE HTML/CSS EDITION)
+# ⚙️ SMART DOCUMENT ENGINE (V31 - PERFECT HTML SIZING & BIDI)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("Almonjez_Docs_HTML")
@@ -19,7 +19,7 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V30 Connected (Pure HTML Engine)")
+        logger.info("✅ Document Engine V31 Connected (Dynamic Size & Bidi)")
 except Exception as e:
     logger.error(f"❌ API Error: {e}")
 
@@ -28,7 +28,7 @@ except Exception as e:
 # ======================================================
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V30 (HTML Engine) is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V31 (Perfect Sizing) is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -38,18 +38,21 @@ def generate():
         data = request.json
         user_msg = data.get('message', '')
         
+        # استلام المقاسات الديناميكية من تطبيق Swift (A3, A4, A5)
+        width = int(data.get('width', 595))
+        height = int(data.get('height', 842))
+        
         logo_b64 = data.get('logo_image')
         reference_b64 = data.get('reference_image')
         letterhead_b64 = data.get('letterhead_image')
         
-        # 1. إعدادات الورق الرسمي (Background CSS)
+        # 1. إعدادات الورق الرسمي والمقاسات
         if letterhead_b64:
             letterhead_css = f"""
             background-image: url('data:image/jpeg;base64,{letterhead_b64}');
-            background-size: cover;
-            background-position: top center;
+            background-size: 100% 100%; /* مطابقة حجم الصفحة بالكامل */
+            background-position: center;
             background-repeat: no-repeat;
-            /* حماية الهيدر والفوتر بزيادة المساحات الفارغة */
             padding-top: 15% !important;
             padding-bottom: 15% !important;
             """
@@ -57,36 +60,36 @@ def generate():
             letterhead_css = "background-color: white;"
 
         # 2. الشعار والمحاكاة
-        logo_hint = f"\n- LOGO INCLUDED: Place this tag exactly at the top of the document content: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; object-fit: contain; margin-bottom: 20px;\" />`" if logo_b64 else ""
+        logo_hint = f"\n- LOGO INCLUDED: Place this EXACT tag at the top of your document content: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; object-fit: contain; margin-bottom: 20px;\" />`" if logo_b64 else ""
         
         ref_hint = ""
         if reference_b64:
             ref_hint = """
-            === 📸 PREMIUM CLONE MODE ===
+            === 📸 STRICT CLONE MODE ===
             - Visually analyze the attached document.
-            - Replicate its layout, tables, and data EXACTLY using HTML/CSS.
-            - Upgrade the aesthetics (use beautiful table borders, subtle background colors for headers).
-            - Keep the exact same number of rows for forms/invoices.
+            - Replicate its layout, tables, and data EXACTLY.
+            - Keep the exact same number of empty rows.
             """
 
-        # 3. التعليمات الصارمة (HTML النقي)
+        # 3. التعليمات الصارمة جداً (مقاسات، صفحات متعددة، ومنع الانعكاس)
         system_instruction = f"""
         ROLE: World-Class Frontend Developer & Document Designer.
         TASK: Generate a COMPLETE, stunning, standalone HTML5 document. DO NOT USE SVG.
         {logo_hint}
         {ref_hint}
 
-        === 🎨 AESTHETICS & TYPOGRAPHY ===
-        - MUST use Google Fonts for Arabic (e.g., Cairo): `<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">`
-        - Base font size should be `14px` or `16px`. Titles should be `24px` to `28px`.
-        - Make tables look highly professional: `border-collapse: collapse; width: 100%;`. Add padding `12px` to cells. Give table headers a soft background (e.g., `#f8f9fa` or similar).
+        === 🌍 BILINGUAL (BIDI) & ANTI-INVERSION (CRITICAL) ===
+        - You MUST prevent Arabic/French mixed text from inverting.
+        - Wrap EVERY French/English word, number, or left-to-right phrase in `<span dir="ltr">` or `<bdi>`.
+        - Example: `<td><span dir="ltr">Quantité</span> / الكمية</td>`
+        - Example: `<p dir="auto"><span dir="ltr">Facture N° 12345</span></p>`
 
-        === 🌍 BILINGUAL (BIDI) RULES ===
-        - The whole document MUST have `dir="rtl"`.
-        - Wrap distinct French/English words or numbers in `<bdi>` to prevent text inversion. Example: `<td><bdi>Quantité</bdi> / <bdi>الكمية</bdi></td>`
-
-        === 📄 A4 PAGE SIMULATION (CSS ARCHITECTURE) ===
-        You must structure the HTML exactly like this:
+        === 📄 PAGE BOUNDARIES & AUTO-PAGINATION ===
+        - The user selected a specific paper size.
+        - The document MUST NOT overflow a single page. 
+        - If the content is too long to fit in one page, YOU MUST split it into multiple `<div class="page">` elements.
+        
+        HTML STRUCTURE MUST BE EXACTLY THIS:
         ```html
         <!DOCTYPE html>
         <html lang="ar" dir="rtl">
@@ -96,52 +99,49 @@ def generate():
             <link href="[https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap](https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap)" rel="stylesheet">
             <style>
                 body {{
-                    background-color: transparent; /* Native App Background */
-                    margin: 0;
-                    padding: 20px;
-                    display: flex;
-                    justify-content: center;
-                    font-family: 'Cairo', sans-serif;
-                    color: #111;
+                    background-color: transparent; 
+                    margin: 0; padding: 20px;
+                    display: flex; flex-direction: column; align-items: center; gap: 20px;
+                    font-family: 'Cairo', sans-serif; color: #111;
                 }}
-                .a4-page {{
-                    width: 210mm;
-                    min-height: 297mm;
-                    {letterhead_css}
-                    padding: 40px 50px;
+                .page {{
+                    width: {width}px;     /* DYNAMIC WIDTH FROM SWIFT */
+                    height: {height}px;   /* STRICT HEIGHT FROM SWIFT */
+                    overflow: hidden;     /* PREVENT TEXT ESCAPING BOUNDARIES */
                     box-sizing: border-box;
+                    padding: 40px 50px;
+                    {letterhead_css}
                     box-shadow: 0 10px 30px rgba(0,0,0,0.1);
                     border-radius: 4px;
-                    background-color: white; /* Fallback */
-                    overflow: hidden;
+                    position: relative;
                 }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                th, td {{ border: 1px solid #ddd; padding: 12px; text-align: right; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+                th, td {{ border: 1px solid #ddd; padding: 12px; text-align: right; font-size: 14px; }}
                 th {{ background-color: #f4f6f8; font-weight: 600; }}
+                h1, h2, h3 {{ margin: 0 0 10px 0; }}
             </style>
         </head>
         <body>
-            <div class="a4-page">
+            <div class="page">
                 </div>
-        </body>
+            </body>
         </html>
         ```
 
         RETURN ONLY THE RAW HTML CODE. Do not use Markdown block ticks.
         """
 
-        contents = [user_msg] if user_msg else ["قم بتصميم هذا المستند بأعلى جودة واحرص على تنسيق الجداول بشكل فاخر."]
+        contents = [user_msg] if user_msg else ["استنسخ هذا المستند بدقة."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.25)
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
         )
         
         raw_text = response.text or ""
-        # تنظيف استخراج الـ HTML
         clean_html = raw_text.replace("```html", "").replace("```", "").strip()
 
         return jsonify({"response": clean_html})
@@ -159,7 +159,7 @@ def modify():
 
     try:
         data = request.json
-        current_html = data.get('current_svg', '') # احتفظنا بنفس اسم المتغير لتجنب تعديل كل شيء في Swift
+        current_html = data.get('current_svg', '')
         instruction = data.get('instruction', '')
 
         system_prompt = """
@@ -167,13 +167,15 @@ def modify():
         TASK: Modify the existing HTML document based on user instruction.
         
         RULES:
-        1. Keep the overall HTML/CSS structure (the `.a4-page` class, Google Fonts, etc.) intact.
-        2. Apply the modifications requested (e.g. change colors, fix typos, add table rows).
+        1. Keep the `.page` CSS class rules EXACTLY the same (width, height, overflow).
+        2. Apply modifications (fix French/Arabic inversions, adjust text, etc.).
+        3. ALWAYS wrap French/English words in `<span dir="ltr">`.
+        4. If the user asks to open a new page or if text doesn't fit, just add a new `<div class="page">` inside the `<body>`.
         
         OUTPUT FORMAT (STRICT JSON):
         {
             "message": "رد عربي ودود قصير يخبر العميل بالنتيجة",
-            "response": "<!DOCTYPE html><html>...updated code...</html>"
+            "response": "<!DOCTYPE html><html>...updated HTML...</html>"
         }
         NO MARKDOWN TICKS. JUST JSON.
         """
