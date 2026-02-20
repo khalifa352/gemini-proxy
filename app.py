@@ -5,10 +5,10 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V33 - ENTERPRISE GRADE)
+# ⚙️ SMART DOCUMENT ENGINE (V34 - THE STRICT SVG RETURN)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_SaaS")
+logger = logging.getLogger("Almonjez_Docs_SVG")
 
 app = Flask(__name__)
 
@@ -19,64 +19,35 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V33 Connected (Enterprise Security & Layouts)")
+        logger.info("✅ Document Engine V34 Connected (Strict SVG Edition)")
 except Exception as e:
     logger.error(f"❌ API Error: {e}")
 
 # ======================================================
-# 🛡️ SYSTEM VALIDATORS & SANITIZERS (THE FIREWALL)
+# 🛡️ SYSTEM VALIDATORS
 # ======================================================
-def sanitize_html_security(html_content):
-    """منع حقن الأكواد الخبيثة (XSS)"""
-    # إزالة أي وسوم script
-    clean = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', html_content, flags=re.IGNORECASE)
-    # إزالة الأحداث المدمجة (onclick, onerror, etc)
-    clean = re.sub(r'(?i)\s*on[a-z]+\s*=\s*(["\']).*?\1', '', clean)
-    return clean
-
 def extract_safe_json(text):
-    """استخراج JSON بأمان حتى لو أضاف النموذج نصوصاً أو فواصل غير صالحة"""
     try:
-        # البحث عن أول قوس { وآخر قوس }
         match = re.search(r'\{.*\}', text.replace('\n', ' '), re.DOTALL)
         if match:
-            json_str = match.group(0)
-            return json.loads(json_str)
+            return json.loads(match.group(0))
     except Exception as e:
         logger.error(f"JSON Parsing Error: {e}")
     return {}
 
-def enforce_page_structure(html_content, width, height, letterhead_css):
-    """ضمان وجود هيكل HTML السليم (Version Control)"""
-    if 'class="page"' not in html_content:
-        logger.warning("⚠️ Model failed to return .page structure. Auto-wrapping applied.")
-        # تغليف إجباري إذا فشل الذكاء الاصطناعي
-        return f"""
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width={width}, initial-scale=1.0">
-            <style>
-                body {{ font-family: -apple-system, "SF Arabic", "Geeza Pro", sans-serif; margin: 0; padding: 20px; background: transparent; }}
-                .page {{ width: {width}px; min-height: {height}px; box-sizing: border-box; {letterhead_css} padding: 40px; background-color: white; }}
-                table {{ width: 100%; border-collapse: collapse; }}
-                th, td {{ border: 1px solid #ddd; padding: 10px; }}
-            </style>
-        </head>
-        <body>
-            <div class="page">{html_content}</div>
-        </body>
-        </html>
-        """
-    return html_content
+def ensure_svg_namespaces(svg_code):
+    if 'xmlns="http://www.w3.org/2000/svg"' not in svg_code:
+        svg_code = svg_code.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+    if 'xmlns:xhtml' not in svg_code:
+        svg_code = svg_code.replace('<foreignObject', '<foreignObject xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
+    return svg_code
 
 # ======================================================
 # 🚀 ROUTE 1: THE GENERATION ROUTE
 # ======================================================
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V33 (Enterprise) is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V34 (SVG Masterpiece) is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -92,102 +63,76 @@ def generate():
         reference_b64 = data.get('reference_image')
         letterhead_b64 = data.get('letterhead_image')
         
-        # 1. حسابات الحواف الديناميكية (Dynamic Padding)
-        pad_top = int(height * 0.18)
-        pad_bottom = int(height * 0.12)
-        
+        # 1. حماية الورق الرسمي (تحديد الإحداثيات الصارمة)
         if letterhead_b64:
-            letterhead_css = f"""
-            background-image: url('data:image/jpeg;base64,{letterhead_b64}');
-            background-size: {width}px {height}px;
-            background-position: center top;
-            background-repeat: no-repeat;
-            padding-top: {pad_top}px !important;
-            padding-bottom: {pad_bottom}px !important;
-            """
+            bg_css = "background: transparent;"
+            fo_x = int(width * 0.08)
+            fo_y = int(height * 0.18)
+            fo_w = int(width * 0.84)
+            fo_h = int(height * 0.70)
         else:
-            letterhead_css = "background-color: white;"
+            bg_css = "background: white;"
+            fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
 
-        logo_hint = f"\n- Place LOGO exactly here: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px;\" />`" if logo_b64 else ""
-        ref_hint = "\n=== CLONE MODE ===\nExtract structure and data EXACTLY. Limit tables to 15 rows max per page." if reference_b64 else ""
+        logo_hint = f"\n- LOGO INCLUDED: Place this tag at the top of your HTML: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 80px; margin-bottom: 15px;\" />`" if logo_b64 else ""
+        ref_hint = "\n=== 📸 PREMIUM CLONE MODE ===\nVisually analyze the attached image. Replicate its layout, tables, and typography EXACTLY. Upgrade its design to look expert and highly professional." if reference_b64 else ""
 
-        # 2. الهيكل المعماري (Templates & System Rules)
+        # 2. الهيكل المعماري الصارم للـ SVG
         system_instruction = f"""
-        ROLE: Enterprise System Templater.
-        TASK: Output a production-ready HTML5 document.
+        ROLE: Master UI/UX Designer & Document Typesetter.
+        TASK: Generate a stunning, visually appealing document using SVG.
         {logo_hint}
         {ref_hint}
 
-        === 🌍 BILINGUAL & TYPOGRAPHY SYSTEM ===
-        - Font: System Native Only (NO Google Fonts).
-        - Bidi: Wrap ALL Latin text/numbers in `<bdi>` tags to prevent inversion.
+        === 📐 SVG ARCHITECTURE & BOUNDARIES (CRITICAL) ===
+        - You MUST use a single `<foreignObject>` inside the SVG to handle text and tables perfectly. DO NOT use native SVG `<text>` elements for paragraphs.
+        - The document MUST NOT overflow. 
+        - Strict Dimensions: `<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">`
 
-        === 📄 HARD PAGINATION RULES (NO OVERFLOW HIDDEN) ===
-        - MAX ROWS: Tables MUST NOT exceed 15 rows per `<div class="page">`.
-        - If content exceeds page limits, close `</div>` and open a NEW `<div class="page">`.
-        
-        === 🏗️ STRICT HTML SKELETON ===
-        ```html
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width={width}, initial-scale=1.0">
-            <style>
-                :root {{ color-scheme: light; }}
-                body {{
-                    background-color: transparent; margin: 0; padding: 20px 0;
-                    display: flex; flex-direction: column; align-items: center; gap: 20px;
-                    /* NATIVE IOS FONTS */
-                    font-family: -apple-system, "SF Arabic", "SF Pro Arabic", "Geeza Pro", Tahoma, Arial, sans-serif; 
-                    color: #111;
-                }}
-                /* BIDI ISOLATION */
-                bdi {{ unicode-bidi: isolate; }}
-                .page {{
-                    width: {width}px; min-height: {height}px;
-                    box-sizing: border-box; padding: 50px;
-                    background-color: white; {letterhead_css}
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative;
-                }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: auto; }}
-                tr {{ page-break-inside: avoid; page-break-after: auto; }}
-                th, td {{ border: 1px solid #ddd; padding: 12px; text-align: start; font-size: 14px; unicode-bidi: plaintext; }}
-                th {{ background-color: #f4f6f8; font-weight: 600; }}
-                
-                /* PRINT QUALITY CSS */
-                @media print {{
-                    body {{ padding: 0; background: white; }}
-                    .page {{ box-shadow: none; border: none; margin: 0; page-break-after: always; }}
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="page">
-                </div>
-        </body>
-        </html>
-        ```
-        RETURN ONLY RAW HTML.
+        === 🎨 EXPERT DESIGN & TYPOGRAPHY ===
+        - Make it look expensive and official.
+        - Tables MUST have `border-collapse: collapse; width: 100%;`.
+        - Table headers (`th`) must have a soft background color (e.g., `#f4f6f8`) and borders.
+        - Main Titles: 20pt to 24pt MAX.
+        - Body Text & Table Cells: 12pt to 15pt. (NEVER use tiny unreadable text).
+
+        === 🌍 BILINGUAL & ANTI-SCATTERING ===
+        - Wrap EVERY French/English word or number in `<bdi>` to prevent RTL/LTR inversion.
+        - Text must be clear and aligned (`text-align: right; direction: rtl;`).
+
+        FORMAT MUST BE EXACTLY:
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
+            <foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; padding: 30px; {bg_css} direction: rtl; text-align: right; font-family: -apple-system, Arial, sans-serif; color: #111;">
+                    </div>
+            </foreignObject>
+        </svg>
+
+        RETURN ONLY THE RAW SVG CODE.
         """
 
-        contents = [user_msg] if user_msg else ["أنشئ المستند."]
+        contents = [user_msg] if user_msg else ["قم بتصميم هذا المستند بأعلى جودة بصرية، ولا تخرج عن الحدود."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.1)
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
         )
         
-        raw_html = response.text.replace("```html", "").replace("```", "").strip() if response.text else ""
-        
-        # 3. Post-Processing & Validation Pipeline
-        clean_html = sanitize_html_security(raw_html)
-        final_html = enforce_page_structure(clean_html, width, height, letterhead_css)
+        raw_text = response.text or ""
+        svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
+        final_svg = svg_match.group(0) if svg_match else raw_text
 
-        return jsonify({"response": final_html})
+        # 3. حقن الورق الرسمي كخلفية مطلقة (خلف الـ foreignObject)
+        if letterhead_b64 and '<svg' in final_svg:
+            bg_image_tag = f'<image href="data:image/jpeg;base64,{letterhead_b64}" x="0" y="0" width="{width}" height="{height}" preserveAspectRatio="none" />'
+            final_svg = final_svg.replace('<foreignObject', f'{bg_image_tag}\n<foreignObject', 1)
+
+        final_svg = ensure_svg_namespaces(final_svg)
+
+        return jsonify({"response": final_svg})
 
     except Exception as e:
         logger.error(f"Generate Error: {e}")
@@ -202,34 +147,40 @@ def modify():
 
     try:
         data = request.json
-        # NOTE: Updated variable name as requested by CTO!
-        current_html = data.get('current_html', '') 
+        current_svg = data.get('current_html', '') # نستخدم نفس المفتاح الذي عدلناه في التطبيق
+        if not current_svg:
+            current_svg = data.get('current_svg', '') # توافق رجعي
+            
         instruction = data.get('instruction', '')
 
         system_prompt = """
-        ROLE: AI HTML Modifier.
-        TASK: Update the HTML based on user command. Do NOT change CSS classes or structure.
-        Ensure `<bdi>` wraps all Latin text.
+        ROLE: Expert Document AI Assistant.
+        TASK: Modify the existing SVG document based on user instruction.
         
-        OUTPUT STRICT JSON:
-        {"message": "رد بالعربية", "response": "<!DOCTYPE html>..."}
+        RULES:
+        1. Keep the overall SVG structure, `viewBox`, and `<foreignObject>` dimensions EXACTLY the same.
+        2. Apply modifications to the HTML/CSS inside the foreignObject (e.g., fixing typos, changing colors, adjusting tables).
+        3. Keep the design expert and unscattered.
+        
+        OUTPUT FORMAT (STRICT JSON):
+        {
+            "message": "رد عربي ودود قصير",
+            "response": "<svg>...updated code...</svg>"
+        }
         """
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
-            contents=f"CURRENT HTML:\n{current_html}\n\nINSTRUCTION:\n{instruction}",
-            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.1)
+            contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
+            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.2)
         )
 
-        # 4. JSON Safe Parsing (No more crashing on bad JSON)
         result_data = extract_safe_json(response.text if response.text else "")
-        
-        raw_updated_html = result_data.get("response", "").replace("```html", "").replace("```", "").strip()
-        final_updated_html = sanitize_html_security(raw_updated_html)
+        updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
 
         return jsonify({
-            "response": final_updated_html,
-            "message": result_data.get("message", "تم التحديث بنجاح.")
+            "response": updated_svg,
+            "message": result_data.get("message", "تم التعديل بنجاح!")
         })
 
     except Exception as e:
@@ -237,4 +188,5 @@ def modify():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
