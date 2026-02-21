@@ -152,7 +152,7 @@ def modify():
         """
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-pro",
             contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
             config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
         )
