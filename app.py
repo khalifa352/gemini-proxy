@@ -5,31 +5,33 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V45 - GPT-4o MASTER ARCHITECT)
+# ⚙️ SMART DOCUMENT ENGINE (V47 - FLASH + NATURAL FLOW)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_GPT4o")
+logger = logging.getLogger("Almonjez_Docs_Flash")
 
 app = Flask(__name__)
 
-# 🚀 تفعيل محرك OpenAI
 client = None
 try:
-    from openai import OpenAI
-    OPENAI_KEY = os.environ.get('OPENAI_API_KEY')
-    if OPENAI_KEY:
-        client = OpenAI(api_key=OPENAI_KEY)
-        logger.info("✅ Document Engine Connected (Master Architect: GPT-4o 🧠🏗️)")
+    from google import genai
+    from google.genai import types
+    API_KEY = os.environ.get('GOOGLE_API_KEY')
+    if API_KEY:
+        client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
+        logger.info("✅ Document Engine Connected (Fast & Smart: Gemini 2.0 Flash ⚡ - Natural Flow)")
     else:
-        logger.warning("⚠️ OPENAI_API_KEY is missing in environment variables.")
+        logger.warning("⚠️ GOOGLE_API_KEY is missing in environment variables.")
 except Exception as e:
-    logger.error(f"❌ OpenAI Initialization Error: {e}")
+    logger.error(f"❌ Gemini Initialization Error: {e}")
 
 def extract_safe_json(text):
     try:
         match = re.search(r'\{.*\}', text.replace('\n', ' '), re.DOTALL)
-        if match: return json.loads(match.group(0))
-    except: pass
+        if match:
+            return json.loads(match.group(0))
+    except Exception as e:
+        logger.error(f"JSON Parsing Error: {e}")
     return {}
 
 def ensure_svg_namespaces(svg_code):
@@ -41,11 +43,11 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V45 (GPT-4o Engine) is Online 🧠📄"})
+    return jsonify({"status": "Almonjez V47 (Flash Natural Engine) is Online ⚡📄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
-    if not client: return jsonify({"error": "OpenAI API Offline"}), 500
+    if not client: return jsonify({"error": "Gemini API Offline"}), 500
 
     try:
         data = request.json
@@ -56,45 +58,43 @@ def generate():
         logo_b64 = data.get('logo_image')
         reference_b64 = data.get('reference_image')
         letterhead_b64 = data.get('letterhead_image')
-
-        logger.info(f"🚦 /gemini (GPT-4o) called | size={width}x{height} | has_ref={bool(reference_b64)}")
+        
+        logger.info(f"🚦 /gemini called | size={width}x{height} | has_ref={bool(reference_b64)}")
 
         if letterhead_b64:
             bg_css = "background: transparent;"
-            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.18), int(width * 0.84), int(height * 0.70)
+            fo_x, fo_y = int(width * 0.08), int(height * 0.18)
+            fo_w, fo_h = int(width * 0.84), int(height * 0.70)
         else:
             bg_css = "background: white;"
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
 
         logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 85px; margin-bottom: 20px;\" />`" if logo_b64 else ""
         
-        # ⚠️ نفس القوانين الصارمة التي علمناها لجيميني
         ref_hint = ""
         if reference_b64:
             ref_hint = """
-            === 📸 STRICT CLONE & STRUCTURAL ANALYSIS (NO LAZINESS) ===
-            Analyze the uploaded image meticulously. 
-            1. **TABLE PROPORTIONS:** Visually estimate column widths (e.g., 'Désignation' should be wider, like `width: 50%`).
-            2. **ROW COUNT (CRITICAL):** Count the EXACT number of rows in the original table. You MUST generate ALL those empty rows using `<tr>`. DO NOT stop at 4 or 5 rows. Fill the space.
-            3. **DOTTED LINES:** Recreate fill-in-the-blank dots (e.g., Date: ......) using CSS: `border-bottom: 2px dotted #111; display: inline-block; min-width: 150px;`.
-            4. **BORDERS & BOXES:** If footer text is inside a drawn box, use CSS `border: 2px solid black; padding: 10px; border-radius: 5px;`.
+            === 📸 SMART CLONE MODE ===
+            Analyze the image accurately. DO NOT STRETCH THE TABLE UNNATURALLY. 
+            Count the exact rows in the original image. If the original table is short, make your table short. Let it be compact and neat.
             """
 
         system_instruction = f"""
         ROLE: Master UI/UX Designer & Document Typesetter.
-        TASK: Generate a stunning document SVG. Keep EVERYTHING strictly inside the workspace.
+        TASK: Generate a stunning document SVG. Keep EVERYTHING inside the workspace.
         {logo_hint}
         {ref_hint}
 
         === 🌍 BILINGUAL SHIELD ===
         - Wrap ALL French/English text or numbers in `<bdi dir="ltr">` or `<span dir="ltr">`.
-        - Arabic MUST be aligned right, Latin text aligned left. Use Flexbox `justify-content: space-between` to separate them cleanly.
+        - Arabic aligned right, Latin text aligned left.
 
-        === 📏 TYPOGRAPHY & LAYOUT (STRICT BOUNDARIES) ===
-        - You have a strict height of {fo_h}px. DO NOT let any text overflow.
-        - Fonts MUST be medium and readable: Headers 16pt, Body 14pt-15pt. 
-        - Make table borders crisp (`border-collapse: collapse; border: 1px solid #333;`).
-        - Use flexbox to organize the document cleanly from top to bottom.
+        === 📏 NATURAL A4 FLOW (NO STRETCHING) ===
+        - You have a strict height of {fo_h}px.
+        - DO NOT stretch tables artificially. Let the table take exactly the height it needs.
+        - Fonts MUST be large and readable: Headers 15pt-16pt, Body 14pt-15pt. 
+        - The container MUST have `display: flex; flex-direction: column; height: 100%;`.
+        - To handle empty space beautifully: Give the final footer/signature div `margin-top: auto;`. This will push the footer to the very bottom of the page, leaving natural white space below the table.
 
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
@@ -107,36 +107,19 @@ def generate():
         RETURN ONLY RAW SVG CODE. DO NOT WRAP IN MARKDOWN.
         """
 
-        # 🚀 بناء الطلب ليتوافق مع OpenAI Vision
-        user_content = []
-        if user_msg:
-            user_content.append({"type": "text", "text": user_msg})
-        else:
-            user_content.append({"type": "text", "text": "قم بمحاكاة المستند بدقة هندسية صارمة، وحافظ على التصميم داخل مساحة العمل."})
-
+        contents = [user_msg] if user_msg else ["قم بمحاكاة المستند بدقة وبشكل طبيعي جداً بدون تمطيط."]
         if reference_b64:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{reference_b64}",
-                    "detail": "high"
-                }
-            })
+            contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
-        messages = [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": user_content}
-        ]
-
-        logger.info("🛰️ Calling GPT-4o...")
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            temperature=0.15 # حرارة منخفضة جداً للالتزام الدقيق بالقواعد
+        logger.info("🛰️ Calling Gemini 2.0 Flash (Natural Flow)...")
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview", 
+            contents=contents,
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
         )
-        logger.info("✅ GPT-4o returned successfully.")
+        logger.info("✅ Gemini returned successfully.")
 
-        raw_text = response.choices[0].message.content or ""
+        raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
@@ -152,15 +135,16 @@ def generate():
             final_svg = final_svg.replace('<foreignObject', f'{bg_images}\n<foreignObject', 1)
 
         final_svg = ensure_svg_namespaces(final_svg)
+
         return jsonify({"response": final_svg})
 
     except Exception as e:
-        logger.error(f"❌ [GPT-4o ERROR]: {str(e)}")
-        return jsonify({"error": "فشل الاتصال بـ OpenAI", "details": str(e)}), 500
+        logger.error(f"❌ [MODEL ERROR]: {str(e)}")
+        return jsonify({"error": "فشل الاتصال", "details": str(e)}), 500
 
 @app.route('/modify', methods=['POST'])
 def modify():
-    if not client: return jsonify({"error": "OpenAI API Offline"}), 500
+    if not client: return jsonify({"error": "Gemini API Offline"}), 500
     try:
         data = request.json
         current_svg = data.get('current_html', '') or data.get('current_svg', '')
@@ -168,29 +152,19 @@ def modify():
 
         system_prompt = f"""
         ROLE: Expert Document AI.
-        TASK: Modify SVG document perfectly. Keep all design elements strictly inside the workspace.
-        OUTPUT STRICT JSON FORMAT:
-        {{
-            "message": "رد عربي ودود",
-            "response": "<svg>...</svg>"
-        }}
+        TASK: Modify SVG document naturally without stretching. Keep all elements strictly inside the workspace.
+        OUTPUT STRICT JSON: {{"message": "رد عربي", "response": "<svg>...</svg>"}}
         """
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}"}
-        ]
-
-        logger.info("🛰️ Calling GPT-4o (Modify)...")
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            temperature=0.15
+        logger.info("🛰️ Calling Gemini Flash (Modify)...")
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
+            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
         )
         logger.info("✅ Modify returned successfully.")
 
-        raw_text = response.choices[0].message.content or ""
-        result_data = extract_safe_json(raw_text)
+        result_data = extract_safe_json(response.text if response.text else "")
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
 
         return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل!")})
