@@ -5,14 +5,14 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V40 - GEMINI MASTERPIECE)
+# ⚙️ SMART DOCUMENT ENGINE (V41 - GEMINI 1.5 PRO EDITION)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_Gemini")
+logger = logging.getLogger("Almonjez_Docs_Pro")
 
 app = Flask(__name__)
 
-# العودة إلى Gemini 2.0 Flash 🚀
+# تهيئة الاتصال بجوجل
 client = None
 try:
     from google import genai
@@ -20,11 +20,11 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V40 Connected (Gemini 2.0 Flash is ONLINE! 🧠)")
+        logger.info("✅ Document Engine V41 Connected (Heavy Artillery: Gemini 1.5 Pro 🧠🔥)")
     else:
         logger.warning("⚠️ GOOGLE_API_KEY is missing in environment variables.")
 except Exception as e:
-    logger.error(f"❌ Gemini API Error: {e}")
+    logger.error(f"❌ Gemini Initialization Error: {e}")
 
 def extract_safe_json(text):
     try:
@@ -44,7 +44,7 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V40 (Gemini Masterpiece) is Online 📄🪄"})
+    return jsonify({"status": "Almonjez V41 (Gemini 1.5 Pro) is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -73,9 +73,10 @@ def generate():
         ref_hint = ""
         if reference_b64:
             ref_hint = """
-            === 📸 ACCURATE CLONE & AESTHETICS ===
-            Replicate the attached document accurately. Do not skip rows if it's a table. 
-            Upgrade the aesthetics: Use elegant borders, proper padding (12px-15px), and a soft background for table headers.
+            === 📸 ACCURATE CLONE MODE ===
+            You are using the Pro model, do not be lazy. Replicate the attached document accurately.
+            Generate ALL rows of the table if it is an invoice. DO NOT STOP SHORT.
+            Upgrade aesthetics: elegant borders, proper padding (12px), soft header backgrounds.
             """
 
         system_instruction = f"""
@@ -84,15 +85,15 @@ def generate():
         {logo_hint}
         {ref_hint}
 
-        === 🌍 BILINGUAL SHIELD (NO INVERSION) ===
+        === 🌍 BILINGUAL SHIELD ===
         - Wrap ALL French/English text or numbers in `<bdi dir="ltr">` or `<span dir="ltr">`.
-        - Arabic MUST be aligned right, Latin text aligned left. Use Flexbox `justify-content: space-between` to separate them in headers.
+        - Arabic MUST be aligned right, Latin text aligned left. Use Flexbox `justify-content: space-between` to separate them.
 
-        === 📏 LONG TEXT & OVERFLOW WARNING (CRITICAL) ===
-        - You have a strict height of {fo_h}px.
-        - DO NOT shrink the font to microscopic sizes to make text fit. Keep font size between 14pt and 18pt.
-        - IF the content (rows or text) exceeds this height naturally, DO NOT squish it. Instead, stop the content elegantly and add this EXACT warning box at the very bottom:
-          `<div style="margin-top:20px; padding:15px; background:#fff3cd; color:#856404; border:1px solid #ffeeba; border-radius:8px; text-align:center; font-weight:bold; font-size:14pt;">💡 تنبيه من المنجز: النص طويل! اطلب مني في المحادثة بالأسفل فتح صفحة جديدة.</div>`
+        === 📏 LONG TEXT & OVERFLOW WARNING ===
+        - Height limit: {fo_h}px.
+        - DO NOT shrink the font to microscopic sizes. Keep it between 14pt and 18pt.
+        - IF content exceeds this height, stop elegantly and add this EXACT warning at the bottom:
+          `<div style="margin-top:20px; padding:15px; background:#fff3cd; color:#856404; border:1px solid #ffeeba; border-radius:8px; text-align:center; font-weight:bold; font-size:14pt;">💡 تنبيه من المنجز: النص طويل! اطلب مني فتح صفحة جديدة.</div>`
 
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
@@ -105,12 +106,13 @@ def generate():
         RETURN ONLY RAW SVG CODE.
         """
 
-        contents = [user_msg] if user_msg else ["قم بتصميم المستند بأعلى جودة جمالية، وحافظ على عدم انعكاس اللغات."]
+        contents = [user_msg] if user_msg else ["قم بتصميم المستند بأعلى جودة جمالية."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
+        # 🚀 THE UPGRADE: Using gemini-1.5-pro instead of flash
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-pro", 
             contents=contents,
             config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
         )
@@ -119,7 +121,6 @@ def generate():
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
-        # 🖼️ تكرار الورق الرسمي لكل صفحة (في حال صمم عدة صفحات لاحقاً)
         if letterhead_b64 and '<svg' in final_svg:
             vb_match = re.search(r'viewBox="0 0 \d+ (\d+)"', final_svg)
             pages = max(1, int(vb_match.group(1)) // height) if vb_match else 1
@@ -136,8 +137,13 @@ def generate():
         return jsonify({"response": final_svg})
 
     except Exception as e:
-        logger.error(f"Generate Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        # 🚨 نظام التقاط الأخطاء الدقيق (Error Radar)
+        error_details = str(e)
+        logger.error(f"❌ [PRO MODEL ERROR]: {error_details}")
+        return jsonify({
+            "error": "فشل الاتصال بنموذج Pro", 
+            "details": error_details # سيتم إرسال تفاصيل الخطأ لك
+        }), 500
 
 @app.route('/modify', methods=['POST'])
 def modify():
@@ -152,21 +158,19 @@ def modify():
 
         system_prompt = f"""
         ROLE: Expert Document AI.
-        TASK: Modify SVG document.
+        TASK: Modify SVG document perfectly.
         
-        === 📄 NEW PAGE LOGIC (CRITICAL) ===
-        If the user asks to "open a new page" (فتح صفحة جديدة) or if the text is too long:
-        1. Double the `viewBox` height of the SVG (e.g. `viewBox="0 0 {width} {height*2}"`).
+        === 📄 NEW PAGE LOGIC ===
+        If asked to "open a new page" (فتح صفحة جديدة) or text overflows:
+        1. Double the `viewBox` height (e.g. `viewBox="0 0 {width} {height*2}"`).
         2. Create a SECOND `<foreignObject>` for the new page, offset by `y="{height}"`.
-        3. Move the overflowing text/table rows into the new page's foreignObject.
-        4. Remove the "تنبيه من المنجز" warning box.
-
-        RULES: Maintain aesthetic design and strictly protect French/Latin text from inversion using `<bdi>`.
-        OUTPUT (JSON): {{"message": "رد عربي ودود يشرح ما تم", "response": "<svg>...</svg>"}}
+        
+        OUTPUT (JSON): {{"message": "رد عربي", "response": "<svg>...</svg>"}}
         """
 
+        # 🚀 THE UPGRADE: Using gemini-1.5-pro for modifications as well
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-pro",
             contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
             config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.2)
         )
@@ -180,8 +184,12 @@ def modify():
         })
 
     except Exception as e:
-        logger.error(f"Modify Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        error_details = str(e)
+        logger.error(f"❌ [PRO MODIFY ERROR]: {error_details}")
+        return jsonify({
+            "error": "فشل التعديل بنموذج Pro",
+            "details": error_details
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
