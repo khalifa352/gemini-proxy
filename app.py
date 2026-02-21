@@ -2,14 +2,14 @@ import os
 import re
 import json
 import logging
+import concurrent.futures
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V48 - HYBRID VANGUARD)
-
+# ⚙️ SMART DOCUMENT ENGINE (V50 - TRUE VANGUARD)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_Hybrid")
+logger = logging.getLogger("Almonjez_Docs_V50")
 
 app = Flask(__name__)
 
@@ -20,7 +20,7 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine Connected (Vanguard: Gemini 3 Preview | Fallback: 2.5 Flash 🛡️)")
+        logger.info("✅ Document Engine Connected (Vanguard: Gemini 3 | Fallback: 2.5 Flash 🛡️)")
     else:
         logger.warning("⚠️ GOOGLE_API_KEY is missing in environment variables.")
 except Exception as e:
@@ -29,10 +29,8 @@ except Exception as e:
 def extract_safe_json(text):
     try:
         match = re.search(r'\{.*\}', text.replace('\n', ' '), re.DOTALL)
-        if match:
-            return json.loads(match.group(0))
-    except Exception as e:
-        logger.error(f"JSON Parsing Error: {e}")
+        if match: return json.loads(match.group(0))
+    except: pass
     return {}
 
 def ensure_svg_namespaces(svg_code):
@@ -42,9 +40,20 @@ def ensure_svg_namespaces(svg_code):
         svg_code = svg_code.replace('<foreignObject', '<foreignObject xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
     return svg_code
 
+# 🛡️ دالة استدعاء الموديل مع إعدام مؤقت (Hard Timeout)
+def call_gemini_with_timeout(model_name, contents, config, timeout_sec):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            client.models.generate_content,
+            model=model_name,
+            contents=contents,
+            config=config
+        )
+        return future.result(timeout=timeout_sec)
+
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V48 (Hybrid Engine) is Online ⚡🛡️"})
+    return jsonify({"status": "Almonjez V50 (True Vanguard) is Online ⚡🛡️"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -64,8 +73,7 @@ def generate():
 
         if letterhead_b64:
             bg_css = "background: transparent;"
-            fo_x, fo_y = int(width * 0.08), int(height * 0.18)
-            fo_w, fo_h = int(width * 0.84), int(height * 0.70)
+            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.18), int(width * 0.84), int(height * 0.70)
         else:
             bg_css = "background: white;"
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
@@ -80,6 +88,7 @@ def generate():
             Count the exact rows in the original image. If the original table is short, make your table short. Let it be compact and neat.
             """
 
+        # 🚀 العودة للوضع الأصلي: جيميني هو الرسام الكامل للـ SVG
         system_instruction = f"""
         ROLE: Master UI/UX Designer & Document Typesetter.
         TASK: Generate a stunning document SVG. Keep EVERYTHING inside the workspace.
@@ -112,32 +121,35 @@ def generate():
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
-        # 🛡️ THE HYBRID FALLBACK SYSTEM 🛡️
+        # تحديد التوكنات لعدم إرهاق الموديل
+        gen_config = types.GenerateContentConfig(
+            system_instruction=system_instruction, 
+            temperature=0.15,
+            max_output_tokens=4096 
+        )
+
+        # 🛡️ THE HYBRID TIMEOUT SYSTEM 🛡️
         response = None
         try:
-            # المحاولة الأولى باستخدام الدبابة الاستطلاعية (Gemini 3 Preview)
-            logger.info("🛰️ Calling Primary Vanguard: gemini-3-flash-preview...")
-            response = client.models.generate_content(
-                model="gemini-2.0-flash", 
-                contents=contents,
-                config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
-            )
-            logger.info("✅ Vanguard (Gemini 3) returned successfully.")
+            logger.info("🛰️ Calling Vanguard: gemini-3-flash-preview (Timeout: 45s)...")
+            response = call_gemini_with_timeout("gemini-3-flash-preview", contents, gen_config, timeout_sec=45.0)
+            logger.info("✅ Vanguard returned successfully.")
+            
+        except concurrent.futures.TimeoutError:
+            logger.warning("⚠️ Vanguard Timed Out (>45s)! Switching to Fallback Tank (gemini-2.5-flash)...")
+            response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
+            logger.info("✅ Fallback Tank returned successfully.")
             
         except Exception as primary_error:
-            # إذا تعطل الإصدار الثالث، نتدخل بالدبابة المستقرة (Gemini 2.5 Flash)
-            logger.warning(f"⚠️ Vanguard Failed: {str(primary_error)} | Switching to Fallback Tank (gemini-2.5-flash)...")
-            response = client.models.generate_content(
-                model="gemini-2.5-flash", 
-                contents=contents,
-                config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
-            )
-            logger.info("✅ Fallback Tank (Gemini 2.5) returned successfully.")
+            logger.warning(f"⚠️ Vanguard Failed ({str(primary_error)}). Switching to Fallback Tank...")
+            response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
+            logger.info("✅ Fallback Tank returned successfully.")
 
         raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
+        # 🚀 العودة للحقن الذكي للورق الرسمي المتعدد الصفحات
         if letterhead_b64 and '<svg' in final_svg:
             vb_match = re.search(r'viewBox="0 0 \d+ (\d+)"', final_svg)
             pages = max(1, int(vb_match.group(1)) // height) if vb_match else 1
@@ -167,28 +179,20 @@ def modify():
 
         system_prompt = f"""
         ROLE: Expert Document AI.
-        TASK: Modify SVG document naturally without stretching. Keep all elements strictly inside the workspace.
+        TASK: Modify SVG document perfectly. Keep everything inside the workspace.
         OUTPUT STRICT JSON: {{"message": "رد عربي", "response": "<svg>...</svg>"}}
         """
 
-        # 🛡️ THE HYBRID FALLBACK SYSTEM FOR MODIFY 🛡️
+        gen_config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15, max_output_tokens=4096)
+        contents = [f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}"]
+
         response = None
         try:
-            logger.info("🛰️ Calling Primary Vanguard (Modify): gemini-3-flash-preview...")
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
-                config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
-            )
-            logger.info("✅ Vanguard Modify (Gemini 3) returned successfully.")
-        except Exception as primary_error:
-            logger.warning(f"⚠️ Vanguard Modify Failed: {str(primary_error)} | Switching to Fallback Tank (gemini-2.5-flash)...")
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
-                config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
-            )
-            logger.info("✅ Fallback Modify (Gemini 2.5) returned successfully.")
+            logger.info("🛰️ Calling Vanguard Modify (gemini-3-flash-preview)...")
+            response = call_gemini_with_timeout("gemini-3-flash-preview", contents, gen_config, timeout_sec=45.0)
+        except:
+            logger.warning("⚠️ Vanguard Modify Failed/Timed out! Switching to Fallback...")
+            response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
 
         result_data = extract_safe_json(response.text if response.text else "")
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
@@ -201,4 +205,4 @@ def modify():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, threaded=True)
