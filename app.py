@@ -113,7 +113,7 @@ def generate():
 
         logger.info("🛰️ Calling Gemini 2.0 Flash (Natural Flow)...")
         response = client.models.generate_content(
-            model="gemini-3-flash-preview", 
+            model="gemini-2.5-flash", 
             contents=contents,
             config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
         )
