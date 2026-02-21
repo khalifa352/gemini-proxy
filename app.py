@@ -5,14 +5,13 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V41 - GEMINI 1.5 PRO EDITION)
+# ⚙️ SMART DOCUMENT ENGINE (DEBUGGING EDITION)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("Almonjez_Docs_Pro")
 
 app = Flask(__name__)
 
-# تهيئة الاتصال بجوجل
 client = None
 try:
     from google import genai
@@ -20,7 +19,7 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine V41 Connected (Heavy Artillery: Gemini 1.5 Pro 🧠🔥)")
+        logger.info("✅ Document Engine Connected (Gemini 1.5 Pro - DEBUG MODE 🧠🔥)")
     else:
         logger.warning("⚠️ GOOGLE_API_KEY is missing in environment variables.")
 except Exception as e:
@@ -44,7 +43,7 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V41 (Gemini 1.5 Pro) is Online 📄🪄"})
+    return jsonify({"status": "Almonjez Debug Engine is Online 📄🪄"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -60,6 +59,12 @@ def generate():
         reference_b64 = data.get('reference_image')
         letterhead_b64 = data.get('letterhead_image')
         
+        # 🟢 1. مجسات التتبع الأولى (دخول الطلب)
+        logger.info("🚦 /gemini called")
+        logger.info(f"keys={list((data or {}).keys())}")
+        logger.info(f"user_msg_len={len(user_msg or '')}  size={width}x{height}")
+        logger.info(f"has_logo={bool(logo_b64)} has_ref={bool(reference_b64)} has_letterhead={bool(letterhead_b64)}")
+
         if letterhead_b64:
             bg_css = "background: transparent;"
             fo_x, fo_y = int(width * 0.08), int(height * 0.18)
@@ -69,15 +74,7 @@ def generate():
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
 
         logo_hint = f"\n- LOGO: `<img src=\"data:image/jpeg;base64,{logo_b64}\" style=\"max-height: 85px; margin-bottom: 20px;\" />`" if logo_b64 else ""
-        
-        ref_hint = ""
-        if reference_b64:
-            ref_hint = """
-            === 📸 ACCURATE CLONE MODE ===
-            You are using the Pro model, do not be lazy. Replicate the attached document accurately.
-            Generate ALL rows of the table if it is an invoice. DO NOT STOP SHORT.
-            Upgrade aesthetics: elegant borders, proper padding (12px), soft header backgrounds.
-            """
+        ref_hint = "\n=== 📸 ACCURATE CLONE MODE ===\nReplicate the attached document accurately. Generate ALL rows of the table." if reference_b64 else ""
 
         system_instruction = f"""
         ROLE: Master UI/UX Designer & Document Typesetter.
@@ -87,7 +84,7 @@ def generate():
 
         === 🌍 BILINGUAL SHIELD ===
         - Wrap ALL French/English text or numbers in `<bdi dir="ltr">` or `<span dir="ltr">`.
-        - Arabic MUST be aligned right, Latin text aligned left. Use Flexbox `justify-content: space-between` to separate them.
+        - Arabic MUST be aligned right, Latin text aligned left. Use Flexbox to separate them.
 
         === 📏 LONG TEXT & OVERFLOW WARNING ===
         - Height limit: {fo_h}px.
@@ -110,13 +107,19 @@ def generate():
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
-        # 🚀 THE UPGRADE: Using gemini-1.5-pro instead of flash
+        # 🟢 2. مجس التتبع الثاني (قبل الاتصال بجوجل)
+        logger.info("🛰️ calling Gemini now...")
+
         response = client.models.generate_content(
             model="gemini-1.5-pro", 
             contents=contents,
             config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.2)
         )
         
+        # 🟢 3. مجس التتبع الثالث (بعد عودة الرد)
+        logger.info("✅ Gemini returned")
+        logger.info(f"raw_len={len((response.text or ''))}")
+
         raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
@@ -137,18 +140,12 @@ def generate():
         return jsonify({"response": final_svg})
 
     except Exception as e:
-        # 🚨 نظام التقاط الأخطاء الدقيق (Error Radar)
-        error_details = str(e)
-        logger.error(f"❌ [PRO MODEL ERROR]: {error_details}")
-        return jsonify({
-            "error": "فشل الاتصال بنموذج Pro", 
-            "details": error_details # سيتم إرسال تفاصيل الخطأ لك
-        }), 500
+        logger.error(f"❌ [MODEL ERROR]: {str(e)}")
+        return jsonify({"error": "فشل الاتصال", "details": str(e)}), 500
 
 @app.route('/modify', methods=['POST'])
 def modify():
     if not client: return jsonify({"error": "Gemini API Offline"}), 500
-
     try:
         data = request.json
         current_svg = data.get('current_html', '') or data.get('current_svg', '')
@@ -159,37 +156,27 @@ def modify():
         system_prompt = f"""
         ROLE: Expert Document AI.
         TASK: Modify SVG document perfectly.
-        
         === 📄 NEW PAGE LOGIC ===
-        If asked to "open a new page" (فتح صفحة جديدة) or text overflows:
-        1. Double the `viewBox` height (e.g. `viewBox="0 0 {width} {height*2}"`).
-        2. Create a SECOND `<foreignObject>` for the new page, offset by `y="{height}"`.
-        
+        If asked to open a new page or text overflows: Double viewBox height, create second foreignObject.
         OUTPUT (JSON): {{"message": "رد عربي", "response": "<svg>...</svg>"}}
         """
 
-        # 🚀 THE UPGRADE: Using gemini-1.5-pro for modifications as well
+        logger.info("🛰️ calling Gemini (Modify) now...")
         response = client.models.generate_content(
             model="gemini-1.5-pro",
             contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
             config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.2)
         )
+        logger.info("✅ Gemini (Modify) returned")
 
         result_data = extract_safe_json(response.text if response.text else "")
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
 
-        return jsonify({
-            "response": updated_svg,
-            "message": result_data.get("message", "تم التعديل!")
-        })
+        return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل!")})
 
     except Exception as e:
-        error_details = str(e)
-        logger.error(f"❌ [PRO MODIFY ERROR]: {error_details}")
-        return jsonify({
-            "error": "فشل التعديل بنموذج Pro",
-            "details": error_details
-        }), 500
+        logger.error(f"❌ [MODIFY ERROR]: {str(e)}")
+        return jsonify({"error": "فشل التعديل", "details": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
