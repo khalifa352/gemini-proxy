@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 
 # ======================================================
 # ⚙️ SMART DOCUMENT ENGINE (V48 - HYBRID VANGUARD)
+
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("Almonjez_Docs_Hybrid")
@@ -117,7 +118,7 @@ def generate():
             # المحاولة الأولى باستخدام الدبابة الاستطلاعية (Gemini 3 Preview)
             logger.info("🛰️ Calling Primary Vanguard: gemini-3-flash-preview...")
             response = client.models.generate_content(
-                model="gemini-3-flash-preview", 
+                model="gemini-2.0-flash", 
                 contents=contents,
                 config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
             )
@@ -175,7 +176,7 @@ def modify():
         try:
             logger.info("🛰️ Calling Primary Vanguard (Modify): gemini-3-flash-preview...")
             response = client.models.generate_content(
-                model="gemini-2.0-flash"",
+                model="gemini-2.0-flash",
                 contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
                 config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
             )
