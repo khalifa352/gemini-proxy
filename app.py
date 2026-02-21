@@ -5,10 +5,10 @@ import logging
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V47 - FLASH + NATURAL FLOW)
+# ⚙️ SMART DOCUMENT ENGINE (V48 - HYBRID VANGUARD)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_Flash")
+logger = logging.getLogger("Almonjez_Docs_Hybrid")
 
 app = Flask(__name__)
 
@@ -19,7 +19,7 @@ try:
     API_KEY = os.environ.get('GOOGLE_API_KEY')
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={'api_version': 'v1beta'})
-        logger.info("✅ Document Engine Connected (Fast & Smart: Gemini 2.0 Flash ⚡ - Natural Flow)")
+        logger.info("✅ Document Engine Connected (Vanguard: Gemini 3 Preview | Fallback: 2.5 Flash 🛡️)")
     else:
         logger.warning("⚠️ GOOGLE_API_KEY is missing in environment variables.")
 except Exception as e:
@@ -43,7 +43,7 @@ def ensure_svg_namespaces(svg_code):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V47 (Flash Natural Engine) is Online ⚡📄"})
+    return jsonify({"status": "Almonjez V48 (Hybrid Engine) is Online ⚡🛡️"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -111,13 +111,27 @@ def generate():
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
-        logger.info("🛰️ Calling Gemini 2.0 Flash (Natural Flow)...")
-        response = client.models.generate_content(
-            model="gemini-2.5-flash", 
-            contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
-        )
-        logger.info("✅ Gemini returned successfully.")
+        # 🛡️ THE HYBRID FALLBACK SYSTEM 🛡️
+        response = None
+        try:
+            # المحاولة الأولى باستخدام الدبابة الاستطلاعية (Gemini 3 Preview)
+            logger.info("🛰️ Calling Primary Vanguard: gemini-3-flash-preview...")
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview", 
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
+            )
+            logger.info("✅ Vanguard (Gemini 3) returned successfully.")
+            
+        except Exception as primary_error:
+            # إذا تعطل الإصدار الثالث، نتدخل بالدبابة المستقرة (Gemini 2.5 Flash)
+            logger.warning(f"⚠️ Vanguard Failed: {str(primary_error)} | Switching to Fallback Tank (gemini-2.5-flash)...")
+            response = client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.15)
+            )
+            logger.info("✅ Fallback Tank (Gemini 2.5) returned successfully.")
 
         raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
@@ -139,8 +153,8 @@ def generate():
         return jsonify({"response": final_svg})
 
     except Exception as e:
-        logger.error(f"❌ [MODEL ERROR]: {str(e)}")
-        return jsonify({"error": "فشل الاتصال", "details": str(e)}), 500
+        logger.error(f"❌ [CRITICAL MODEL ERROR - BOTH FAILED]: {str(e)}")
+        return jsonify({"error": "فشل الاتصال بجميع النماذج", "details": str(e)}), 500
 
 @app.route('/modify', methods=['POST'])
 def modify():
@@ -156,13 +170,24 @@ def modify():
         OUTPUT STRICT JSON: {{"message": "رد عربي", "response": "<svg>...</svg>"}}
         """
 
-        logger.info("🛰️ Calling Gemini Flash (Modify)...")
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
-            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
-        )
-        logger.info("✅ Modify returned successfully.")
+        # 🛡️ THE HYBRID FALLBACK SYSTEM FOR MODIFY 🛡️
+        response = None
+        try:
+            logger.info("🛰️ Calling Primary Vanguard (Modify): gemini-3-flash-preview...")
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
+                config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
+            )
+            logger.info("✅ Vanguard Modify (Gemini 3) returned successfully.")
+        except Exception as primary_error:
+            logger.warning(f"⚠️ Vanguard Modify Failed: {str(primary_error)} | Switching to Fallback Tank (gemini-2.5-flash)...")
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
+                config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
+            )
+            logger.info("✅ Fallback Modify (Gemini 2.5) returned successfully.")
 
         result_data = extract_safe_json(response.text if response.text else "")
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
@@ -170,7 +195,7 @@ def modify():
         return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل!")})
 
     except Exception as e:
-        logger.error(f"❌ [MODIFY ERROR]: {str(e)}")
+        logger.error(f"❌ [CRITICAL MODIFY ERROR]: {str(e)}")
         return jsonify({"error": "فشل التعديل", "details": str(e)}), 500
 
 if __name__ == '__main__':
