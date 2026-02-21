@@ -175,7 +175,7 @@ def modify():
         try:
             logger.info("🛰️ Calling Primary Vanguard (Modify): gemini-3-flash-preview...")
             response = client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model="gemini-2.0-flash"",
                 contents=f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}",
                 config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.15)
             )
