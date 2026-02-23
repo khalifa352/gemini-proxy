@@ -6,10 +6,10 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V54 - THE UNIFIED BRAIN)
+# ⚙️ SMART DOCUMENT ENGINE (V55 - CLEAN & ANTI-ARTIFACTS)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_V54")
+logger = logging.getLogger("Almonjez_Docs_V55")
 
 app = Flask(__name__)
 
@@ -52,7 +52,7 @@ def call_gemini_with_timeout(model_name, contents, config, timeout_sec):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V54 (Unified Brain) is Online ⚡🛡️"})
+    return jsonify({"status": "Almonjez V55 (Clean Layout & Anti-Artifacts) is Online ⚡🛡️"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -64,11 +64,10 @@ def generate():
         width = int(data.get('width', 595))
         height = int(data.get('height', 842))
         
-        # الواجهة الجديدة ترسل فقط هذين المرفقين
         reference_b64 = data.get('reference_image') 
         letterhead_b64 = data.get('letterhead_image')
         
-        # 📄 1. معالجة الرأسية (Letterhead Logic)
+        # 📄 معالجة الرأسية
         letterhead_instruction = ""
         if letterhead_b64:
             bg_css = "background: transparent;"
@@ -88,32 +87,32 @@ def generate():
             Design the entire document from top to bottom, including professional headers and footers.
             """
 
-        # 📸 2. معالجة الصورة المرفقة بذكاء (نسخ أم إدراج؟)
+        # 📸 معالجة المحاكاة والصور + 🚫 منع الضوضاء (Anti-Noise)
         ref_hint = ""
         if reference_b64:
             ref_hint = f"""
-            === 👁️ SMART VISUAL CONTEXT ===
-            The user attached an image. Analyze the user's prompt to decide how to use it:
-            1. CLONE MODE: If the image is a document/receipt and the user wants to copy it, extract its exact text/table structure and clone it accurately without stretching.
-            2. INSERT MODE: If the image is a logo, signature, or product photo, and the user wants to add it to the design, embed it using this exact tag:
-               `<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:8px;" />` 
-               Place it exactly where it belongs logically.
+            === 👁️ SMART VISUAL CONTEXT & ANTI-NOISE ===
+            1. CLONE MODE: If the image is a document, extract its text and structure perfectly.
+               - 🚫 STRICT: IGNORE shadows, wrinkles, watermarks, dust, or background noise.
+               - 🚫 STRICT: DO NOT draw random SVG `<path>`, `<circle>`, or `<line>` elements to mimic paper textures. Use CLEAN HTML/CSS borders for tables and lines.
+            2. INSERT MODE: If the image is a logo/photo to add, embed it using:
+               `<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:8px;" />`
             """
 
-        # 🚀 3. القواعد الموحدة (إبداع + دقة بيانات + منع الانعكاس)
-        core_instruction = """
-        === 🎨 CREATIVITY vs 🛑 STRICT DATA ===
-        - DESIGN: UNLEASH YOUR CREATIVITY! Use highly modern UI/UX, premium colors, soft shadows, and rounded borders.
-        - DATA: ZERO HALLUCINATION. Use ONLY the data provided by the user or the image. Do not invent fake names, items, or prices.
+        # 🚀 قوانين التحجيم الصارم (Anti-Oversize)
+        core_instruction = f"""
+        === 📏 STRICT SCALING & FIT (CRITICAL) ===
+        - You have a MAXIMUM canvas of {fo_w}px width and {fo_h}px height.
+        - 🚫 NEVER use absolute fixed widths/heights larger than the canvas (e.g., `width: 1500px` is FORBIDDEN).
+        - Use `width: 100%` for all main tables and containers to ensure nothing is cut off.
+        - If there is a lot of data, use smaller fonts (e.g., 11pt-12pt) and tighter padding so EVERYTHING fits inside without overflowing.
 
-        === 🪞 ANTI-REFLECTION BILINGUAL LAYOUT (CRITICAL) ===
-        NEVER write Arabic and English inline like `محمد: Mohamed`. It causes text reflection bugs!
-        ALWAYS use Flexbox with a middle spacer for bilingual rows. Example:
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%; margin-bottom: 10px; direction: rtl;">
-            <span style="font-weight: bold; font-size: 15pt;">محمد</span>
-            <span style="flex-grow: 1; border-bottom: 1px dotted #ccc; margin: 0 10px; position: relative; top: -5px;"></span>
-            <span dir="ltr" style="font-weight: bold; font-size: 14pt; color: #555;">Mohamed</span>
-        </div>
+        === 🎨 CREATIVITY vs 🛑 STRICT DATA ===
+        - DESIGN: Clean, professional, modern business UI.
+        - DATA: ZERO HALLUCINATION. Do not invent fake names, items, or prices.
+
+        === 🪞 ANTI-REFLECTION BILINGUAL LAYOUT ===
+        NEVER write Arabic and English inline like `محمد: Mohamed`. ALWAYS use Flexbox with `justify-content: space-between` and `direction: rtl` for bilingual rows.
         """
 
         system_instruction = f"""
@@ -123,11 +122,6 @@ def generate():
         {letterhead_instruction}
         {ref_hint}
         {core_instruction}
-
-        === 📏 NATURAL FLOW ===
-        - You have a strict height of {fo_h}px.
-        - The container MUST have `display: flex; flex-direction: column; height: 100%;`.
-        - Give the final footer/signature div `margin-top: auto;` to push it down naturally.
 
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
@@ -140,13 +134,13 @@ def generate():
         RETURN ONLY RAW SVG CODE. DO NOT WRAP IN MARKDOWN.
         """
 
-        contents = [user_msg] if user_msg else ["صمم المستند بإبداع بناءً على المعطيات فقط."]
+        contents = [user_msg] if user_msg else ["صمم المستند بإبداع، وتأكد أن كل شيء يظهر داخل الإطار بدون قص."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         gen_config = types.GenerateContentConfig(
             system_instruction=system_instruction, 
-            temperature=0.35, # ⚖️ درجة حرارة متوازنة جداً: إبداع في التصميم + دقة في البيانات
+            temperature=0.3, # ⚖️ تخفيض طفيف لتقليل "تأليف الرسومات" العشوائية
             max_output_tokens=4096 
         )
 
@@ -154,15 +148,12 @@ def generate():
         try:
             logger.info("🛰️ Calling Vanguard: gemini-3-flash-preview...")
             response = call_gemini_with_timeout("gemini-3-flash-preview", contents, gen_config, timeout_sec=45.0)
-            logger.info("✅ Vanguard returned successfully.")
         except concurrent.futures.TimeoutError:
-            logger.warning("⚠️ Vanguard Timed Out! Switching to Fallback Tank...")
+            logger.warning("⚠️ Vanguard Timed Out! Switching to Fallback...")
             response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
-            logger.info("✅ Fallback Tank returned successfully.")
         except Exception as primary_error:
-            logger.warning(f"⚠️ Vanguard Failed. Switching to Fallback Tank...")
+            logger.warning(f"⚠️ Vanguard Failed. Switching to Fallback...")
             response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
-            logger.info("✅ Fallback Tank returned successfully.")
 
         raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
@@ -197,6 +188,7 @@ def modify():
         ROLE: Expert Document AI.
         TASK: Modify SVG document perfectly based on user instruction. 
         - DO NOT invent new data. Use what the user explicitly asks for.
+        - ENSURE the layout does not break or exceed 100% width.
         OUTPUT STRICT JSON: {{"message": "رد عربي قصير يوضح ما تم إنجازه", "response": "<svg>...</svg>"}}
         """
 
