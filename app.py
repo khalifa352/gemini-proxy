@@ -6,10 +6,10 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V55 - CLEAN & ANTI-ARTIFACTS)
+# ⚙️ SMART DOCUMENT ENGINE (V56 - MINIMALIST & AUTO-FIT)
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_V55")
+logger = logging.getLogger("Almonjez_Docs_V56")
 
 app = Flask(__name__)
 
@@ -52,7 +52,7 @@ def call_gemini_with_timeout(model_name, contents, config, timeout_sec):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V55 (Clean Layout & Anti-Artifacts) is Online ⚡🛡️"})
+    return jsonify({"status": "Almonjez V56 (Minimalist & Auto-Fit) is Online ⚡🛡️"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -73,46 +73,39 @@ def generate():
             bg_css = "background: transparent;"
             fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.18), int(width * 0.84), int(height * 0.70)
             letterhead_instruction = """
-            === 📄 LETTERHEAD ACTIVE (STRICT OVERRIDE) ===
-            The user provided a pre-designed letterhead. 
-            - DO NOT design a top header (No company logos/names at the very top).
-            - DO NOT design a footer unless it is the document total/signatures.
-            - Start immediately with the document title and core content.
+            === 📄 LETTERHEAD ACTIVE ===
+            - DO NOT design a top header or logos.
+            - Start immediately with the core content.
             """
         else:
             bg_css = "background: white;"
             fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
             letterhead_instruction = """
             === 📄 FULL PAGE DESIGN ===
-            Design the entire document from top to bottom, including professional headers and footers.
+            Design the entire document from top to bottom.
             """
 
-        # 📸 معالجة المحاكاة والصور + 🚫 منع الضوضاء (Anti-Noise)
+        # 📸 معالجة المحاكاة
         ref_hint = ""
         if reference_b64:
             ref_hint = f"""
-            === 👁️ SMART VISUAL CONTEXT & ANTI-NOISE ===
-            1. CLONE MODE: If the image is a document, extract its text and structure perfectly.
-               - 🚫 STRICT: IGNORE shadows, wrinkles, watermarks, dust, or background noise.
-               - 🚫 STRICT: DO NOT draw random SVG `<path>`, `<circle>`, or `<line>` elements to mimic paper textures. Use CLEAN HTML/CSS borders for tables and lines.
-            2. INSERT MODE: If the image is a logo/photo to add, embed it using:
-               `<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:8px;" />`
+            === 👁️ SMART CLONE & INSERT ===
+            1. CLONE MODE: If copying a document, IGNORE shadows/wrinkles. Use clean HTML tables. NO random SVG paths/lines.
+            2. INSERT MODE: Embed image using `<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:4px;" />`
             """
 
-        # 🚀 قوانين التحجيم الصارم (Anti-Oversize)
+        # 🚀 قواعد المينيماليزم والتحجيم الصارم (Minimalist & Strict Scaling)
         core_instruction = f"""
-        === 📏 STRICT SCALING & FIT (CRITICAL) ===
-        - You have a MAXIMUM canvas of {fo_w}px width and {fo_h}px height.
-        - 🚫 NEVER use absolute fixed widths/heights larger than the canvas (e.g., `width: 1500px` is FORBIDDEN).
-        - Use `width: 100%` for all main tables and containers to ensure nothing is cut off.
-        - If there is a lot of data, use smaller fonts (e.g., 11pt-12pt) and tighter padding so EVERYTHING fits inside without overflowing.
+        === 🎨 AESTHETICS & MINIMALISM ===
+        - DEFAULT STYLE: ULTRA-MINIMALIST. For invoices, letters, and forms, use ONLY Black, White, and subtle Greys.
+        - CONTRAST: Create visual hierarchy using TYPOGRAPHY (Bold vs Regular, font sizes, spacing) and simple borders. 
+        - 🚫 DO NOT use heavy colored backgrounds or decorative shapes UNLESS the user explicitly asks for colors.
+        - Layout: You are a master of spacing. Let the content breathe.
 
-        === 🎨 CREATIVITY vs 🛑 STRICT DATA ===
-        - DESIGN: Clean, professional, modern business UI.
-        - DATA: ZERO HALLUCINATION. Do not invent fake names, items, or prices.
-
-        === 🪞 ANTI-REFLECTION BILINGUAL LAYOUT ===
-        NEVER write Arabic and English inline like `محمد: Mohamed`. ALWAYS use Flexbox with `justify-content: space-between` and `direction: rtl` for bilingual rows.
+        === 📏 STRICT FIT & SCALING (NO OVERFLOW) ===
+        - 🚫 FORBIDDEN: Fixed widths larger than the canvas (e.g., `width: 1000px` is banned).
+        - MANDATORY: Use `width: 100%; box-sizing: border-box;` for all containers and tables.
+        - Ensure NOTHING is cut off or exceeds the bounding box. If data is wide, reduce font size to 11pt-12pt.
         """
 
         system_instruction = f"""
@@ -134,13 +127,13 @@ def generate():
         RETURN ONLY RAW SVG CODE. DO NOT WRAP IN MARKDOWN.
         """
 
-        contents = [user_msg] if user_msg else ["صمم المستند بإبداع، وتأكد أن كل شيء يظهر داخل الإطار بدون قص."]
+        contents = [user_msg] if user_msg else ["صمم المستند بشكل رسمي، تأكد من أن كل شيء يناسب الحجم بدون ألوان مزعجة."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         gen_config = types.GenerateContentConfig(
             system_instruction=system_instruction, 
-            temperature=0.3, # ⚖️ تخفيض طفيف لتقليل "تأليف الرسومات" العشوائية
+            temperature=0.35,
             max_output_tokens=4096 
         )
 
@@ -159,7 +152,6 @@ def generate():
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
-        # 🧩 دمج الرأسية في الخلفية
         if letterhead_b64 and '<svg' in final_svg:
             vb_match = re.search(r'viewBox="0 0 \d+ (\d+)"', final_svg)
             pages = max(1, int(vb_match.group(1)) // height) if vb_match else 1
@@ -173,8 +165,8 @@ def generate():
         return jsonify({"response": final_svg})
 
     except Exception as e:
-        logger.error(f"❌ [CRITICAL MODEL ERROR - BOTH FAILED]: {str(e)}")
-        return jsonify({"error": "فشل الاتصال بجميع النماذج", "details": str(e)}), 500
+        logger.error(f"❌ [CRITICAL ERROR]: {str(e)}")
+        return jsonify({"error": "فشل الاتصال", "details": str(e)}), 500
 
 @app.route('/modify', methods=['POST'])
 def modify():
@@ -186,10 +178,11 @@ def modify():
 
         system_prompt = f"""
         ROLE: Expert Document AI.
-        TASK: Modify SVG document perfectly based on user instruction. 
-        - DO NOT invent new data. Use what the user explicitly asks for.
-        - ENSURE the layout does not break or exceed 100% width.
-        OUTPUT STRICT JSON: {{"message": "رد عربي قصير يوضح ما تم إنجازه", "response": "<svg>...</svg>"}}
+        TASK: Modify SVG document perfectly. 
+        - DO NOT invent new data.
+        - MAINTAIN minimalist design unless colors are requested.
+        - ENSURE layout does not exceed 100% width.
+        OUTPUT STRICT JSON: {{"message": "رد عربي قصير", "response": "<svg>...</svg>"}}
         """
 
         gen_config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.35, max_output_tokens=4096)
@@ -197,18 +190,16 @@ def modify():
 
         response = None
         try:
-            logger.info("🛰️ Calling Vanguard Modify...")
             response = call_gemini_with_timeout("gemini-3-flash-preview", contents, gen_config, timeout_sec=45.0)
         except:
-            logger.warning("⚠️ Vanguard Modify Failed! Switching to Fallback...")
             response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
 
         result_data = extract_safe_json(response.text if response.text else "")
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
-        return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل بنجاح!")})
+        return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل!")})
 
     except Exception as e:
-        logger.error(f"❌ [CRITICAL MODIFY ERROR]: {str(e)}")
+        logger.error(f"❌ [MODIFY ERROR]: {str(e)}")
         return jsonify({"error": "فشل التعديل", "details": str(e)}), 500
 
 if __name__ == '__main__':
