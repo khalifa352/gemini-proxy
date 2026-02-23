@@ -72,21 +72,19 @@ def generate():
         user_msg = data.get('message', '')
         width = int(data.get('width', 595))
         height = int(data.get('height', 842))
-        mode = data.get('mode', 'documents') # 👈 تحديد مساحة العمل الحالية
+        mode = data.get('mode', 'documents')
         
         reference_b64 = data.get('reference_image') 
         letterhead_b64 = data.get('letterhead_image')
         
-        # 📄 قانون الهوامش (Safe Margins Logic)
-        # 🚀 التحديث: جعل الخلفية شفافة دائماً لتجنب تغطية الأختام أو الرأسية
         bg_css = "background: transparent;"
         
+        # 📄 قانون الهوامش (تمت زيادة الهامش العلوي للرأسية لتجنب التداخل)
         if letterhead_b64:
-            # هوامش للرأسية المرفقة
-            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.18), int(width * 0.84), int(height * 0.70)
-            letterhead_instruction = "=== 📄 LETTERHEAD ACTIVE ===\n- DO NOT design a top header or logos. Start immediately with the core content."
+            # تم التغيير من 0.18 إلى 0.25 (25% من الصفحة من الأعلى متروكة فارغة)
+            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.25), int(width * 0.84), int(height * 0.65)
+            letterhead_instruction = "=== 📄 LETTERHEAD ACTIVE ===\n- DO NOT design a top header or logos. Start immediately with the core content. Keep backgrounds 100% transparent."
         else:
-            # هوامش افتراضية للطباعة
             fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.12), int(width * 0.84), int(height * 0.73)
             letterhead_instruction = """
             === 📄 SAFE MARGINS (CRITICAL) ===
@@ -101,7 +99,7 @@ def generate():
                 === 👁️ SMART CLONE & INSERT (SIMULATION) ===
                 1. CLONE MODE: Replicate the layout, structure, and text of the document accurately.
                 2. IGNORE LOGOS: DO NOT copy or generate any logos, stamps, or watermarks. Only textual and structural data.
-                3. ADAPT FORM FACTOR: If the original document has a specific shape (like a DL envelope or landscape card), adjust your SVG layout and inner containers to match that proportion.
+                3. ADAPT FORM FACTOR: If the original document has a specific shape, adjust your SVG layout and inner containers to match that proportion.
                 """
             else:
                 ref_hint = f"""
@@ -110,14 +108,12 @@ def generate():
                 2. INSERT MODE: Embed image using `<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:4px;" />`
                 """
 
-        # 🚀 فصل التعليمات حسب نوع مساحة العمل (Dynamic System Prompts)
         if mode == "resumes":
             core_instruction = """
             === 🎨 RESUMES (CV) CREATIVE & PROFESSIONAL RULES ===
             - ROLE: Expert CV & Resume Designer.
             - CREATIVITY ALLOWED: You MUST be creative. Use modern layouts (Flexbox/Grid), elegant sidebars, and clean dividers.
-            - COLORS: Use professional, visually appealing colors (e.g., subtle Blues, Teals, or Dark Greys) to highlight sections and headers. DO NOT be restricted to pure black and white.
-            - SHAPES: You can use rounded corners, background tints for specific sections (like skills or contact info), and varying typography weights to make the CV look stunning.
+            - COLORS: Use professional, visually appealing colors to highlight sections.
             - STRICT FIT: `width: 100%; box-sizing: border-box;`.
             """
         elif mode == "simulation":
@@ -125,25 +121,26 @@ def generate():
             === 🎨 SIMULATION & CLONING STRICT RULES ===
             - ROLE: Precise Document Typesetter.
             - EXACT COPY: Your goal is to mirror the exact structure, tables, and text of the provided image.
-            - NO HALLUCINATION: Do NOT invent missing data, do NOT add extra text or headers not present in the original.
+            - NO HALLUCINATION: Do NOT invent missing data, do NOT add extra text or headers.
             - TABLES: If tables exist, use `width: 100%; table-layout: fixed; word-break: break-word; border-collapse: collapse;`.
             """
         else:
-            # الوضع الافتراضي (Documents / الفواتير والخطابات)
+            # 🚀 تم تحديث القسم الافتراضي (الفواتير والمستندات) بحزم شديد
             core_instruction = f"""
-            === 🎨 ULTRA-MINIMALISM & FORMATTING (DOCUMENTS) ===
-            - DEFAULT STYLE: Extremely simple and official. Use ONLY Black, White, and subtle Greys.
-            - NO EXTRA ELEMENTS: Do not add decorative shapes or colored backgrounds.
-            - 📊 CLOSED TABLES: All invoice or data tables MUST have CLOSED solid borders. CRITICAL: Use `width: 100%; table-layout: fixed; word-break: break-word; border-collapse: collapse; border: 1px solid black;` to ensure tables NEVER overflow the A4 page width. Text size should be professional (12px to 16px).
+            === 🚫 STRICT ANTI-HALLUCINATION (CRITICAL) ===
+            1. NEVER invent or add any greetings (e.g., "Thank you for visiting"), fake stamps, fake dates, or signature lines UNLESS explicitly provided by the user.
+            2. EXACT DATA ONLY: Format the text exactly as provided. Do not add conversational fillers.
 
-            === ✍️ CONTENT GENERATION RULES (CRITICAL) ===
-            1. NO HALLUCINATION: If the user provides invoice data, ONLY format that data. DO NOT add "Thank you for visiting", fake stamps, fake dates, or extra columns unless explicitly written by the user.
-            2. EXACT DATA: Use the text EXACTLY. 
-            3. SMART DRAFTING: Only draft text if the user provides a very generic idea. Otherwise, stick to their data strictly.
+            === 🎨 ULTRA-MINIMALISM & FORMATTING (DOCUMENTS) ===
+            - NO BACKGROUNDS: NEVER add a `<rect>` for background. Keep it 100% transparent.
+            - DEFAULT STYLE: Extremely simple and official. Use ONLY Black, White, and subtle Greys.
+            
+            === 📊 COMPACT & BEAUTIFUL TABLES ===
+            - TABLES: MUST use `width: 100%; table-layout: fixed; word-break: break-word; border-collapse: collapse; border: 1px solid black; margin-top: 15px;`.
+            - TABLE CELLS: MUST use small padding to keep tables compact! Use `padding: 6px 8px; font-size: 12px;` for both `th` and `td`. DO NOT make rows excessively tall or wide.
 
             === 📄 SMART PAGINATION (MULTI-PAGE) ===
-            - If the tables or text are too long to fit beautifully in one single height (e.g., 842px), you MUST create a multi-page document.
-            - How? Double or triple the total `viewBox` height (e.g., `viewBox="0 0 {width} {height * 2}"`), and insert a SECOND `<foreignObject>` below the first one (e.g., `y="{height + fo_y}"`) to continue the text cleanly, making it look like a professional multi-page document.
+            - If text/tables are too long for one height (842px), create a multi-page document by doubling `viewBox` height and inserting a SECOND `<foreignObject>`.
             """
 
         sys_prompt = f"""
@@ -165,7 +162,7 @@ def generate():
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
-        gen_config = types.GenerateContentConfig(system_instruction=sys_prompt, temperature=0.35, max_output_tokens=8192) # 👈 تم رفع الـ tokens لدعم الصفحات المتعددة
+        gen_config = types.GenerateContentConfig(system_instruction=sys_prompt, temperature=0.2, max_output_tokens=8192) # تقليل الحرارة لـ 0.2 لمنع التأليف
         
         response = None
         try:
@@ -175,8 +172,14 @@ def generate():
 
         raw_text = response.text or ""
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
-        final_svg = ensure_svg_namespaces(svg_match.group(0) if svg_match else raw_text)
+        final_svg = svg_match.group(0) if svg_match else raw_text
         
+        # 🚀 تنظيف إجباري لحل مشكلة البياض فوق الرأسية
+        final_svg = re.sub(r'<rect[^>]*fill=["\'](?:white|#FFF|#ffffff|#fff|#FFFFFF)["\'][^>]*>', '', final_svg)
+        final_svg = final_svg.replace('background-color: white;', 'background-color: transparent;')
+        final_svg = final_svg.replace('background: white;', 'background: transparent;')
+        
+        final_svg = ensure_svg_namespaces(final_svg)
         final_svg = inject_letterhead(final_svg, letterhead_b64, width, height)
         
         return jsonify({"response": final_svg})
@@ -203,7 +206,8 @@ def modify():
         if reference_b64:
             mod_hint += f"\n- INSERT IMAGE EXACTLY HERE: `<img src=\"data:image/jpeg;base64,{reference_b64}\" style=\"max-width:100%; height:auto; border-radius:4px;\" />`"
         if letterhead_b64:
-            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.18), int(width * 0.84), int(height * 0.70)
+            # تمت زيادة الهوامش هنا أيضاً لتتوافق مع التعديل
+            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.25), int(width * 0.84), int(height * 0.65)
             mod_hint += f"\n- USER ADDED LETTERHEAD: You MUST update the `<foreignObject>` tags to: `x=\"{fo_x}\" y=\"{fo_y}\" width=\"{fo_w}\" height=\"{fo_h}\"`. Shrink font sizes if needed."
 
         system_prompt = f"""
@@ -213,13 +217,13 @@ def modify():
         CRITICAL RULES:
         1. You must NOT remove, break, or lose any existing code or features.
         2. Only apply the requested change and keep everything else exactly the same.
-        3. Maintain minimalist design (no colors unless requested) and ensure width is 100%.
-        4. If adding tables, they MUST be closed with solid borders. {mod_hint}
+        3. Maintain minimalist design (no backgrounds) and ensure width is 100%.
+        4. If adding tables, they MUST be closed with solid borders and compact padding (6px). {mod_hint}
         
         OUTPUT STRICT JSON: {{"message": "رد عربي قصير", "response": "<svg>...</svg>"}}
         """
 
-        gen_config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.2, max_output_tokens=4096)
+        gen_config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.1, max_output_tokens=4096)
         contents = [f"CURRENT SVG:\n{current_svg}\n\nINSTRUCTION:\n{instruction}"]
 
         response = None
@@ -229,8 +233,14 @@ def modify():
             response = call_gemini_with_timeout("gemini-2.5-flash", contents, gen_config, timeout_sec=40.0)
 
         result_data = extract_safe_json(response.text if response.text else "")
-        updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
+        raw_svg = result_data.get("response", "")
         
+        # 🚀 تنظيف إجباري في التعديل أيضاً
+        raw_svg = re.sub(r'<rect[^>]*fill=["\'](?:white|#FFF|#ffffff|#fff|#FFFFFF)["\'][^>]*>', '', raw_svg)
+        raw_svg = raw_svg.replace('background-color: white;', 'background-color: transparent;')
+        raw_svg = raw_svg.replace('background: white;', 'background: transparent;')
+        
+        updated_svg = ensure_svg_namespaces(raw_svg)
         updated_svg = inject_letterhead(updated_svg, letterhead_b64, width, height)
         
         return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل!")})
