@@ -6,11 +6,11 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 # ======================================================
-# ⚙️ SMART DOCUMENT ENGINE (V58 - THE ULTIMATE MERGE)
-# MINIMALIST + AUTO-FIT + STRICT MODIFY + LETTERHEAD INJECT
+# ⚙️ SMART DOCUMENT ENGINE (V59 - EXECUTIVE SECRETARY)
+# SAFE MARGINS + CLOSED TABLES + SMART DRAFTING
 # ======================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Almonjez_Docs_V58")
+logger = logging.getLogger("Almonjez_Docs_V59")
 
 app = Flask(__name__)
 
@@ -41,7 +41,6 @@ def ensure_svg_namespaces(svg_code):
         svg_code = svg_code.replace('<foreignObject', '<foreignObject xmlns:xhtml="http://www.w3.org/1999/xhtml"', 1)
     return svg_code
 
-# 🚀 الدالة العبقرية لإدراج الرأسية بأمان
 def inject_letterhead(svg_code, letterhead_b64, width, height):
     if not letterhead_b64 or '<svg' not in svg_code:
         return svg_code
@@ -62,7 +61,7 @@ def call_gemini_with_timeout(model_name, contents, config, timeout_sec):
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "Almonjez V58 (Ultimate) is Online ⚡🛡️"})
+    return jsonify({"status": "Almonjez V59 (Executive Secretary) is Online ⚡🛡️"})
 
 @app.route('/gemini', methods=['POST'])
 def generate():
@@ -77,40 +76,48 @@ def generate():
         reference_b64 = data.get('reference_image') 
         letterhead_b64 = data.get('letterhead_image')
         
-        # 📄 معالجة الرأسية (هوامش دقيقة)
+        # 📄 قانون الهوامش (Safe Margins Logic)
         if letterhead_b64:
             bg_css = "background: transparent;"
+            # هوامش للرأسية المرفقة
             fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.18), int(width * 0.84), int(height * 0.70)
             letterhead_instruction = "=== 📄 LETTERHEAD ACTIVE ===\n- DO NOT design a top header or logos. Start immediately with the core content."
         else:
             bg_css = "background: white;"
-            fo_x, fo_y, fo_w, fo_h = 0, 0, width, height
-            letterhead_instruction = "=== 📄 FULL PAGE DESIGN ===\nDesign the entire document from top to bottom."
+            # 🚀 جديد: حتى بدون رأسية، نترك هامش 12% فوق و 15% تحت للطباعة الرسمية والأختام
+            fo_x, fo_y, fo_w, fo_h = int(width * 0.08), int(height * 0.12), int(width * 0.84), int(height * 0.73)
+            letterhead_instruction = """
+            === 📄 SAFE MARGINS (CRITICAL) ===
+            ALWAYS leave the top and bottom of the container empty. Do not fill the entire height. 
+            Keep a clean, professional whitespace at the bottom for future stamps and signatures.
+            """
 
-        # 📸 معالجة المحاكاة (منع الهلوسة والخطوط)
         ref_hint = ""
         if reference_b64:
             ref_hint = f"""
             === 👁️ SMART CLONE & INSERT ===
-            1. CLONE MODE: If copying a document, IGNORE shadows/wrinkles. Use clean HTML tables. NO random SVG paths/lines.
+            1. CLONE MODE: If copying a document, IGNORE shadows/wrinkles. NO random SVG paths/lines.
             2. INSERT MODE: Embed image using `<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:4px;" />`
             """
 
-        # 🚀 قواعد المينيماليزم والتحجيم الصارم
+        # 🚀 قوانين البساطة، الجداول المغلقة، والمحتوى المزدوج
         core_instruction = f"""
-        === 🎨 AESTHETICS & MINIMALISM ===
-        - DEFAULT STYLE: ULTRA-MINIMALIST. For invoices/letters, use ONLY Black, White, and subtle Greys.
-        - CONTRAST: Use TYPOGRAPHY (Bold vs Regular) and simple borders. 
-        - 🚫 NO colors or heavy backgrounds UNLESS the user explicitly asks.
-        
-        === 📏 STRICT FIT & SCALING ===
-        - 🚫 FORBIDDEN: Fixed widths larger than the canvas (e.g., `width: 1000px` is banned).
-        - MANDATORY: Use `width: 100%; box-sizing: border-box;` for containers.
-        - Ensure NOTHING is cut off. Reduce font size if needed.
+        === 🎨 ULTRA-MINIMALISM & FORMATTING ===
+        - DEFAULT STYLE: Extremely simple and official. Use ONLY Black, White, and subtle Greys.
+        - NO EXTRA ELEMENTS: Do not add decorative shapes, colored backgrounds, or unnecessary design flares.
+        - CONTRAST: Rely entirely on TYPOGRAPHY (Bold vs Regular fonts) and clean spacing.
+        - 📊 CLOSED TABLES: All invoice or data tables MUST have CLOSED solid borders on all outer edges and all inner cells (like a standard Excel spreadsheet). Use `border-collapse: collapse; border: 1px solid black;` for tables, th, and td.
+
+        === ✍️ CONTENT GENERATION RULES (CRITICAL) ===
+        1. EXACT DATA: If the user provides specific text, items, names, or prices, you MUST use them EXACTLY. Do not add or subtract data.
+        2. SMART DRAFTING: If the user provides only a general idea (e.g., "Write a letter to X from Y"), you MUST act as an expert secretary. Draft a highly professional, well-written, and concise text (in Arabic or the requested language) without unnecessary complexity.
+
+        === 📏 STRICT FIT ===
+        - MANDATORY: Use `width: 100%; box-sizing: border-box;` for containers. No fixed widths larger than the canvas.
         """
 
         sys_prompt = f"""
-        ROLE: Master UI/UX Designer & Document Typesetter.
+        ROLE: Master Executive Secretary & Document Typesetter.
         {letterhead_instruction}
         {ref_hint}
         {core_instruction}
@@ -118,13 +125,13 @@ def generate():
         FORMAT EXACTLY:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
             <foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; padding: 30px; {bg_css} display: flex; flex-direction: column; direction: rtl; font-family: -apple-system, sans-serif; color: #111;">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; padding: 20px; {bg_css} display: flex; flex-direction: column; direction: rtl; font-family: -apple-system, sans-serif; color: #111;">
                     </div>
             </foreignObject>
         </svg>
         """
 
-        contents = [user_msg] if user_msg else ["صمم المستند بشكل رسمي ومناسب للحجم."]
+        contents = [user_msg] if user_msg else ["قم بإنشاء مستند رسمي بسيط، بجداول مغلقة (إن وجدت) ومساحة للأختام."]
         if reference_b64:
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
@@ -140,7 +147,6 @@ def generate():
         svg_match = re.search(r'(?s)<svg[^>]*>.*?</svg>', raw_text)
         final_svg = ensure_svg_namespaces(svg_match.group(0) if svg_match else raw_text)
         
-        # دمج الرأسية بأمان
         final_svg = inject_letterhead(final_svg, letterhead_b64, width, height)
         
         return jsonify({"response": final_svg})
@@ -163,7 +169,6 @@ def modify():
         width = int(width_match.group(1)) if width_match else 595
         height = int(width_match.group(2)) if width_match else 842
 
-        # 🚀 قوانين التعديل (دمج المينيماليزم مع التعديل الصارم)
         mod_hint = ""
         if reference_b64:
             mod_hint += f"\n- INSERT IMAGE EXACTLY HERE: `<img src=\"data:image/jpeg;base64,{reference_b64}\" style=\"max-width:100%; height:auto; border-radius:4px;\" />`"
@@ -178,7 +183,8 @@ def modify():
         CRITICAL RULES:
         1. You must NOT remove, break, or lose any existing code or features.
         2. Only apply the requested change and keep everything else exactly the same.
-        3. Maintain minimalist design (no colors unless requested) and ensure width is 100%.{mod_hint}
+        3. Maintain minimalist design (no colors unless requested) and ensure width is 100%.
+        4. If adding tables, they MUST be closed with solid borders. {mod_hint}
         
         OUTPUT STRICT JSON: {{"message": "رد عربي قصير", "response": "<svg>...</svg>"}}
         """
@@ -195,7 +201,6 @@ def modify():
         result_data = extract_safe_json(response.text if response.text else "")
         updated_svg = ensure_svg_namespaces(result_data.get("response", ""))
         
-        # دمج الرأسية بأمان بعد التعديل
         updated_svg = inject_letterhead(updated_svg, letterhead_b64, width, height)
         
         return jsonify({"response": updated_svg, "message": result_data.get("message", "تم التعديل!")})
