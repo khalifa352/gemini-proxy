@@ -6,20 +6,20 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 # ======================================================
-# MONJEZ DOCUMENT ENGINE V2.0
-# ──────────────────────────────────────────────────────
-# - Style-aware generation (formal / modern / classic)
-# - Smart pagination with real page breaks
-# - Adaptive margins & letterhead system
-# - Mode-separated prompts (documents / simulation / resumes)
-# - Fixed: Unicode quotes, proper escaping
+# MONJEZ DOCUMENT ENGINE V3.0
+# - Real multi-page pagination (separate foreignObjects)
+# - Font: Arial for formal documents
+# - Style: formal (classic) + modern only
+# - hasLetterhead flag (no base64 sent from client)
+# - AI notes system for user feedback
+# - Content visibility fixes (footer text not cut off)
 # ======================================================
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("Monjez_Engine_V2")
+logger = logging.getLogger("Monjez_V3")
 
 app = Flask(__name__)
 
@@ -30,19 +30,14 @@ try:
     API_KEY = os.environ.get("GOOGLE_API_KEY")
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={"api_version": "v1beta"})
-        logger.info("Document Engine connected (Gemini)")
+        logger.info("Monjez Engine V3 connected")
     else:
         logger.warning("GOOGLE_API_KEY is missing.")
 except Exception as e:
     logger.error(f"Gemini init error: {e}")
 
 
-# ──────────────────────────────────────────────────────
-# UTILITY FUNCTIONS
-# ──────────────────────────────────────────────────────
-
 def extract_safe_json(text):
-    """Extract JSON object from mixed text safely."""
     try:
         match = re.search(r"\{.*\}", text.replace("\n", " "), re.DOTALL)
         if match:
@@ -53,11 +48,8 @@ def extract_safe_json(text):
 
 
 def ensure_svg_namespaces(svg_code):
-    """Ensure SVG has proper XML namespaces."""
     if 'xmlns="http://www.w3.org/2000/svg"' not in svg_code:
-        svg_code = svg_code.replace(
-            "<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1
-        )
+        svg_code = svg_code.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
     if "xmlns:xhtml" not in svg_code and "<foreignObject" in svg_code:
         svg_code = svg_code.replace(
             "<foreignObject",
@@ -68,7 +60,6 @@ def ensure_svg_namespaces(svg_code):
 
 
 def clean_white_backgrounds(svg_code):
-    """Remove white backgrounds that may cover content."""
     svg_code = re.sub(
         r'<rect[^>]*fill=["\'](?:white|#FFF|#ffffff|#fff|#FFFFFF)["\'][^>]*>',
         "",
@@ -79,59 +70,23 @@ def clean_white_backgrounds(svg_code):
     return svg_code
 
 
-def calculate_adaptive_margins(width, height, letterhead_active, content_type="documents"):
-    """Calculate dynamic margins based on content type and letterhead."""
+def calculate_margins(width, height, has_letterhead):
     margin_left = int(width * 0.06)
     margin_right = int(width * 0.06)
     margin_bottom = int(height * 0.08)
-
-    if letterhead_active:
-        margin_top = int(height * 0.12)
-    else:
-        margin_top = int(height * 0.08)
-
-    content_width = width - (margin_left + margin_right)
-    content_height = height - (margin_top + margin_bottom)
+    margin_top = int(height * 0.14) if has_letterhead else int(height * 0.06)
 
     return {
         "x": margin_left,
         "y": margin_top,
-        "width": content_width,
-        "height": content_height,
+        "width": width - margin_left - margin_right,
+        "height": height - margin_top - margin_bottom,
         "margin_top": margin_top,
         "margin_bottom": margin_bottom,
     }
 
 
-def inject_letterhead_smart(svg_code, letterhead_b64, width, height):
-    """Insert letterhead image on first page only."""
-    if not letterhead_b64 or "<svg" not in svg_code:
-        return svg_code
-
-    bg_image = (
-        f'<image href="data:image/jpeg;base64,{letterhead_b64}" '
-        f'x="0" y="0" width="{width}" height="{height}" '
-        f'preserveAspectRatio="none" />\n'
-    )
-
-    # Insert before first foreignObject
-    if "<foreignObject" in svg_code:
-        return svg_code.replace("<foreignObject", f"{bg_image}<foreignObject", 1)
-    return svg_code
-
-
-def detect_page_size_from_image(reference_b64):
-    """
-    Attempt to detect the page orientation/size from a reference image.
-    Returns suggested PageSize string.
-    """
-    # Default to A4 portrait - actual detection happens via aspect ratio
-    # in the AI prompt, this gives a hint
-    return "a4Portrait"
-
-
-def call_gemini_with_timeout(model_name, contents, config, timeout_sec):
-    """Call Gemini API with a timeout."""
+def call_gemini(model_name, contents, config, timeout_sec):
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(
             client.models.generate_content,
@@ -142,91 +97,63 @@ def call_gemini_with_timeout(model_name, contents, config, timeout_sec):
         return future.result(timeout=timeout_sec)
 
 
-# ──────────────────────────────────────────────────────
-# STYLE SYSTEM
-# ──────────────────────────────────────────────────────
-
-def get_style_instructions(style, mode):
-    """Return AI instructions based on selected design style."""
-
+def get_style_prompt(style, mode):
     if mode == "resumes":
         return """
-=== RESUME DESIGN MODE ===
-- ROLE: Professional CV Designer with creative vision.
-- Create a UNIQUE, modern resume layout.
-- Use creative sidebars, color accents, skill bars, icons.
-- Professional yet visually distinctive.
-- STRICT FIT: width: 100%; box-sizing: border-box;
-- Use professional color palette (navy, teal, charcoal, or similar).
-- Section headers must be clearly styled and hierarchical.
-- Contact info prominently placed.
+=== RESUME DESIGN ===
+- Creative, modern CV layout with sidebars and color accents.
+- Use professional colors (navy, teal, charcoal).
+- Skill bars, icons, clear section headers.
+- Font: Arial, Helvetica, sans-serif.
+- STRICT: width: 100%; box-sizing: border-box;
 """
 
     if mode == "simulation":
         return """
-=== DOCUMENT CLONING MODE ===
-- ROLE: Precision Document Typesetter.
-- EXACT COPY: Mirror the structure, tables, and text from the image.
-- IGNORE all logos, stamps, signatures, and decorative images.
-- FOCUS ONLY on: text content, tables, form fields, structure.
-- NO INVENTION: Do not add or fabricate any missing data.
-- TABLES: width: 100%; table-layout: fixed; border-collapse: collapse;
-- Preserve the exact hierarchy and layout of the original.
-- If the document has a specific form factor, match it.
+=== DOCUMENT CLONING ===
+- Mirror the EXACT text, tables, and structure from the image.
+- IGNORE logos, stamps, signatures, decorative images.
+- Focus ONLY on textual content and table structure.
+- Do NOT invent or add any data not visible in the image.
+- Font: Arial, Helvetica, sans-serif.
+- Tables: width: 100%; table-layout: fixed; border-collapse: collapse;
 """
 
-    # Documents mode - style-dependent
-    if style == "formal":
+    if style == "modern":
         return """
-=== FORMAL DOCUMENT STYLE ===
-- MINIMALIST: Black text on transparent background.
-- TABLES: Closed borders, 1px solid #333, clean cells.
-- HIERARCHY: Clear size contrast (title 18px, subtitle 14px, body 12px).
-- NO decorative elements, NO colored backgrounds, NO fancy fonts.
-- Professional administrative look (invoices, official letters, reports).
-- Table style: width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #333;
-- Cell style: padding: 6px 8px; font-size: 12px; border: 1px solid #333;
-- Headers: font-weight: bold; background-color: #f5f5f5;
+=== MODERN STYLE ===
+- Professional colors: accent headers, subtle colored backgrounds.
+- Tables: alternating row colors, no heavy borders, clean look.
+- Dividers, colored section headers, visual hierarchy.
+- Font: Arial, Helvetica, sans-serif.
+- Table: width:100%; border-collapse:collapse; border:none;
+- Cell: padding:10px 12px; font-size:13px; border-bottom:1px solid #e0e0e0;
+- Headers: color:#2563EB; font-weight:700;
 """
-    elif style == "modern":
-        return """
-=== MODERN DOCUMENT STYLE ===
-- USE professional colors: accent headers, subtle backgrounds.
-- TABLES: Rounded feel, alternating row colors, no heavy borders.
-- TYPOGRAPHY: Varied weights, clear visual hierarchy.
-- Subtle design elements: colored dividers, icon-style bullets.
-- Modern and clean but with personality.
-- Table style: width: 100%; border-collapse: collapse; border: none;
-- Cell style: padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #e0e0e0;
-- Headers: color: #2563EB; font-weight: 700;
-"""
-    elif style == "classic":
-        return """
-=== CLASSIC DOCUMENT STYLE ===
-- ELEGANT: Serif-inspired hierarchy, fine lines, generous spacing.
-- TABLES: Thin borders, wide margins, refined look.
-- Traditional and dignified aesthetic.
-- Subtle use of gray tones for depth.
-- Table style: width: 100%; border-collapse: collapse; border: 1px solid #999;
-- Cell style: padding: 8px 12px; font-size: 12px; border: 1px solid #ccc;
-- Headers: font-variant: small-caps; letter-spacing: 1px;
-"""
-    else:
-        return get_style_instructions("formal", mode)
 
+    # Default: formal (classic official documents)
+    return """
+=== FORMAL STYLE (Official Documents) ===
+- STRICT FORMAL: Black text, transparent background, no colors.
+- Tables: CLOSED borders, 1px solid #333, clean professional cells.
+- Mix of rounded and sharp corners allowed for variety.
+- Clear size hierarchy: title 18px bold, subtitle 14px, body 12px.
+- NO decorative elements, NO colored backgrounds.
+- Perfect for: invoices, official letters, contracts, purchase orders.
+- Font: Arial, Helvetica, sans-serif.
+- Table: width:100%; table-layout:fixed; border-collapse:collapse; border:1px solid #333;
+- Cell: padding:6px 8px; font-size:12px; border:1px solid #333;
+- Header cells: font-weight:bold; background-color:#f5f5f5;
+"""
 
-# ──────────────────────────────────────────────────────
-# ROUTES
-# ──────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez Engine V2.0 Online"})
+    return jsonify({"status": "Monjez Engine V3.0 Online"})
 
 
 @app.route("/gemini", methods=["POST"])
 def generate():
-    """Generate a new document."""
     if not client:
         return jsonify({"error": "Gemini API Offline"}), 500
 
@@ -237,163 +164,140 @@ def generate():
         height = int(data.get("height", 842))
         mode = data.get("mode", "documents")
         style = data.get("style", "formal")
-        page_size = data.get("pageSize", "a4Portrait")
+        has_letterhead = data.get("hasLetterhead", False)
 
         reference_b64 = data.get("reference_image")
-        letterhead_b64 = data.get("letterhead_image")
 
-        # Calculate adaptive margins
-        margins = calculate_adaptive_margins(width, height, bool(letterhead_b64), mode)
-        fo_x = margins["x"]
-        fo_y = margins["y"]
-        fo_w = margins["width"]
-        fo_h = margins["height"]
+        margins = calculate_margins(width, height, has_letterhead)
+        fo_x, fo_y = margins["x"], margins["y"]
+        fo_w, fo_h = margins["width"], margins["height"]
 
-        # Get style-specific instructions
-        style_instruction = get_style_instructions(style, mode)
+        style_prompt = get_style_prompt(style, mode)
 
-        # Letterhead instructions
-        if letterhead_b64:
-            letterhead_instruction = f"""
+        letterhead_note = ""
+        if has_letterhead:
+            letterhead_note = f"""
 === LETTERHEAD ACTIVE ===
-- Reserved space at top: {margins['margin_top']}px (letterhead image will be placed here).
-- Start ALL content below this reserved space.
-- NO logos, NO top decorations, NO header designs.
-- Transparent background ONLY.
-- Content must NOT overlap with letterhead area.
+- Top {margins['margin_top']}px is RESERVED for letterhead (added by client).
+- Start ALL content below y={margins['margin_top']}px.
+- NO logos, NO header decorations. Content only.
+- Background MUST be transparent.
 """
         else:
-            letterhead_instruction = """
+            letterhead_note = """
 === NO LETTERHEAD ===
-- Full page available for content.
-- Leave 8% whitespace at bottom for signatures/stamps.
+- Full page available. Leave 8% bottom for signatures/stamps.
+- Always leave top 6% margin for clean spacing.
 """
 
-        # Reference image handling
         ref_instruction = ""
-        if reference_b64:
-            if mode == "simulation":
-                ref_instruction = """
-=== SMART CLONE FROM IMAGE ===
-1. Analyze the attached image carefully.
-2. Clone ONLY the text content, tables, and structure.
-3. IGNORE all logos, stamps, watermarks, and decorative images.
-4. Match the document form factor and layout precisely.
-5. Do NOT invent or hallucinate any data not visible in the image.
-6. After cloning, the user can add letterhead/images separately.
-"""
-            else:
-                ref_instruction = f"""
-=== REFERENCE IMAGE ===
-- Embed this image in the document:
-  <img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;" />
-- Center aligned within content area.
+        if reference_b64 and mode != "simulation":
+            ref_instruction = f"""
+=== EMBEDDED IMAGE ===
+- Insert: <img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:4px; margin:10px 0;" />
 """
 
-        # Anti-hallucination rules
+        pagination_rules = f"""
+=== CRITICAL: CONTENT VISIBILITY & PAGINATION ===
+1. ALL content MUST be visible. Nothing should be cut off or hidden.
+2. Available height per page: {fo_h}px.
+3. If content fits in one page but text near bottom might be cut:
+   - Slightly reduce font size (minimum 10px, never smaller).
+   - Reduce padding/margins slightly.
+4. If content STILL does not fit after adjustments:
+   - Extend viewBox height to {height * 2} (for 2 pages) or {height * 3} (for 3).
+   - Create a NEW <foreignObject> for page 2 at y="{height}" with width="{fo_w}" height="{fo_h}".
+   - Each page is INDEPENDENT with its own foreignObject.
+   - NEVER stretch a single page. Create real separate pages.
+5. NEVER hide or truncate any content the user provided.
+6. If you create multiple pages, include this in your note.
+
+=== RESPONSE FORMAT ===
+Return ONLY valid SVG code. No markdown, no backticks, no explanation.
+"""
+
         anti_hallucination = """
-=== STRICT ANTI-HALLUCINATION RULES ===
+=== ANTI-HALLUCINATION ===
 1. Format ONLY the text/data provided by the user.
-2. NEVER invent greetings, dates, reference numbers, or signatures.
-3. NEVER add "Dear Sir/Madam" or similar unless the user wrote it.
-4. NEVER add stamps, seals, or signature lines unless requested.
-5. If the user gives minimal input, create a minimal document.
+2. NEVER invent greetings, dates, reference numbers, signatures, stamps.
+3. NEVER add "Dear Sir" or salutations unless the user wrote them.
+4. If user gives minimal input, create a minimal document.
+5. Do NOT add any decorative text or placeholder content.
 """
 
-        # Pagination rules
-        pagination = f"""
-=== SMART PAGINATION ===
-- Available content height per page: {fo_h}px.
-- If content exceeds one page, extend viewBox height to {height * 2} (or more).
-- Each new page = a NEW <foreignObject> starting at y="{height}" (page 2), y="{height * 2}" (page 3), etc.
-- Each foreignObject has the SAME width={fo_w} and height={fo_h}.
-- NEVER shrink font size to fit content. Create new pages instead.
-- Each page is INDEPENDENT (not stretched).
-"""
+        sys_prompt = f"""ROLE: Master Document Designer.
 
-        sys_prompt = f"""ROLE: Master Document Designer & Executive Secretary.
-
-{style_instruction}
-
-{letterhead_instruction}
-
+{style_prompt}
+{letterhead_note}
 {ref_instruction}
-
 {anti_hallucination}
+{pagination_rules}
 
-{pagination}
-
-RETURN EXACTLY THIS SVG STRUCTURE:
+SVG STRUCTURE:
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="100%">
     <foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-        <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; box-sizing: border-box; padding: 15px; background: transparent; direction: rtl; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #111; line-height: 1.6;">
-            [CONTENT HERE]
+        <div xmlns="http://www.w3.org/1999/xhtml" style="width:100%; box-sizing:border-box; padding:15px; background:transparent; direction:rtl; font-family:Arial, Helvetica, sans-serif; color:#111; line-height:1.6; font-size:13px;">
+            [CONTENT]
         </div>
     </foreignObject>
 </svg>
-
-CRITICAL: Return ONLY the SVG code. No markdown, no explanation, no backticks.
 """
 
-        contents = []
-        if user_msg:
-            contents.append(user_msg)
-        else:
-            contents.append("Create a simple formal document with proper tables.")
-
+        contents = [user_msg] if user_msg else ["Create a simple formal document."]
         if reference_b64:
-            contents.append({
-                "inline_data": {
-                    "mime_type": "image/jpeg",
-                    "data": reference_b64,
-                }
-            })
+            contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         gen_config = types.GenerateContentConfig(
             system_instruction=sys_prompt,
             temperature=0.2 if style == "formal" else 0.35,
-            max_output_tokens=8192,
+            max_output_tokens=12000,
         )
 
         response = None
         try:
-            response = call_gemini_with_timeout(
-                "gemini-2.5-flash", contents, gen_config, timeout_sec=45.0
-            )
+            response = call_gemini("gemini-2.5-flash", contents, gen_config, 50.0)
         except Exception as e:
             logger.warning(f"Primary model failed: {e}")
-            response = call_gemini_with_timeout(
-                "gemini-2.0-flash", contents, gen_config, timeout_sec=40.0
-            )
+            response = call_gemini("gemini-2.0-flash", contents, gen_config, 45.0)
 
         raw_text = response.text or ""
 
-        # Extract SVG
         svg_match = re.search(r"(?s)<svg[^>]*>.*?</svg>", raw_text)
         final_svg = svg_match.group(0) if svg_match else raw_text
 
-        # Clean up
         final_svg = clean_white_backgrounds(final_svg)
         final_svg = ensure_svg_namespaces(final_svg)
-        final_svg = inject_letterhead_smart(final_svg, letterhead_b64, width, height)
 
-        logger.info(
-            f"Generated document (mode={mode}, style={style}, "
-            f"letterhead={bool(letterhead_b64)})"
-        )
-        return jsonify({"response": final_svg})
+        # Detect if multi-page was created
+        note = ""
+        fo_count = final_svg.count("<foreignObject")
+        if fo_count > 1:
+            note = f"النص طويل، تم توزيعه على {fo_count} صفحات. يمكنك طلب حشر المحتوى في صفحة واحدة إن أردت."
+
+        # Check if viewBox was extended
+        vb_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', final_svg)
+        if vb_match:
+            vb_height = int(vb_match.group(2))
+            if vb_height > height:
+                pages = (vb_height + height - 1) // height
+                if not note:
+                    note = f"تم إنشاء {pages} صفحات لاستيعاب كامل المحتوى."
+
+        logger.info(f"Generated (mode={mode}, style={style}, pages={fo_count})")
+
+        result = {"response": final_svg}
+        if note:
+            result["note"] = note
+
+        return jsonify(result)
 
     except Exception as e:
         logger.error(f"Generate error: {str(e)}", exc_info=True)
-        return jsonify({
-            "error": "Document generation failed",
-            "details": str(e),
-        }), 500
+        return jsonify({"error": "Document generation failed", "details": str(e)}), 500
 
 
 @app.route("/modify", methods=["POST"])
 def modify():
-    """Modify an existing document."""
     if not client:
         return jsonify({"error": "Gemini API Offline"}), 500
 
@@ -402,64 +306,44 @@ def modify():
         current_svg = data.get("current_html", "") or data.get("current_svg", "")
         instruction = data.get("instruction", "")
         reference_b64 = data.get("reference_image")
-        letterhead_b64 = data.get("letterhead_image")
 
-        # Extract dimensions from current SVG
         width_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', current_svg)
         width = int(width_match.group(1)) if width_match else 595
-        height = int(width_match.group(2)) if width_match else 842
+        base_height = int(width_match.group(2)) if width_match else 842
 
-        # Calculate margins
-        margins = calculate_adaptive_margins(
-            width, height, bool(letterhead_b64), "documents"
-        )
-        fo_x = margins["x"]
-        fo_y = margins["y"]
-        fo_w = margins["width"]
-        fo_h = margins["height"]
+        # Use single page height for margin calculation
+        page_height = min(base_height, 842)
+        margins = calculate_margins(width, page_height, False)
+        fo_x, fo_y = margins["x"], margins["y"]
+        fo_w, fo_h = margins["width"], margins["height"]
 
-        # Image insertion instruction
         image_instruction = ""
         if reference_b64:
             image_instruction = (
-                "INSERT THIS IMAGE in the document: "
+                "INSERT THIS IMAGE: "
                 f'<img src="data:image/jpeg;base64,{reference_b64}" '
-                'style="max-width:100%; height:auto; margin:10px 0; '
-                'border-radius:4px;" />'
-            )
-
-        # Letterhead instruction
-        letterhead_mod = ""
-        if letterhead_b64:
-            letterhead_mod = (
-                f"LETTERHEAD ACTIVE: Ensure foreignObject starts at "
-                f'x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}". '
-                f"Content must not overlap with top {margins['margin_top']}px."
+                'style="max-width:100%; height:auto; margin:10px 0; border-radius:4px;" />'
             )
 
         system_prompt = f"""ROLE: Expert Document Modifier.
 
-MODIFICATION RULES:
+RULES:
 1. PRESERVE all existing content and structure.
 2. Apply ONLY the requested change.
-3. If adding content exceeds {fo_h}px height:
-   - Extend viewBox height to {height * 2}
-   - Add NEW <foreignObject> at y="{height}" with same dimensions
-   - This creates a real new page, NOT stretching
-4. NEVER shrink text to fit. Create new pages instead.
-5. {image_instruction}
-6. {letterhead_mod}
+3. Font: Arial, Helvetica, sans-serif.
+4. ALL content must remain visible after modification.
+5. If content exceeds page height ({fo_h}px):
+   - Create new page: extend viewBox, add new foreignObject at y={page_height}.
+   - NEVER shrink text below 10px. Create pages instead.
+6. {image_instruction}
 
-Page dimensions: {width}x{height}px
-Content area: {fo_w}x{fo_h}px at ({fo_x}, {fo_y})
-
-RESPONSE FORMAT - STRICT JSON:
+RESPONSE FORMAT - JSON:
 {{
     "message": "Brief Arabic summary of changes",
-    "response": "<svg>...complete SVG code...</svg>"
+    "response": "<svg>...complete SVG...</svg>"
 }}
 
-CRITICAL: Return valid JSON only. No markdown, no backticks.
+Return valid JSON only. No markdown.
 """
 
         gen_config = types.GenerateContentConfig(
@@ -469,62 +353,37 @@ CRITICAL: Return valid JSON only. No markdown, no backticks.
         )
 
         contents = [
-            f"CURRENT SVG:\n{current_svg}\n\n"
-            f"USER INSTRUCTION:\n{instruction}\n\n"
-            f"MODIFY THIS DOCUMENT."
+            f"CURRENT SVG:\n{current_svg}\n\nUSER REQUEST:\n{instruction}\n\nMODIFY NOW."
         ]
-
         if reference_b64:
-            contents.append({
-                "inline_data": {
-                    "mime_type": "image/jpeg",
-                    "data": reference_b64,
-                }
-            })
+            contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
 
         response = None
         try:
-            response = call_gemini_with_timeout(
-                "gemini-2.5-flash", contents, gen_config, timeout_sec=50.0
-            )
+            response = call_gemini("gemini-2.5-flash", contents, gen_config, 50.0)
         except Exception as e:
-            logger.warning(f"Modify primary model failed: {e}")
-            response = call_gemini_with_timeout(
-                "gemini-2.0-flash", contents, gen_config, timeout_sec=45.0
-            )
+            logger.warning(f"Modify primary failed: {e}")
+            response = call_gemini("gemini-2.0-flash", contents, gen_config, 45.0)
 
         result_data = extract_safe_json(response.text if response.text else "")
         raw_svg = result_data.get("response", "")
         message = result_data.get("message", "")
 
-        # If JSON extraction failed, try extracting SVG directly
         if not raw_svg:
-            svg_match = re.search(
-                r"(?s)<svg[^>]*>.*?</svg>", response.text or ""
-            )
+            svg_match = re.search(r"(?s)<svg[^>]*>.*?</svg>", response.text or "")
             if svg_match:
                 raw_svg = svg_match.group(0)
-                message = message or "Applied modification"
+                message = message or "تم التعديل"
 
-        # Clean up
         raw_svg = clean_white_backgrounds(raw_svg)
         updated_svg = ensure_svg_namespaces(raw_svg)
-        updated_svg = inject_letterhead_smart(
-            updated_svg, letterhead_b64, width, height
-        )
 
         logger.info("Modified document successfully")
-        return jsonify({
-            "response": updated_svg,
-            "message": message,
-        })
+        return jsonify({"response": updated_svg, "message": message})
 
     except Exception as e:
         logger.error(f"Modify error: {str(e)}", exc_info=True)
-        return jsonify({
-            "error": "Modification failed",
-            "details": str(e),
-        }), 500
+        return jsonify({"error": "Modification failed", "details": str(e)}), 500
 
 
 if __name__ == "__main__":
