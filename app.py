@@ -7,7 +7,7 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("Monjez")
+logger = logging.getLogger("Monjez_V7")
 
 app = Flask(__name__)
 
@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("Monjez V7 (Smart Pagination & Vision) ready")
+                logger.info("✅ Monjez V7 (Smart Pagination & Live Edit) ready")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -52,20 +52,12 @@ def extract_json(text):
 # ══════════════════════════════════════════════════════════
 #  HARD-CODED LAYOUT RULES (enforced by CODE, not by AI)
 # ══════════════════════════════════════════════════════════
-# 1pt = 0.3528mm, 1cm = 28.35pt
-# A4 = 595 x 842 pt
-
 LETTERHEAD_TOP = 128    # 4.5cm EXACTLY
 LETTERHEAD_BOTTOM = 128 # 4.5cm EXACTLY
 SIDE_MARGIN = 42        # ~1.5cm
 
-
 def compute_layout(width, height, has_letterhead):
-    """
-    Compute exact foreignObject position.
-    التحديث: دائمًا نترك هامش 4.5 سم من الأعلى والأسفل (سواء برأسية أو بدون)
-    لتفادي الاشتباك إذا أضاف المستخدم رأسية لاحقًا.
-    """
+    """دائماً نترك هامش 4.5 سم من الأعلى والأسفل لحماية المستند حتى لو أضيفت رأسية لاحقاً"""
     top = LETTERHEAD_TOP
     bottom = LETTERHEAD_BOTTOM
     side = SIDE_MARGIN
@@ -78,9 +70,8 @@ def compute_layout(width, height, has_letterhead):
 
 
 def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterhead_tag=""):
-    """Build the final SVG with multi-page support and CSS protections."""
+    """بناء الـ SVG مع دعم الصفحات المتعددة والحماية القوية للـ CSS"""
     
-    # تقسيم المحتوى إلى صفحات واقعية
     pages = re.split(r'<pagebreak\s*/?>', inner_html, flags=re.IGNORECASE)
     pages = [p for p in pages if p.strip()]
     if not pages: 
@@ -89,15 +80,14 @@ def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterh
     num_pages = len(pages)
     total_height = height * num_pages
 
-    # خلفية مساحة العمل رمادية فاتحة لإبراز الأوراق
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {total_height}" width="{width}" height="{total_height}" style="background:#f3f4f6;">\n'
 
-    # 🛡️ حقن CSS إجباري لحماية المستند من التشوه والخطوط العشوائية
+    # 🛡️ حقن CSS إجباري لحماية المستند ودعم التعديل الحر (Live Edit)
     css_protections = """
     <style>
         table { width: 100% !important; table-layout: fixed !important; word-wrap: break-word !important; overflow-wrap: break-word !important; border-collapse: collapse; margin-bottom: 15px; }
         td, th { word-wrap: break-word !important; overflow-wrap: break-word !important; white-space: normal !important; }
-        hr { display: none !important; } /* يمنع رسم خطوط طويلة تفصل بين النصوص */
+        hr { display: none !important; }
         p { margin-bottom: 12px; text-align: justify; line-height: 1.7; }
     </style>
     """
@@ -106,7 +96,7 @@ def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterh
         y_offset = i * height
         abs_fo_y = y_offset + fo_y
 
-        # رسم ورقة A4 بيضاء واقعية
+        # رسم ورقة A4 بيضاء لكل صفحة
         svg += f'<rect x="0" y="{y_offset}" width="{width}" height="{height}" fill="white" />\n'
 
         if letterhead_tag:
@@ -119,7 +109,7 @@ def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterh
         svg += page_html.strip()
         svg += '\n</div>\n</foreignObject>\n'
 
-        # فاصل بصري بين الصفحات
+        # فاصل رمادي بين الصفحات المتعددة للتمييز البصري
         if i < num_pages - 1:
             svg += f'<rect x="0" y="{y_offset + height}" width="{width}" height="8" fill="#e5e7eb" />\n'
 
@@ -130,7 +120,6 @@ def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterh
 def extract_inner_html(svg_text):
     divs = re.findall(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', svg_text, re.DOTALL)
     if divs:
-        # مسح كود الستايل المحقون حتى لا يتكرر
         cleaned = ["\n<pagebreak/>\n".join([re.sub(r'<style>.*?</style>', '', d, flags=re.DOTALL).strip() for d in divs])]
         return cleaned[0]
 
@@ -150,11 +139,9 @@ def strip_white_rects(svg):
         '', svg, flags=re.IGNORECASE
     )
 
-
 # ══════════════════════════════════════════════════════════
-#  STYLE PROMPTS (for AI creativity, not for layout rules)
+#  STYLE PROMPTS
 # ══════════════════════════════════════════════════════════
-
 def get_style_prompt(style, mode):
     if mode == "resumes":
         return """RESUME/CV: Creative layout with sidebar, skill bars, icons, color accents.
@@ -181,7 +168,7 @@ Total row in <tfoot>: "الإجمالي المستحق" colspan=3, amount in las
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V7 (Swift-like Real Pagination & Vision)"})
+    return jsonify({"status": "Monjez V7.1 (Live Edit & Smart Pagination Active)"})
 
 
 @app.route("/gemini", methods=["POST"])
@@ -200,7 +187,7 @@ def generate():
         reference_b64 = data.get("reference_image")
         letterhead_b64 = data.get("letterhead_image")
 
-        needs_lh = True # تم التثبيت دائماً لحماية التصميم
+        needs_lh = True # تثبيت دائم للهوامش
 
         fo_x, fo_y, fo_w, fo_h = compute_layout(width, height, needs_lh)
         style_prompt = get_style_prompt(style, mode)
@@ -213,7 +200,6 @@ def generate():
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        # ── AI PROMPT: Strict rules simulating Swift's context.beginPage() ──
         prompt = f"""You are an Expert Document Typesetter in Mauritania.
 
 {style_prompt}
@@ -221,35 +207,25 @@ def generate():
 
 CRITICAL PAGINATION & LAYOUT RULES (MANDATORY):
 1. NO SHORTENING: NEVER summarize or omit the user's data. Write everything.
-2. NO LONG SEPARATOR LINES: Do NOT use `<hr>` tags or long bottom borders to separate paragraphs.
-3. PAGE CAPACITY: The physical space allowed per page is exactly {fo_h}px height. This fits A MAXIMUM of 15 table rows OR 250 words of text.
-4. REAL MULTI-PAGE SPLITTING: If the user provides a lot of data, YOU MUST manually split the document into pages using exactly the `<pagebreak/>` tag.
-   - Example for long tables:
-     <table>
-       <tr><th>Headers</th></tr>
-       </table>
-     <pagebreak/>
-     <table>
-       <tr><th>Headers (Repeated)</th></tr>
-       </table>
-5. LETTERHEAD VISION AWARENESS: The top 4.5cm and bottom 4.5cm are PERMANENTLY reserved. Do NOT design headers/footers in the text.
+2. PAGE CAPACITY: The physical space allowed per page is exactly {fo_h}px height. This fits A MAXIMUM of 15 table rows OR 250 words of text.
+3. REAL MULTI-PAGE SPLITTING: If the user provides a lot of data, YOU MUST manually split the document into pages using exactly the `<pagebreak/>` tag. Do not squeeze text.
+4. LETTERHEAD VISION AWARENESS: The top 4.5cm and bottom 4.5cm are PERMANENTLY reserved. Do NOT design headers/footers in the text.
+5. NO LONG LINES: Do NOT use `<hr>` tags. Use proper spacing instead.
 
 OUTPUT: Return ONLY the raw HTML content. Use `<pagebreak/>` correctly."""
 
         contents = [user_msg] if user_msg else ["Create a formal document."]
         
-        # إرسال الصور للذكاء الاصطناعي ليراها ويستوعب المساحات والمحتوى
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         
-        # التحديث الجوهري: إرسال الرأسية لجيميني ليلقي نظرة عليها!
         if letterhead_b64:
-            contents.append("I have attached the Letterhead design image as well. Observe the empty space and ensure your layout perfectly matches its aesthetic without overlapping its borders.")
+            contents.append("I have attached the Letterhead design image. Observe the empty space and ensure your layout perfectly matches its aesthetic without overlapping its borders.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
 
         gen_config = get_types().GenerateContentConfig(
             system_instruction=prompt,
-            temperature=0.15, # تقليل الحرارة لضمان اتباع القواعد بصرامة
+            temperature=0.15,
             max_output_tokens=16000, 
         )
 
@@ -300,10 +276,12 @@ def modify():
 
         vb = re.search(r'viewBox="0 0 (\d+) (\d+)"', current_svg)
         w = int(vb.group(1)) if vb else 595
-        h = 842 # الارتفاع القياسي للصفحة الواحدة
+        h = 842 
 
-        has_lh = True # تثبيت الهوامش الآمنة
+        has_lh = True
         fo_x, fo_y, fo_w, fo_h = compute_layout(w, h, has_lh)
+        
+        # استخراج المحتوى النظيف (يدعم التعديلات اليدوية القادمة من الواجهة)
         current_inner = extract_inner_html(current_svg)
 
         img_note = ""
@@ -313,9 +291,9 @@ def modify():
         sys = f"""Expert document modifier for Mauritanian documents.
 
 CRITICAL RULES:
-1. Preserve everything. Apply ONLY requested changes.
+1. Preserve everything including recent manual user edits. Apply ONLY the requested AI change.
 2. Return ONLY the modified HTML content (No SVG wrappers).
-3. PAGE SPLITTING: You MUST use `<pagebreak/>` if tables or text get longer than {fo_h}px (approx 15 table rows). DO NOT shorten content.
+3. PAGE SPLITTING: You MUST use `<pagebreak/>` if tables or text get longer than {fo_h}px (approx 15 table rows).
 4. TABLES: `width:100%; table-layout:fixed; word-wrap:break-word;`
 5. NO LONG LINES: Do not use `<hr>` tags.
 {img_note}
@@ -331,7 +309,6 @@ OUTPUT FORMAT - JSON:
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
-        # السماح لجيميني برؤية الرأسية حتى أثناء التعديل
         if lh_b64:
             cts.append("I have attached the NEW Letterhead design image. Ensure your layout fits its empty space.")
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(lh_b64), mime_type="image/jpeg"))
