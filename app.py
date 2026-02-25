@@ -6,19 +6,18 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 # ======================================================
-# MONJEZ DOCUMENT ENGINE V4.0
+# MONJEZ DOCUMENT ENGINE V5.0
 # ──────────────────────────────────────────────────────
-# KEY CHANGE: Returns HTML with <div class="page"> wrappers
-# Client renders with CSS page-break for real separate pages
-# - No more SVG stretching
-# - No more content cut off at bottom
-# - Invoice totals attached to tables (tfoot)
-# - Font: Arial
-# - AI notes for user feedback
+# FIXES:
+# 1. Font too big → enforced 13px body, proper size hierarchy
+# 2. A4 not actual size → strict viewBox 595x842
+# 3. Content overflows page → strict content area with overflow hidden
+# 4. Letterhead not showing → reserved top space when hasLetterhead=true
+# 5. Multi-page → real second SVG page (new foreignObject)
 # ======================================================
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("Monjez_V4")
+logger = logging.getLogger("Monjez_V5")
 
 app = Flask(__name__)
 
@@ -29,7 +28,7 @@ try:
     API_KEY = os.environ.get("GOOGLE_API_KEY")
     if API_KEY:
         client = genai.Client(api_key=API_KEY, http_options={"api_version": "v1beta"})
-        logger.info("Monjez Engine V4 connected")
+        logger.info("Monjez Engine V5 ready")
     else:
         logger.warning("GOOGLE_API_KEY missing")
 except Exception as e:
@@ -55,57 +54,31 @@ def extract_safe_json(text):
     return {}
 
 
-def get_style_prompt(style, mode):
+def get_style_instructions(style, mode):
     if mode == "resumes":
-        return """
-=== RESUME DESIGN ===
-- Create a creative, modern CV layout.
-- Use sidebars, color accents, skill bars, section icons.
-- Professional colors (navy #1e3a5f, teal #0d9488, charcoal #374151).
-- Font: Arial, sans-serif.
-"""
+        return """RESUME: Creative CV with sidebar, skill bars, color accents.
+Colors: navy #1e3a5f, teal #0d9488, charcoal #374151.
+Use sections: personal info, experience, education, skills."""
 
     if mode == "simulation":
-        return """
-=== DOCUMENT CLONING ===
-- Clone EXACTLY the text, tables, and structure from the image.
-- IGNORE logos, stamps, signatures, decorative images completely.
-- Focus ONLY on textual content, tables, form fields.
-- Do NOT invent any data not visible in the image.
-- Font: Arial, sans-serif.
-"""
+        return """CLONING: Copy EXACTLY the text/tables from the reference image.
+IGNORE logos, stamps, signatures, decorative images.
+Focus ONLY on text content and table structure. Do NOT invent data."""
 
     if style == "modern":
-        return """
-=== MODERN STYLE ===
-- Professional accent colors on headers and dividers.
-- Tables: alternating row colors (#f9fafb / white), no heavy borders.
-- Clean, contemporary look with visual hierarchy.
-- Font: Arial, sans-serif.
-- Table borders: border-bottom: 1px solid #e5e7eb;
-- Headers: color: #2563eb; font-weight: 700;
-"""
+        return """MODERN: Accent colors on headers (#2563eb), subtle backgrounds.
+Tables: alternating rows (#f9fafb/white), border-bottom: 1px solid #e5e7eb.
+Clean contemporary look."""
 
-    # formal (default)
-    return """
-=== FORMAL STYLE (Official Documents) ===
-- BLACK text on WHITE background. NO colors except #f5f5f5 for header cells.
-- Tables: CLOSED borders on ALL sides. 1px solid #333.
-- Clean, professional, administrative look.
-- Perfect for: invoices, contracts, official letters, purchase orders.
-- Font: Arial, sans-serif.
-- INVOICE TABLES: Total/subtotal rows MUST be inside <tfoot> (attached to table).
-  Do NOT put totals in a separate div or table. Use <tfoot> inside the same <table>.
-- Table: width:100%; table-layout:fixed; border-collapse:collapse;
-- th,td: padding:6px 8px; font-size:12px; border:1px solid #333; text-align:right;
-- th: background:#f5f5f5; font-weight:bold;
-- tfoot td: font-weight:bold; background:#f0f0f0; border-top:2px solid #333;
-"""
+    return """FORMAL: Black text, white background, NO colors except #f5f5f5 headers.
+Tables: CLOSED borders ALL sides, 1px solid #333.
+Invoice totals: put in <tfoot> inside SAME table (not separate).
+Perfect for: invoices, contracts, official letters, purchase orders."""
 
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez Engine V4.0 Online"})
+    return jsonify({"status": "Monjez Engine V5.0"})
 
 
 @app.route("/gemini", methods=["POST"])
@@ -122,115 +95,166 @@ def generate():
         style = data.get("style", "formal")
         has_letterhead = data.get("hasLetterhead", False)
         reference_b64 = data.get("reference_image")
+        letterhead_b64 = data.get("letterhead_image")
 
-        # Calculate margins
-        top_margin = int(height * 0.14) if has_letterhead else int(height * 0.06)
-        bottom_margin = int(height * 0.08)
-        side_margin = int(width * 0.06)
-        content_height = height - top_margin - bottom_margin
+        # Fixed margins
+        margin_side = int(width * 0.07)
+        margin_bottom = int(height * 0.06)
 
-        style_prompt = get_style_prompt(style, mode)
+        if has_letterhead or letterhead_b64:
+            margin_top = int(height * 0.15)
+        else:
+            margin_top = int(height * 0.06)
 
-        letterhead_note = ""
-        if has_letterhead:
-            letterhead_note = f"""
-=== LETTERHEAD (Client-side) ===
-- The client will overlay a letterhead image on the first page.
-- Top {top_margin}px is RESERVED. Start content below this area.
-- Do NOT create any header design or logo area.
-- Keep background transparent/white.
-"""
+        fo_x = margin_side
+        fo_y = margin_top
+        fo_w = width - (margin_side * 2)
+        fo_h = height - margin_top - margin_bottom
 
-        ref_instruction = ""
+        style_instructions = get_style_instructions(style, mode)
+
+        # Build letterhead injection
+        letterhead_svg = ""
+        if letterhead_b64:
+            letterhead_svg = f'<image href="data:image/jpeg;base64,{letterhead_b64}" x="0" y="0" width="{width}" height="{height}" preserveAspectRatio="xMidYMin slice" opacity="1"/>'
+
+        ref_note = ""
         if reference_b64 and mode != "simulation":
-            ref_instruction = f"""
-=== IMAGE TO INSERT ===
-<img src="data:image/jpeg;base64,{reference_b64}" style="max-width:100%; height:auto; border-radius:4px; margin:10px 0;" />
-"""
+            ref_note = """You have a reference image attached. Insert it using:
+<img src="data:image/jpeg;base64,..." style="max-width:80%; height:auto; margin:8px auto; display:block; border-radius:4px;" />"""
 
-        sys_prompt = f"""ROLE: Professional Document Designer.
+        sys_prompt = f"""You are a PRECISE document designer. Output ONLY valid SVG code.
 
-{style_prompt}
-{letterhead_note}
+=== STYLE ===
+{style_instructions}
 
-=== CRITICAL RULES ===
-1. ANTI-HALLUCINATION: Only format text the user provided. NEVER invent data.
-2. NEVER add greetings, dates, signatures, stamps unless the user wrote them.
-3. Font: Arial, sans-serif throughout.
-4. For invoices/tables: totals MUST be in <tfoot> inside the SAME table, NOT separate.
+=== CRITICAL SIZE RULES ===
+The page is {width}x{height} points (A4).
+Content area: x={fo_x}, y={fo_y}, width={fo_w}, height={fo_h}.
+
+FONT SIZES (STRICT - never exceed these):
+- Title/Main header: 18px maximum, font-weight: bold
+- Section headers: 14px, font-weight: bold
+- Body text: 12-13px, font-weight: normal
+- Table cells: 11-12px
+- Small notes/footer: 10px
+- NEVER use font-size above 20px for anything
+
+LINE HEIGHT: 1.5 for body, 1.3 for tables.
+
+=== LETTERHEAD ===
+{"Top " + str(margin_top) + "px is RESERVED for letterhead. Do NOT put any content there." if (has_letterhead or letterhead_b64) else "Leave top 6% as clean margin."}
+
+=== ANTI-HALLUCINATION ===
+1. Format ONLY what the user wrote. NEVER invent greetings, dates, signatures, reference numbers.
+2. If user gives minimal text, create a minimal document. Do NOT pad with fake content.
+3. For simulation mode: clone ONLY visible text from the image.
+
+=== TABLES ===
+- width:100%; table-layout:fixed; border-collapse:collapse;
+- th,td: padding:5px 7px; font-size:11px; border:1px solid #333;
+- th: background:#f5f5f5; font-weight:bold;
+- Totals: use <tfoot> inside the SAME <table>, not a separate element.
+
+{ref_note}
+
+=== PAGINATION ===
+If ALL content fits in {fo_h}px, use ONE foreignObject.
+If content is too long:
+- First try reducing font slightly (min 10px body).
+- If still too long: extend viewBox to "0 0 {width} {height * 2}" and add a SECOND foreignObject at y="{height}" with same width/margins.
+- NEVER hide or cut content.
 
 === OUTPUT FORMAT ===
-Return HTML content wrapped in <div class="page">...</div> tags.
-Each page is a separate div.page element.
+Return ONLY this SVG structure. No markdown, no backticks, no explanation:
 
-PAGINATION RULES:
-- Each page can hold approximately {content_height}px of content.
-- If content fits in ONE page, return ONE <div class="page">content</div>.
-- If content is too long, split it across MULTIPLE <div class="page"> elements.
-- Each page is independent. Tables can span pages but prefer keeping them together.
-- NEVER cut off content. ALL user content MUST appear.
-- When splitting, end a page at a natural break (after a paragraph, after a table row).
-
-EXAMPLE for single page:
-<div class="page">
-  <h2>Title</h2>
-  <p>Content here...</p>
-  <table>...</table>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="background:white">
+{letterhead_svg}
+<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
+<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111; line-height:1.5; direction:rtl; padding:10px; box-sizing:border-box; overflow:hidden;">
+YOUR_CONTENT_HERE
 </div>
-
-EXAMPLE for multi-page:
-<div class="page">
-  <h2>Title</h2>
-  <p>First part of content...</p>
-</div>
-<div class="page">
-  <p>Continuation of content...</p>
-  <table>...</table>
-</div>
-
-{ref_instruction}
-
-Return ONLY the HTML div.page content. No markdown, no backticks, no explanation, no <html> or <body> tags.
+</foreignObject>
+</svg>
 """
 
-        contents = [user_msg] if user_msg else ["Create a simple formal document."]
+        contents = []
+        if user_msg:
+            contents.append(user_msg)
+        else:
+            contents.append("Create a simple formal document.")
+
         if reference_b64:
-            contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
+            contents.append(types.Part.from_bytes(
+                data=__import__('base64').b64decode(reference_b64),
+                mime_type="image/jpeg"
+            ))
 
         gen_config = types.GenerateContentConfig(
             system_instruction=sys_prompt,
-            temperature=0.2 if style == "formal" else 0.35,
+            temperature=0.2 if style == "formal" else 0.3,
             max_output_tokens=12000,
         )
 
         response = None
         try:
-            response = call_gemini("gemini-2.5-flash", contents, gen_config, 50.0)
+            response = call_gemini("gemini-2.5-flash", contents, gen_config, 55.0)
         except Exception as e:
-            logger.warning(f"Primary model failed: {e}")
-            response = call_gemini("gemini-2.0-flash", contents, gen_config, 45.0)
+            logger.warning(f"Primary failed: {e}, trying fallback...")
+            try:
+                response = call_gemini("gemini-2.0-flash", contents, gen_config, 50.0)
+            except Exception as e2:
+                logger.error(f"Both models failed: {e2}")
+                return jsonify({"error": "AI generation failed", "details": str(e2)}), 500
 
         raw = response.text or ""
 
-        # Clean markdown artifacts
-        raw = raw.replace("```html", "").replace("```", "").strip()
+        # Clean markdown wrapping
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```\w*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+            raw = raw.strip()
 
-        # Ensure content is wrapped in page divs
-        if '<div class="page">' not in raw:
-            raw = f'<div class="page">\n{raw}\n</div>'
+        # Extract SVG
+        svg_match = re.search(r"(?s)(<svg[^>]*>.*?</svg>)", raw)
+        if svg_match:
+            final_svg = svg_match.group(1)
+        else:
+            # Wrap raw content in SVG if AI didn't
+            final_svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="background:white">
+{letterhead_svg}
+<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
+<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111; line-height:1.5; direction:rtl; padding:10px; box-sizing:border-box;">
+{raw}
+</div>
+</foreignObject>
+</svg>'''
 
-        # Count pages for note
-        page_count = raw.count('<div class="page">')
-        note = ""
-        if page_count > 1:
-            note = f"المحتوى طويل، تم توزيعه على {page_count} صفحات. يمكنك طلب ضغطه في صفحة واحدة."
+        # Ensure xmlns
+        if 'xmlns="http://www.w3.org/2000/svg"' not in final_svg:
+            final_svg = final_svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
 
-        logger.info(f"Generated (mode={mode}, style={style}, pages={page_count})")
+        # Inject letterhead if provided but not already in SVG
+        if letterhead_b64 and 'letterhead' not in final_svg.lower() and letterhead_svg:
+            if '<foreignObject' in final_svg:
+                final_svg = final_svg.replace(
+                    '<foreignObject',
+                    f'{letterhead_svg}\n<foreignObject',
+                    1
+                )
 
-        result = {"response": raw}
-        if note:
-            result["note"] = note
-        return jsonify(result)
+        # Remove any white background rects that cover content
+        final_svg = re.sub(
+            r'<rect[^>]*fill=["\'](?:white|#fff(?:fff)?)["\'][^>]*/?>',
+            '',
+            final_svg,
+            flags=re.IGNORECASE
+        )
+
+        logger.info(f"Generated OK: mode={mode}, style={style}, len={len(final_svg)}")
+
+        return jsonify({"response": final_svg})
 
     except Exception as e:
         logger.error(f"Generate error: {str(e)}", exc_info=True)
@@ -244,38 +268,40 @@ def modify():
 
     try:
         data = request.json
-        current_content = data.get("current_content", "") or data.get("current_svg", "") or data.get("current_html", "")
+        current_svg = data.get("current_svg", "") or data.get("current_content", "") or data.get("current_html", "")
         instruction = data.get("instruction", "")
         reference_b64 = data.get("reference_image")
+        letterhead_b64 = data.get("letterhead_image")
 
-        image_instruction = ""
+        # Parse dimensions from existing SVG
+        vb = re.search(r'viewBox="0 0 (\d+) (\d+)"', current_svg)
+        width = int(vb.group(1)) if vb else 595
+        height = int(vb.group(2)) if vb else 842
+
+        image_note = ""
         if reference_b64:
-            image_instruction = (
-                "INSERT THIS IMAGE in the document: "
-                f'<img src="data:image/jpeg;base64,{reference_b64}" '
-                'style="max-width:100%; height:auto; margin:10px 0; border-radius:4px;" />'
-            )
+            image_note = f'INSERT this image: <img src="data:image/jpeg;base64,{reference_b64}" style="max-width:80%; height:auto; margin:8px auto; display:block; border-radius:4px;" />'
 
-        system_prompt = f"""ROLE: Expert Document Modifier.
+        letterhead_note = ""
+        if letterhead_b64:
+            lh_tag = f'<image href="data:image/jpeg;base64,{letterhead_b64}" x="0" y="0" width="{width}" height="{height}" preserveAspectRatio="xMidYMin slice"/>'
+            letterhead_note = f"Add this letterhead as first element inside <svg>: {lh_tag}"
+
+        system_prompt = f"""You are an expert SVG document modifier.
 
 RULES:
 1. PRESERVE all existing content and structure.
 2. Apply ONLY the user's requested change.
-3. Font: Arial, sans-serif.
-4. ALL content must remain visible.
-5. Keep the <div class="page">...</div> structure.
-6. If content overflows, create additional page divs.
-7. For invoices: totals stay in <tfoot> inside the same table.
-8. {image_instruction}
+3. Font: Arial, Helvetica, sans-serif. Body: 12-13px max. Title: 18px max.
+4. ALL content must remain visible. NEVER cut off text.
+5. Tables: totals in <tfoot> inside same table.
+6. {image_note}
+7. {letterhead_note}
 
-RESPONSE FORMAT - JSON:
-{{
-    "message": "Brief Arabic summary of changes",
-    "response": "<div class=\\"page\\">...modified content...</div>"
-}}
+RESPONSE: Return valid JSON:
+{{"message": "وصف التعديل", "response": "<svg>...SVG...</svg>"}}
 
-Return valid JSON only. No markdown backticks.
-"""
+No markdown. Just JSON."""
 
         gen_config = types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -283,43 +309,43 @@ Return valid JSON only. No markdown backticks.
             max_output_tokens=16384,
         )
 
-        contents = [
-            f"CURRENT CONTENT:\n{current_content}\n\nUSER REQUEST:\n{instruction}\n\nMODIFY NOW."
-        ]
+        contents = [f"CURRENT SVG:\n{current_svg}\n\nREQUEST:\n{instruction}\n\nMODIFY:"]
         if reference_b64:
-            contents.append({"inline_data": {"mime_type": "image/jpeg", "data": reference_b64}})
+            contents.append(types.Part.from_bytes(
+                data=__import__('base64').b64decode(reference_b64),
+                mime_type="image/jpeg"
+            ))
 
         response = None
         try:
-            response = call_gemini("gemini-2.5-flash", contents, gen_config, 50.0)
+            response = call_gemini("gemini-2.5-flash", contents, gen_config, 55.0)
         except Exception as e:
             logger.warning(f"Modify primary failed: {e}")
-            response = call_gemini("gemini-2.0-flash", contents, gen_config, 45.0)
+            response = call_gemini("gemini-2.0-flash", contents, gen_config, 50.0)
 
         raw_text = response.text or ""
+
+        # Try JSON parse first
         result_data = extract_safe_json(raw_text)
-        content = result_data.get("response", "")
+        svg_out = result_data.get("response", "")
         message = result_data.get("message", "")
 
-        # Fallback: extract HTML directly if JSON parsing failed
-        if not content:
-            # Try to find page divs
-            cleaned = raw_text.replace("```html", "").replace("```json", "").replace("```", "").strip()
-            if '<div class="page">' in cleaned:
-                start = cleaned.find('<div class="page">')
-                last = cleaned.rfind("</div>")
-                if start >= 0 and last >= 0:
-                    content = cleaned[start:last + 6]
-            elif cleaned:
-                content = f'<div class="page">\n{cleaned}\n</div>'
+        # Fallback: extract SVG directly
+        if not svg_out:
+            cleaned = raw_text.replace("```svg", "").replace("```json", "").replace("```", "").strip()
+            svg_match = re.search(r"(?s)(<svg[^>]*>.*?</svg>)", cleaned)
+            if svg_match:
+                svg_out = svg_match.group(1)
+            else:
+                svg_out = current_svg  # Return original if all fails
             message = message or "تم التعديل"
 
-        # Ensure page wrapper
-        if content and '<div class="page">' not in content:
-            content = f'<div class="page">\n{content}\n</div>'
+        # Ensure xmlns
+        if svg_out and 'xmlns="http://www.w3.org/2000/svg"' not in svg_out:
+            svg_out = svg_out.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
 
-        logger.info("Modified document successfully")
-        return jsonify({"response": content, "message": message})
+        logger.info("Modify OK")
+        return jsonify({"response": svg_out, "message": message})
 
     except Exception as e:
         logger.error(f"Modify error: {str(e)}", exc_info=True)
