@@ -114,7 +114,7 @@ def generate():
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        # 🚀 التوجيه الجديد: توليد HTML فقط، وبدون SVG
+        # 🚀 التوجيه الجديد: منع تغليف الصفحة بأي حدود أو أبعاد ثابتة
         prompt = f"""You are an Expert Document Typesetter in Mauritania.
 
 {style_prompt}
@@ -126,6 +126,7 @@ CRITICAL RULES (MANDATORY):
 3. NO LONG LINES: Do NOT use `<hr>` tags.
 4. PARAGRAPHS: Use proper `<p style="margin-bottom: 12px; text-align: justify; line-height: 1.7;">` for all text.
 5. Do NOT include `<html>`, `<head>`, or `<body>` tags. Just the structural elements (`<div>`, `<table>`, `<h1>`, `<p>`).
+6. NO PAGE WRAPPERS: DO NOT wrap the content in an outer page container (like `<div style="width:21cm...">`). DO NOT add black borders, shadows, or fixed width/height simulating a paper. The app handles the A4 paper UI natively. Just output the flowing text/tables.
 
 OUTPUT: Return raw HTML only."""
 
@@ -188,6 +189,7 @@ CRITICAL RULES:
 3. DO NOT output `<svg>`, `<html>`, or `<body>` tags. Only inner HTML elements.
 4. TABLES: `width:100%; table-layout:fixed; word-wrap:break-word;`
 5. NO LONG LINES: Do not use `<hr>` tags.
+6. NO PAGE WRAPPERS: DO NOT wrap the content in an outer page container with fixed heights or borders.
 {img_note}
 
 OUTPUT FORMAT - JSON:
