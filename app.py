@@ -21,24 +21,40 @@ logger = logging.getLogger("Monjez_V5")
 
 app = Flask(__name__)
 
-client = None
-try:
-    from google import genai
-    from google.genai import types
-    API_KEY = os.environ.get("GOOGLE_API_KEY")
-    if API_KEY:
-        client = genai.Client(api_key=API_KEY, http_options={"api_version": "v1beta"})
-        logger.info("Monjez Engine V5 ready")
-    else:
-        logger.warning("GOOGLE_API_KEY missing")
-except Exception as e:
-    logger.error(f"Gemini init error: {e}")
+# Lazy-load Gemini client (so Flask starts FAST and Render detects the port)
+_client = None
+_genai = None
+_types = None
+_initialized = False
+
+def get_client():
+    global _client, _genai, _types, _initialized
+    if not _initialized:
+        _initialized = True
+        try:
+            from google import genai as _g
+            from google.genai import types as _t
+            _genai = _g
+            _types = _t
+            API_KEY = os.environ.get("GOOGLE_API_KEY")
+            if API_KEY:
+                _client = _g.Client(api_key=API_KEY, http_options={"api_version": "v1beta"})
+                logger.info("Monjez Engine V5 ready (lazy init)")
+            else:
+                logger.warning("GOOGLE_API_KEY missing")
+        except Exception as e:
+            logger.error(f"Gemini init error: {e}")
+    return _client
+
+def get_types():
+    get_client()  # ensure initialized
+    return _types
 
 
 def call_gemini(model_name, contents, config, timeout_sec):
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(
-            client.models.generate_content,
+            get_client().models.generate_content,
             model=model_name, contents=contents, config=config,
         )
         return future.result(timeout=timeout_sec)
@@ -83,7 +99,7 @@ def index():
 
 @app.route("/gemini", methods=["POST"])
 def generate():
-    if not client:
+    if not get_client():
         return jsonify({"error": "Gemini API Offline"}), 500
 
     try:
@@ -185,12 +201,12 @@ YOUR_CONTENT_HERE
             contents.append("Create a simple formal document.")
 
         if reference_b64:
-            contents.append(types.Part.from_bytes(
+            contents.append(get_types().Part.from_bytes(
                 data=__import__('base64').b64decode(reference_b64),
                 mime_type="image/jpeg"
             ))
 
-        gen_config = types.GenerateContentConfig(
+        gen_config = get_types().GenerateContentConfig(
             system_instruction=sys_prompt,
             temperature=0.2 if style == "formal" else 0.3,
             max_output_tokens=12000,
@@ -263,7 +279,7 @@ YOUR_CONTENT_HERE
 
 @app.route("/modify", methods=["POST"])
 def modify():
-    if not client:
+    if not get_client():
         return jsonify({"error": "Gemini API Offline"}), 500
 
     try:
@@ -303,7 +319,7 @@ RESPONSE: Return valid JSON:
 
 No markdown. Just JSON."""
 
-        gen_config = types.GenerateContentConfig(
+        gen_config = get_types().GenerateContentConfig(
             system_instruction=system_prompt,
             temperature=0.15,
             max_output_tokens=16384,
@@ -311,7 +327,7 @@ No markdown. Just JSON."""
 
         contents = [f"CURRENT SVG:\n{current_svg}\n\nREQUEST:\n{instruction}\n\nMODIFY:"]
         if reference_b64:
-            contents.append(types.Part.from_bytes(
+            contents.append(get_types().Part.from_bytes(
                 data=__import__('base64').b64decode(reference_b64),
                 mime_type="image/jpeg"
             ))
