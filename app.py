@@ -2,6 +2,7 @@ import os
 import re
 import json
 import logging
+import base64
 import concurrent.futures
 from flask import Flask, request, jsonify
 
@@ -10,7 +11,7 @@ logger = logging.getLogger("Monjez")
 
 app = Flask(__name__)
 
-# ── Lazy Gemini (Flask starts fast → Render detects port) ──
+# ── Lazy Gemini ──
 _client = None
 _types = None
 _init = False
@@ -26,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("Monjez V6 ready")
+                logger.info("Monjez V7 ready")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -49,110 +50,120 @@ def extract_json(text):
 
 
 # ══════════════════════════════════════════════════════════
-#  MAURITANIAN DOCUMENT STANDARDS
+#  HARD-CODED LAYOUT RULES (enforced by CODE, not by AI)
 # ══════════════════════════════════════════════════════════
-# 1 CSS point = 0.0353 cm → 1 cm = 28.35 pt
-# 4.5 cm = 127.6 pt ≈ 128 pt (top margin for letterhead)
-# 4.4 cm = 124.7 pt ≈ 125 pt (bottom margin for footer)
-# These are for documents WITH letterhead/footer only.
-# Documents WITHOUT letterhead: full page freedom.
+# 1pt = 0.3528mm, 1cm = 28.35pt
+# A4 = 595 x 842 pt
+
+LETTERHEAD_TOP = 128    # 4.5cm
+LETTERHEAD_BOTTOM = 125 # 4.4cm
+SIDE_MARGIN = 42        # ~1.5cm
+NO_LH_TOP = 34          # ~1.2cm
+NO_LH_BOTTOM = 34       # ~1.2cm
+
+
+def compute_layout(width, height, has_letterhead):
+    """Compute exact foreignObject position - these are FIXED rules."""
+    if has_letterhead:
+        top = LETTERHEAD_TOP
+        bottom = LETTERHEAD_BOTTOM
+    else:
+        top = NO_LH_TOP
+        bottom = NO_LH_BOTTOM
+
+    side = SIDE_MARGIN
+    fo_x = side
+    fo_y = top
+    fo_w = width - (side * 2)
+    fo_h = height - top - bottom
+    return fo_x, fo_y, fo_w, fo_h
+
+
+def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterhead_tag=""):
+    """Build the final SVG with exact layout - CODE controls the structure."""
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="background:white">
+{letterhead_tag}
+<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
+<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111; line-height:1.5; direction:rtl; padding:4px; box-sizing:border-box; overflow:hidden; height:{fo_h}px;">
+{inner_html}
+</div>
+</foreignObject>
+</svg>'''
+
+
+def extract_inner_html(svg_text):
+    """Extract ONLY the inner HTML content from inside foreignObject > div."""
+    # Try to find content inside the xhtml div
+    m = re.search(
+        r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>',
+        svg_text, re.DOTALL
+    )
+    if m:
+        return m.group(1).strip()
+
+    # Fallback: get everything inside foreignObject
+    m2 = re.search(r'<foreignObject[^>]*>(.*?)</foreignObject>', svg_text, re.DOTALL)
+    if m2:
+        return m2.group(1).strip()
+
+    # Last resort: if no SVG structure, return as-is (raw HTML from AI)
+    if '<svg' not in svg_text:
+        return svg_text.strip()
+
+    return ""
+
+
+def strip_white_rects(svg):
+    """Remove all white/opaque rects that could cover letterhead."""
+    return re.sub(
+        r'<rect[^>]*(?:fill=["\'](?:white|#fff(?:fff)?|rgba?\(255[^)]*\))["\'])[^>]*/?>',
+        '', svg, flags=re.IGNORECASE
+    )
+
+
 # ══════════════════════════════════════════════════════════
-
-LETTERHEAD_TOP_PT = 128    # 4.5 cm
-LETTERHEAD_BOTTOM_PT = 125 # 4.4 cm
-
+#  STYLE PROMPTS (for AI creativity, not for layout rules)
+# ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
-
     if mode == "resumes":
-        return """=== RESUME / CV ===
-Creative layout: sidebar, skill bars, icons, color accents.
-Colors: navy #1e3a5f, teal #0d9488, charcoal #374151.
-Sections: info, experience, education, skills, languages.
-Make it visually impressive and professional."""
+        return """RESUME/CV: Creative layout with sidebar, skill bars, icons, color accents.
+Colors: navy #1e3a5f, teal #0d9488, charcoal #374151."""
 
     if mode == "simulation":
-        return """=== DOCUMENT CLONING ===
-Reproduce EXACTLY the text, tables, structure from the reference image.
-IGNORE: logos, stamps, signatures, watermarks, decorative images.
-Focus ONLY on textual content and table structure.
-Do NOT invent any data not visible in the image."""
+        return """CLONING: Reproduce EXACTLY text/tables from the reference image.
+IGNORE logos, stamps, signatures. Do NOT invent data."""
 
     if style == "modern":
-        return """=== MODERN STYLE ===
-- Headers: color:#2563eb; font-weight:700;
-- Tables: alternating rows (#f9fafb/white), border-bottom:1px solid #e5e7eb.
-- Clean contemporary look.
-- Accent colors allowed for headers and dividers."""
+        return """MODERN: Headers color:#2563eb, alternating table rows (#f9fafb/white),
+border-bottom:1px solid #e5e7eb. Clean contemporary look."""
 
-    # ── FORMAL STYLE (Default for Mauritania) ──
-    return """=== FORMAL / OFFICIAL STYLE ===
-Design like a skilled HUMAN designer in Mauritania. Professional, clean, elegant.
+    return """FORMAL/OFFICIAL - Professional Mauritanian document design.
 
-TYPOGRAPHY:
-- Title: 16px bold, centered, margin-bottom:10px.
-- Section headers: 13px bold, border-bottom:2px solid #333, padding-bottom:3px, margin:10px 0 6px.
-- Body: 12px, line-height:1.5.
-- Subtle <hr> (1px solid #ddd) between sections.
+TYPOGRAPHY: Title 16px bold centered. Sections 13px bold with border-bottom:2px solid #333.
+Body 12px. Subtle <hr> between sections. NO bright colors.
+Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd, white only.
 
-COLORS ALLOWED: #333, #555, #f7f7f7, #f0f0f0, #ddd, white ONLY. No bright colors.
-
-GENERAL TABLE DESIGN:
-- table: width:100%; border-collapse:collapse; border:1px solid #333;
-- th: background:#333; color:white; padding:7px 8px; font-size:11px; font-weight:bold; text-align:right; border:1px solid #333;
+TABLE DESIGN:
+- th: background:#333; color:white; padding:7px; font-size:11px; border:1px solid #333;
 - td: padding:6px 8px; font-size:11px; border:1px solid #ddd; text-align:right;
 - Even rows: background:#f7f7f7;
 
-=== MAURITANIAN INVOICE TABLE (Facture / فاتورة) ===
-When designing invoices (فاتورة, facture, devis, عرض سعر, bon de commande):
+INVOICE TABLE (فاتورة/facture/devis):
+Columns right-to-left: البيان/الوصف(50%) | السعر | الكمية | الإجمالي
+Total row in <tfoot>: "الإجمالي المستحق" colspan=3, amount in last column only.
+After table: "Arrête la présente facture a la somme de : [WORDS] [CURRENCY]"
 
-COLUMN ORDER (right to left, Arabic direction):
-| البيان / الوصف (50% width) | السعر | الكمية | الإجمالي |
+FORMS (استمارة): Organize raw text into clean form with label:value pairs and input boxes.
+LETTERS (خطاب): Date, recipient, subject (centered bold), body, signature area.
 
-TOTAL ROW STRUCTURE (CRITICAL):
-The total row ("الإجمالي المستحق") is OUTSIDE the <tbody> in a <tfoot>.
-- "الإجمالي المستحق" label spans 3 columns (colspan="3"), right-aligned, bold, border:1px solid #333.
-- The total number is in the last column (الإجمالي), bold, border:1px solid #333, background:#f0f0f0.
-- Example:
-<tfoot>
-  <tr>
-    <td colspan="3" style="text-align:right; font-weight:bold; padding:8px; border:1px solid #333; font-size:12px;">الإجمالي المستحق</td>
-    <td style="text-align:center; font-weight:bold; padding:8px; border:1px solid #333; background:#f0f0f0; font-size:12px;">461</td>
-  </tr>
-</tfoot>
-
-AFTER THE TABLE:
-Add the French closing line:
-"Arrête la/le présent(e) facture/devis a la somme de : [AMOUNT IN WORDS] [CURRENCY]"
-Style: font-size:11px; margin-top:10px; font-style:italic;
-
-=== SMART CONTENT PLACEMENT ===
-- If content is SHORT (small invoice, short letter): do NOT stick it to the top.
-  Instead, add padding-top to push content to the upper-third area, leaving balanced whitespace.
-  Use: padding-top: 5-15% of available height for short content.
-- If content is MEDIUM: normal placement from top.
-- If content is LONG: compact everything to fit.
-
-=== FORMS / APPLICATIONS (استمارة) ===
-When user provides raw unstructured text for a form:
-- Identify field labels and organize them into a clean form layout.
-- Use tables or grid with label:value pairs.
-- Add input-style boxes: border:1px solid #999; min-height:24px; padding:4px;
-- Think like a human designer: what would this form look like printed?
-
-=== LETTERS (خطاب / رسالة) ===
-- Date: top-left or top-right, font-size:11px.
-- Recipient: right-aligned block.
-- Subject line: centered, bold, underlined.
-- Body: justified, 12px.
-- Signature area: bottom-left, with space for stamp.
-
-REMEMBER: Formal ≠ boring. It means NO colors but WITH good design, spacing, hierarchy, and professional layout."""
+SHORT content: add padding-top for balance. LONG content: reduce font to 10-11px.
+Formal ≠ boring. Good design, spacing, hierarchy - just no colors."""
 
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V6"})
+    return jsonify({"status": "Monjez V7"})
 
 
 @app.route("/gemini", methods=["POST"])
@@ -171,104 +182,50 @@ def generate():
         reference_b64 = data.get("reference_image")
         letterhead_b64 = data.get("letterhead_image")
 
-        # ── MARGINS ──
-        margin_side = int(width * 0.07)
+        needs_lh = has_letterhead or (letterhead_b64 is not None)
 
-        needs_letterhead_margins = has_letterhead or (letterhead_b64 is not None)
-
-        if needs_letterhead_margins:
-            # 4.5cm top, 4.4cm bottom for letterhead documents
-            margin_top = LETTERHEAD_TOP_PT
-            margin_bottom = LETTERHEAD_BOTTOM_PT
-        else:
-            # Free layout - minimal margins
-            margin_top = int(height * 0.04)
-            margin_bottom = int(height * 0.04)
-
-        fo_x = margin_side
-        fo_y = margin_top
-        fo_w = width - (margin_side * 2)
-        fo_h = height - margin_top - margin_bottom
+        # ── LAYOUT: computed by CODE, not by AI ──
+        fo_x, fo_y, fo_w, fo_h = compute_layout(width, height, needs_lh)
 
         style_prompt = get_style_prompt(style, mode)
 
-        # Letterhead SVG image tag
-        letterhead_tag = ""
+        # Letterhead tag
+        lh_tag = ""
         if letterhead_b64:
-            letterhead_tag = f'<image href="data:image/jpeg;base64,{letterhead_b64}" x="0" y="0" width="{width}" height="{height}" preserveAspectRatio="xMidYMin slice"/>'
+            lh_tag = f'<image href="data:image/jpeg;base64,{letterhead_b64}" x="0" y="0" width="{width}" height="{height}" preserveAspectRatio="xMidYMin slice"/>'
 
         ref_note = ""
         if reference_b64 and mode != "simulation":
-            ref_note = "ATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
+            ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        letterhead_note = ""
-        if needs_letterhead_margins:
-            letterhead_note = f"""
-=== LETTERHEAD DOCUMENT ===
-Top {margin_top}px (4.5cm) is RESERVED for the letterhead header. Do NOT place content there.
-Bottom {margin_bottom}px (4.4cm) is RESERVED for footer/stamps. Do NOT place content there.
-Your content area is ONLY {fo_h}px tall. Stay within it."""
+        lh_note = ""
+        if needs_lh:
+            lh_note = f"\nLETTERHEAD: Top {fo_y}px and bottom {LETTERHEAD_BOTTOM}px are reserved. Content area is {fo_h}px."
         else:
-            letterhead_note = f"""
-=== NO LETTERHEAD ===
-This document has NO letterhead. You have the FULL page to work with.
-Content area: {fo_h}px tall. Use it freely with appropriate margins."""
+            lh_note = f"\nNO LETTERHEAD: Full page available. Content area is {fo_h}px."
 
-        prompt = f"""You are a PROFESSIONAL document designer working in Mauritania.
-You create production-ready documents that look like they were designed by an expert human.
+        # ── AI PROMPT: ask for HTML content only, NOT full SVG ──
+        prompt = f"""You are a professional document designer in Mauritania.
 
 {style_prompt}
-
-{letterhead_note}
-
-=== PAGE DIMENSIONS ===
-Page: {width} x {height} pt.
-Content foreignObject: x={fo_x} y={fo_y} w={fo_w} h={fo_h}.
-
-=== FONT RULES ===
-- Title: 16-18px bold max.
-- Sections: 13px bold.
-- Body: 12px.
-- Tables: 11px.
-- Notes: 10px.
-- Font: Arial, Helvetica, sans-serif.
-- NEVER exceed 18px.
-
-=== CONTENT FITTING ===
-ALL content MUST fit in {fo_h}px.
-If long: reduce font (min 10px), reduce spacing. NEVER overflow.
-viewBox MUST be "0 0 {width} {height}". NEVER extend or change it.
-
-=== ANTI-HALLUCINATION (ABSOLUTE) ===
-1. Format ONLY what the user wrote. NEVER invent content.
-2. NEVER add greetings, dates, signatures, stamps, reference numbers unless user wrote them.
-3. Minimal input = minimal document. Do NOT pad with fake content.
-4. Be intelligent: detect document type from context (invoice, letter, form, etc.) and apply appropriate layout.
-
-=== NO BACKGROUND RECTANGLES ===
-NEVER add <rect> elements with white/opaque fill that could cover letterhead, stamps, or footer.
-The SVG background is already white via style="background:white".
-Do NOT add any covering elements. The foreignObject handles content containment.
-
+{lh_note}
 {ref_note}
 
-=== SVG OUTPUT ===
-Return ONLY this SVG. No markdown, no backticks, no text before or after:
+RULES:
+1. Return ONLY the HTML content (no <svg>, no <foreignObject>, no wrapper).
+2. Content must fit in approximately {fo_h}px height at 12px font.
+3. If content is long, use 10-11px font. NEVER overflow.
+4. Format ONLY user's text. NEVER invent content, dates, greetings, signatures.
+5. Font: Arial. Title max 16px. Body 12px. Tables 11px.
+6. Be intelligent: detect document type and apply appropriate layout.
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="background:white">
-{letterhead_tag}
-<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111; line-height:1.5; direction:rtl; padding:6px; box-sizing:border-box; overflow:hidden;">
-CONTENT_HERE
-</div>
-</foreignObject>
-</svg>"""
+OUTPUT: Return ONLY the inner HTML content. No SVG tags, no markdown, no backticks.
+Example: <h2 style="...">Title</h2><table>...</table><p>...</p>"""
 
         contents = [user_msg] if user_msg else ["Create a formal document."]
         if reference_b64:
             contents.append(get_types().Part.from_bytes(
-                data=__import__('base64').b64decode(reference_b64),
-                mime_type="image/jpeg"
+                data=base64.b64decode(reference_b64), mime_type="image/jpeg"
             ))
 
         gen_config = get_types().GenerateContentConfig(
@@ -289,62 +246,33 @@ CONTENT_HERE
 
         raw = (resp.text or "").strip()
 
-        # Clean markdown
+        # Clean markdown wrapping
         if raw.startswith("```"):
             raw = re.sub(r"^```\w*\n?", "", raw)
             raw = re.sub(r"\n?```$", "", raw)
             raw = raw.strip()
 
-        # Extract SVG
-        svg_m = re.search(r"(?s)(<svg[^>]*>.*?</svg>)", raw)
-        if svg_m:
-            svg = svg_m.group(1)
+        # ── EXTRACT INNER HTML ──
+        # If AI returned full SVG anyway, extract just the inner content
+        if '<svg' in raw:
+            inner = extract_inner_html(raw)
+        elif '<foreignObject' in raw:
+            inner = extract_inner_html(raw)
         else:
-            svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="background:white">
-{letterhead_tag}
-<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111; line-height:1.5; direction:rtl; padding:6px; box-sizing:border-box; overflow:hidden;">
-{raw}
-</div>
-</foreignObject>
-</svg>'''
+            # AI returned clean HTML - perfect
+            inner = raw
 
-        # ── POST-PROCESSING ──
+        if not inner:
+            inner = raw  # fallback
 
-        # 1. Ensure xmlns
-        if 'xmlns="http://www.w3.org/2000/svg"' not in svg:
-            svg = svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+        # ── BUILD FINAL SVG (CODE controls layout) ──
+        final_svg = build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner, lh_tag)
 
-        # 2. FORCE single-page viewBox (NEVER let AI extend it)
-        svg = re.sub(r'viewBox="[^"]*"', f'viewBox="0 0 {width} {height}"', svg)
+        # ── POST-PROCESSING (hard rules) ──
+        final_svg = strip_white_rects(final_svg)
 
-        # 3. Force correct width/height on svg tag
-        svg = re.sub(r'(<svg[^>]*?)width="[^"]*"', f'\\1width="{width}"', svg, count=1)
-        svg = re.sub(r'(<svg[^>]*?)height="[^"]*"', f'\\1height="{height}"', svg, count=1)
-
-        # 4. REMOVE all white/opaque rects that cover content
-        svg = re.sub(
-            r'<rect[^>]*(?:fill=["\'](?:white|#fff(?:fff)?|rgba?\(255[^)]*\))["\'])[^>]*/?>',
-            '', svg, flags=re.IGNORECASE
-        )
-
-        # 5. Inject letterhead if provided but missing from SVG
-        if letterhead_b64 and letterhead_tag and '<image' not in svg:
-            svg = svg.replace('<foreignObject', f'{letterhead_tag}\n<foreignObject', 1)
-
-        # 6. Cap foreignObject height to safe area
-        def fix_fo(match):
-            full = match.group(0)
-            h_m = re.search(r'height="(\d+)"', full)
-            if h_m:
-                old_h = int(h_m.group(1))
-                if old_h > fo_h:
-                    full = full.replace(f'height="{old_h}"', f'height="{fo_h}"')
-            return full
-        svg = re.sub(r'<foreignObject[^>]*>', fix_fo, svg, count=1)
-
-        logger.info(f"OK: mode={mode}, style={style}, lh={needs_letterhead_margins}, len={len(svg)}")
-        return jsonify({"response": svg})
+        logger.info(f"OK: mode={mode}, style={style}, lh={needs_lh}, inner={len(inner)}, total={len(final_svg)}")
+        return jsonify({"response": final_svg})
 
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
@@ -358,46 +286,50 @@ def modify():
 
     try:
         data = request.json
-        current = data.get("current_svg", "") or data.get("current_content", "")
+        current_svg = data.get("current_svg", "") or data.get("current_content", "")
         instruction = data.get("instruction", "")
         ref_b64 = data.get("reference_image")
         lh_b64 = data.get("letterhead_image")
 
-        vb = re.search(r'viewBox="0 0 (\d+) (\d+)"', current)
+        # Parse dimensions
+        vb = re.search(r'viewBox="0 0 (\d+) (\d+)"', current_svg)
         w = int(vb.group(1)) if vb else 595
         h = int(vb.group(2)) if vb else 842
 
+        # Detect if letterhead exists
+        has_lh = '<image' in current_svg
+        fo_x, fo_y, fo_w, fo_h = compute_layout(w, h, has_lh)
+
+        # Extract current inner HTML
+        current_inner = extract_inner_html(current_svg)
+
         img_note = ""
         if ref_b64:
-            img_note = f"INSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
+            img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        lh_note = ""
-        if lh_b64:
-            lh_note = f'Add letterhead: <image href="data:image/jpeg;base64,{lh_b64}" x="0" y="0" width="{w}" height="{h}" preserveAspectRatio="xMidYMin slice"/>'
-
-        sys = f"""Expert SVG document modifier for Mauritanian documents.
+        sys = f"""Expert document modifier for Mauritanian documents.
 
 RULES:
-1. Preserve ALL existing content. Apply ONLY the requested change.
-2. Font: Arial. Body 12px, Title 16-18px max.
-3. ALL content MUST remain visible. NEVER cut off or hide text.
-4. viewBox MUST stay "0 0 {w} {h}". NEVER extend.
-5. NEVER add white <rect> elements that cover letterhead or stamps.
-6. Invoice totals: Mauritanian format - "الإجمالي المستحق" colspan 3, amount in last column only.
-7. {img_note}
-8. {lh_note}
+1. You receive the CURRENT HTML content of the document.
+2. Apply ONLY the requested change. Preserve everything else.
+3. Return ONLY the modified HTML content (no SVG wrapper, no foreignObject).
+4. Content must fit in {fo_h}px. If too long, reduce font (min 10px).
+5. Invoice totals: "الإجمالي المستحق" colspan=3, amount in last column.
+6. NEVER add white rectangles or background elements.
+{img_note}
 
-Return JSON: {{"message": "وصف بالعربي", "response": "<svg>...</svg>"}}
-No markdown."""
+OUTPUT FORMAT - JSON:
+{{"message": "وصف التعديل", "content": "<modified HTML here>"}}
+No markdown, just JSON."""
 
         cfg = get_types().GenerateContentConfig(
             system_instruction=sys, temperature=0.15, max_output_tokens=16384,
         )
 
-        cts = [f"SVG:\n{current}\n\nREQUEST:\n{instruction}\n\nMODIFY:"]
+        cts = [f"CURRENT HTML:\n{current_inner}\n\nREQUEST:\n{instruction}\n\nMODIFY:"]
         if ref_b64:
             cts.append(get_types().Part.from_bytes(
-                data=__import__('base64').b64decode(ref_b64), mime_type="image/jpeg"
+                data=base64.b64decode(ref_b64), mime_type="image/jpeg"
             ))
 
         resp = None
@@ -407,27 +339,35 @@ No markdown."""
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         raw = (resp.text or "").strip()
+
+        # Try JSON parse
         rd = extract_json(raw)
-        out = rd.get("response", "")
-        msg = rd.get("message", "")
+        new_inner = rd.get("content", "") or rd.get("response", "")
+        msg = rd.get("message", "تم التعديل")
 
-        if not out:
-            cleaned = raw.replace("```svg", "").replace("```json", "").replace("```", "").strip()
-            sm = re.search(r"(?s)(<svg[^>]*>.*?</svg>)", cleaned)
-            out = sm.group(1) if sm else current
-            msg = msg or "تم التعديل"
+        if not new_inner:
+            # Clean and use directly
+            cleaned = raw.replace("```html", "").replace("```json", "").replace("```", "").strip()
+            if '<svg' in cleaned:
+                new_inner = extract_inner_html(cleaned)
+            else:
+                new_inner = cleaned
+            if not new_inner:
+                new_inner = current_inner  # fallback to original
 
-        # Force single page
-        out = re.sub(r'viewBox="[^"]*"', f'viewBox="0 0 {w} {h}"', out)
+        # Preserve letterhead tag from original SVG
+        lh_tag_match = re.search(r'(<image[^>]*>)', current_svg)
+        lh_tag = lh_tag_match.group(1) if lh_tag_match else ""
 
-        # Remove white rects
-        out = re.sub(r'<rect[^>]*(?:fill=["\'](?:white|#fff(?:fff)?)["\'])[^>]*/?>',
-                      '', out, flags=re.IGNORECASE)
+        # Also handle new letterhead
+        if lh_b64:
+            lh_tag = f'<image href="data:image/jpeg;base64,{lh_b64}" x="0" y="0" width="{w}" height="{h}" preserveAspectRatio="xMidYMin slice"/>'
 
-        if out and 'xmlns="http://www.w3.org/2000/svg"' not in out:
-            out = out.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+        # ── REBUILD SVG (CODE controls layout) ──
+        final_svg = build_svg_wrapper(w, h, fo_x, fo_y, fo_w, fo_h, new_inner, lh_tag)
+        final_svg = strip_white_rects(final_svg)
 
-        return jsonify({"response": out, "message": msg})
+        return jsonify({"response": final_svg, "message": msg})
 
     except Exception as e:
         logger.error(f"Modify: {str(e)}", exc_info=True)
