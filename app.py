@@ -279,11 +279,11 @@ CONTENT_HERE
 
         resp = None
         try:
-            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
+            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except Exception as e:
             logger.warning(f"Primary fail: {e}")
             try:
-                resp = call_gemini("gemini-2.0-flash", contents, gen_config, 50)
+                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
             except Exception as e2:
                 return jsonify({"error": "AI failed", "details": str(e2)}), 500
 
@@ -402,9 +402,9 @@ No markdown."""
 
         resp = None
         try:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
+            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.0-flash", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         raw = (resp.text or "").strip()
         rd = extract_json(raw)
