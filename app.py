@@ -58,20 +58,15 @@ def extract_json(text):
 LETTERHEAD_TOP = 128    # 4.5cm
 LETTERHEAD_BOTTOM = 125 # 4.4cm
 SIDE_MARGIN = 42        # ~1.5cm
-NO_LH_TOP = 34          # ~1.2cm
-NO_LH_BOTTOM = 34       # ~1.2cm
 
 
 def compute_layout(width, height, has_letterhead):
-    """Compute exact foreignObject position - these are FIXED rules."""
-    if has_letterhead:
-        top = LETTERHEAD_TOP
-        bottom = LETTERHEAD_BOTTOM
-    else:
-        top = NO_LH_TOP
-        bottom = NO_LH_BOTTOM
-
+    """Compute exact foreignObject position - ALWAYS reserve safe margins for letterhead."""
+    # التحديث: دائمًا نترك هامش 4.5 سم من الأعلى والأسفل لتفادي الاشتباك إذا أضيفت رأسية لاحقًا
+    top = LETTERHEAD_TOP
+    bottom = LETTERHEAD_BOTTOM
     side = SIDE_MARGIN
+    
     fo_x = side
     fo_y = top
     fo_w = width - (side * 2)
@@ -80,33 +75,59 @@ def compute_layout(width, height, has_letterhead):
 
 
 def build_svg_wrapper(width, height, fo_x, fo_y, fo_w, fo_h, inner_html, letterhead_tag=""):
-    """Build the final SVG with exact layout - CODE controls the structure."""
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="background:white">
-{letterhead_tag}
-<foreignObject x="{fo_x}" y="{fo_y}" width="{fo_w}" height="{fo_h}">
-<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111; line-height:1.5; direction:rtl; padding:4px; box-sizing:border-box; overflow:hidden; height:{fo_h}px;">
-{inner_html}
-</div>
-</foreignObject>
-</svg>'''
+    """Build the final SVG with multi-page support and exact realistic layout."""
+    
+    # تقسيم المحتوى إلى صفحات واقعية بناءً على وسم <pagebreak/>
+    pages = re.split(r'<pagebreak\s*/?>', inner_html, flags=re.IGNORECASE)
+    pages = [p for p in pages if p.strip()]
+    if not pages: 
+        pages = [inner_html]
+
+    num_pages = len(pages)
+    total_height = height * num_pages
+
+    # خلفية مساحة العمل رمادية فاتحة لإبراز الأوراق البيضاء
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {total_height}" width="{width}" height="{total_height}" style="background:#f3f4f6;">\n'
+
+    for i, page_html in enumerate(pages):
+        y_offset = i * height
+        abs_fo_y = y_offset + fo_y
+
+        # رسم ورقة A4 بيضاء واقعية لكل صفحة
+        svg += f'<rect x="0" y="{y_offset}" width="{width}" height="{height}" fill="white" />\n'
+
+        # إضافة الرأسية لكل صفحة بذكاء (مع تعديل مكانها للأسفل حسب الصفحة)
+        if letterhead_tag:
+            shifted_lh = re.sub(r'y="\d+"', f'y="{y_offset}"', letterhead_tag)
+            svg += shifted_lh + '\n'
+
+        # إضافة محتوى الصفحة (مع حماية CSS صارمة لمنع خروج النص من اليسار وتنسيق السطور)
+        svg += f'<foreignObject x="{fo_x}" y="{abs_fo_y}" width="{fo_w}" height="{fo_h}">\n'
+        svg += f'<div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111; line-height:1.7; direction:rtl; padding:4px; box-sizing:border-box; overflow-wrap:break-word; word-wrap:break-word; word-break:break-word; max-width:100%; height:{fo_h}px; text-align:justify;">\n'
+        svg += page_html.strip()
+        svg += '\n</div>\n</foreignObject>\n'
+
+        # فاصل بصري بين الصفحات (ظل خفيف) لتظهر كصفحات منفصلة
+        if i < num_pages - 1:
+            svg += f'<rect x="0" y="{y_offset + height}" width="{width}" height="8" fill="#e5e7eb" />\n'
+
+    svg += '</svg>'
+    return svg
 
 
 def extract_inner_html(svg_text):
-    """Extract ONLY the inner HTML content from inside foreignObject > div."""
-    # Try to find content inside the xhtml div
-    m = re.search(
-        r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>',
-        svg_text, re.DOTALL
-    )
-    if m:
-        return m.group(1).strip()
+    """Extract ONLY the inner HTML content, combining multiple pages back together."""
+    # استخراج محتوى جميع الصفحات لدمجها قبل إرسالها للتعديل
+    divs = re.findall(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', svg_text, re.DOTALL)
+    if divs:
+        return "\n<pagebreak/>\n".join([d.strip() for d in divs])
 
     # Fallback: get everything inside foreignObject
-    m2 = re.search(r'<foreignObject[^>]*>(.*?)</foreignObject>', svg_text, re.DOTALL)
-    if m2:
-        return m2.group(1).strip()
+    fos = re.findall(r'<foreignObject[^>]*>(.*?)</foreignObject>', svg_text, re.DOTALL)
+    if fos:
+        return "\n<pagebreak/>\n".join([f.strip() for f in fos])
 
-    # Last resort: if no SVG structure, return as-is (raw HTML from AI)
+    # Last resort: if no SVG structure, return as-is
     if '<svg' not in svg_text:
         return svg_text.strip()
 
@@ -114,9 +135,11 @@ def extract_inner_html(svg_text):
 
 
 def strip_white_rects(svg):
-    """Remove all white/opaque rects that could cover letterhead."""
+    """Remove all white/opaque rects that could cover letterhead, EXCEPT our page backgrounds."""
+    # لن نقوم بمسح الخلفية البيضاء الأساسية للصفحات التي رسمناها للتو.
+    # سنمسح فقط المستطيلات المضافة عشوائياً بدون تحديد العرض والطول الكامل.
     return re.sub(
-        r'<rect[^>]*(?:fill=["\'](?:white|#fff(?:fff)?|rgba?\(255[^)]*\))["\'])[^>]*/?>',
+        r'<rect(?! x="0" y="\d+" width="\d+" height="\d+" fill="white")[^>]*(?:fill=["\'](?:white|#fff(?:fff)?|rgba?\(255[^)]*\))["\'])[^>]*/?>',
         '', svg, flags=re.IGNORECASE
     )
 
@@ -141,12 +164,12 @@ border-bottom:1px solid #e5e7eb. Clean contemporary look."""
     return """FORMAL/OFFICIAL - Professional Mauritanian document design.
 
 TYPOGRAPHY: Title 16px bold centered. Sections 13px bold with border-bottom:2px solid #333.
-Body 12px. Subtle <hr> between sections. NO bright colors.
+Body 13px. Subtle <hr> between sections. NO bright colors.
 Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd, white only.
 
 TABLE DESIGN:
-- th: background:#333; color:white; padding:7px; font-size:11px; border:1px solid #333;
-- td: padding:6px 8px; font-size:11px; border:1px solid #ddd; text-align:right;
+- th: background:#333; color:white; padding:7px; font-size:12px; border:1px solid #333;
+- td: padding:6px 8px; font-size:12px; border:1px solid #ddd; text-align:right;
 - Even rows: background:#f7f7f7;
 
 INVOICE TABLE (فاتورة/facture/devis):
@@ -157,13 +180,12 @@ After table: "Arrête la présente facture a la somme de : [WORDS] [CURRENCY]"
 FORMS (استمارة): Organize raw text into clean form with label:value pairs and input boxes.
 LETTERS (خطاب): Date, recipient, subject (centered bold), body, signature area.
 
-SHORT content: add padding-top for balance. LONG content: reduce font to 10-11px.
 Formal ≠ boring. Good design, spacing, hierarchy - just no colors."""
 
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V7"})
+    return jsonify({"status": "Monjez V7 (Real Pagination & Safe Margins)"})
 
 
 @app.route("/gemini", methods=["POST"])
@@ -198,11 +220,7 @@ def generate():
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        lh_note = ""
-        if needs_lh:
-            lh_note = f"\nLETTERHEAD: Top {fo_y}px and bottom {LETTERHEAD_BOTTOM}px are reserved. Content area is {fo_h}px."
-        else:
-            lh_note = f"\nNO LETTERHEAD: Full page available. Content area is {fo_h}px."
+        lh_note = f"\nLETTERHEAD AND MARGINS: Top {fo_y}px and bottom {LETTERHEAD_BOTTOM}px are PERMANENTLY reserved. Content area is strictly {fo_h}px height."
 
         # ── AI PROMPT: ask for HTML content only, NOT full SVG ──
         prompt = f"""You are a professional document designer in Mauritania.
@@ -211,16 +229,15 @@ def generate():
 {lh_note}
 {ref_note}
 
-RULES:
+CRITICAL RULES:
 1. Return ONLY the HTML content (no <svg>, no <foreignObject>, no wrapper).
-2. Content must fit in approximately {fo_h}px height at 12px font.
-3. If content is long, use 10-11px font. NEVER overflow.
-4. Format ONLY user's text. NEVER invent content, dates, greetings, signatures.
-5. Font: Arial. Title max 16px. Body 12px. Tables 11px.
-6. Be intelligent: detect document type and apply appropriate layout.
+2. Content area per page is strictly {fo_h}px height.
+3. REAL PAGINATION: If the report or text is long (e.g. over 500 words or long tables), you MUST split it into multiple realistic pages by inserting exactly `<pagebreak/>` where the split should happen. Do NOT shrink text to fit an impossibly small area.
+4. TEXT FORMATTING: Do NOT write long unbroken lines of text. Use `<p style="text-align: justify; margin-bottom: 15px; line-height: 1.7;">` to structure paragraphs beautifully.
+5. Format ONLY user's text. NEVER invent content, dates, greetings, signatures.
+6. Make tables look compact: strictly use `width: 100%; table-layout: fixed; word-wrap: break-word;` to prevent overflowing.
 
-OUTPUT: Return ONLY the inner HTML content. No SVG tags, no markdown, no backticks.
-Example: <h2 style="...">Title</h2><table>...</table><p>...</p>"""
+OUTPUT: Return ONLY the inner HTML content. Use `<pagebreak/>` between pages if content is long."""
 
         contents = [user_msg] if user_msg else ["Create a formal document."]
         if reference_b64:
@@ -231,7 +248,7 @@ Example: <h2 style="...">Title</h2><table>...</table><p>...</p>"""
         gen_config = get_types().GenerateContentConfig(
             system_instruction=prompt,
             temperature=0.2 if style == "formal" else 0.3,
-            max_output_tokens=12000,
+            max_output_tokens=16000, # زيادة لدعم تقارير متعددة الصفحات
         )
 
         resp = None
@@ -253,13 +270,11 @@ Example: <h2 style="...">Title</h2><table>...</table><p>...</p>"""
             raw = raw.strip()
 
         # ── EXTRACT INNER HTML ──
-        # If AI returned full SVG anyway, extract just the inner content
         if '<svg' in raw:
             inner = extract_inner_html(raw)
         elif '<foreignObject' in raw:
             inner = extract_inner_html(raw)
         else:
-            # AI returned clean HTML - perfect
             inner = raw
 
         if not inner:
@@ -294,13 +309,14 @@ def modify():
         # Parse dimensions
         vb = re.search(r'viewBox="0 0 (\d+) (\d+)"', current_svg)
         w = int(vb.group(1)) if vb else 595
-        h = int(vb.group(2)) if vb else 842
+        # The height in viewBox might be total_height (multiple pages). We need the single page height.
+        h = 842 # نثبت الارتفاع ليكون A4 قياسي بدلاً من أخذ الارتفاع الكلي المتمدد
 
         # Detect if letterhead exists
         has_lh = '<image' in current_svg
         fo_x, fo_y, fo_w, fo_h = compute_layout(w, h, has_lh)
 
-        # Extract current inner HTML
+        # Extract current inner HTML (This will now gracefully extract all pages separated by <pagebreak/>)
         current_inner = extract_inner_html(current_svg)
 
         img_note = ""
@@ -313,9 +329,10 @@ RULES:
 1. You receive the CURRENT HTML content of the document.
 2. Apply ONLY the requested change. Preserve everything else.
 3. Return ONLY the modified HTML content (no SVG wrapper, no foreignObject).
-4. Content must fit in {fo_h}px. If too long, reduce font (min 10px).
-5. Invoice totals: "الإجمالي المستحق" colspan=3, amount in last column.
-6. NEVER add white rectangles or background elements.
+4. REAL PAGINATION: If content becomes too long, insert `<pagebreak/>` to create realistic new pages! Do NOT shrink text.
+5. TEXT FORMATTING: Do NOT output long unbroken lines. Use `<p style="margin-bottom: 15px;">` for proper paragraphs.
+6. TABLES: MUST be `width:100%; table-layout:fixed; word-wrap:break-word;` so they don't overflow the page.
+7. NEVER add white rectangles or background elements.
 {img_note}
 
 OUTPUT FORMAT - JSON:
@@ -355,11 +372,13 @@ No markdown, just JSON."""
             if not new_inner:
                 new_inner = current_inner  # fallback to original
 
-        # Preserve letterhead tag from original SVG
-        lh_tag_match = re.search(r'(<image[^>]*>)', current_svg)
-        lh_tag = lh_tag_match.group(1) if lh_tag_match else ""
+        # Preserve letterhead tag from original SVG (ensure y="0" for the multiplier logic)
+        lh_tag_match = re.search(r'(<image[^>]*href="data:image[^>]*>)', current_svg)
+        lh_tag = ""
+        if lh_tag_match:
+            lh_tag = re.sub(r'y="\d+"', 'y="0"', lh_tag_match.group(1))
 
-        # Also handle new letterhead
+        # Also handle new letterhead if user uploads one during modify
         if lh_b64:
             lh_tag = f'<image href="data:image/jpeg;base64,{lh_b64}" x="0" y="0" width="{w}" height="{h}" preserveAspectRatio="xMidYMin slice"/>'
 
