@@ -7,7 +7,7 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("Monjez_V8_HTML")
+logger = logging.getLogger("Monjez_V9_HTML")
 
 app = Flask(__name__)
 
@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V8 (Pure HTML & Native WebKit Ready)")
+                logger.info("✅ Monjez V9 (Unified HTML + Smart Pagination)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -49,14 +49,14 @@ def extract_json(text):
     return {}
 
 def clean_html_output(raw_text):
-    """تنظيف المخرجات من أي تغليف Markdown واستخراج الـ HTML النقي"""
+    """Clean output from any Markdown wrapping and extract pure HTML"""
     raw = raw_text.strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(html|xml)?\n?", "", raw, flags=re.IGNORECASE)
         raw = re.sub(r"\n?```$", "", raw)
     
-    # إذا قام جيميني بتغليف الكود بـ SVG بالخطأ، نستخرج الـ HTML الداخلي
-    div_match = re.search(r'<div[^>]*xmlns="[http://www.w3.org/1999/xhtml](http://www.w3.org/1999/xhtml)"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
+    # If Gemini wrapped in SVG by mistake, extract inner HTML
+    div_match = re.search(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
     if div_match:
         raw = div_match.group(1)
         
@@ -64,7 +64,7 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-#  STYLE PROMPTS
+#  STYLE PROMPTS - FORMAL vs MODERN (actually different!)
 # ══════════════════════════════════════════════════════════
 def get_style_prompt(style, mode):
     if mode == "resumes":
@@ -75,6 +75,38 @@ Colors: navy #1e3a5f, teal #0d9488, charcoal #374151."""
         return """CLONING: Reproduce EXACTLY text/tables from the reference image.
 IGNORE logos, stamps, signatures. Do NOT invent data."""
 
+    if style == "modern":
+        return """MODERN/CONTEMPORARY - Vibrant, clean, professional design with personality.
+
+TYPOGRAPHY: Use bold headings with accent colors. Title 17px bold.
+Section headings 14px bold with colored left border (border-right for RTL).
+
+COLOR PALETTE (USE THESE ACTIVELY):
+- Primary: #2563EB (blue) for headings, borders, accents
+- Secondary: #7C3AED (purple) for highlights
+- Accent: #0891B2 (teal) for tags, badges
+- Background sections: #F0F4FF (light blue), #F5F3FF (light purple)
+- Text: #1E293B (dark slate)
+
+DESIGN ELEMENTS:
+- Section headings: Use colored right-border (4px solid #2563EB) with right padding and light background
+  Example: <h2 style="border-right:4px solid #2563EB; padding-right:12px; background:#F0F4FF; padding:10px 12px; border-radius:6px; color:#1E293B; font-size:14px;">
+- Key values/numbers: Wrap in colored badges
+  Example: <span style="background:#2563EB; color:white; padding:3px 10px; border-radius:12px; font-size:12px;">
+- Cards/sections: Use subtle shadows and rounded corners
+  Example: <div style="background:white; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin:10px 0; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+- Tables: Rounded feel, colored header, alternating rows
+  th: background:#2563EB; color:white; padding:10px; font-size:12px; border:none; 
+  td: padding:8px 10px; font-size:12px; border-bottom:1px solid #E2E8F0;
+  Even rows: background:#F8FAFC;
+- Dividers: Use colored lines instead of plain gray
+  <div style="height:2px; background:linear-gradient(to left, #2563EB, #7C3AED); margin:14px 0; border-radius:2px;"></div>
+
+INVOICE TABLE (فاتورة/facture/devis):
+Columns right-to-left: البيان/الوصف(50%) | السعر | الكمية | الإجمالي
+Total row in <tfoot> with accent background."""
+
+    # Default: formal
     return """FORMAL/OFFICIAL - Professional Mauritanian document design.
 
 TYPOGRAPHY: Title 16px bold centered. Sections 13px bold.
@@ -90,9 +122,47 @@ Columns right-to-left: البيان/الوصف(50%) | السعر | الكمية 
 Total row in <tfoot>: "الإجمالي المستحق" colspan=3, amount in last column only."""
 
 
+# ══════════════════════════════════════════════════════════
+#  DOCUMENT TYPE DETECTION
+# ══════════════════════════════════════════════════════════
+def detect_document_type(user_msg):
+    """Detect if document is likely single-page (invoice, letter) or multi-page (report)"""
+    msg_lower = user_msg.lower()
+    
+    single_page_keywords = [
+        'فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon',
+        'شهادة', 'certificate', 'attestation',
+        'رسالة', 'letter', 'lettre', 'courrier',
+        'إيصال', 'receipt', 'reçu', 'bon de',
+        'تصريح', 'declaration', 'déclaration',
+        'إذن', 'autorisation', 'permission',
+        'بطاقة', 'card', 'carte',
+    ]
+    
+    multi_page_keywords = [
+        'تقرير', 'report', 'rapport',
+        'دراسة', 'study', 'étude',
+        'بحث', 'research', 'recherche',
+        'خطة', 'plan', 'عمل',
+        'مشروع', 'project', 'projet',
+        'تفصيلي', 'detailed', 'détaillé', 'مفصل',
+        'شامل', 'comprehensive', 'complet',
+    ]
+    
+    for kw in single_page_keywords:
+        if kw in msg_lower:
+            return "single_page"
+    
+    for kw in multi_page_keywords:
+        if kw in msg_lower:
+            return "multi_page"
+    
+    return "auto"
+
+
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V8 (Pure HTML Backend Active ⚡)"})
+    return jsonify({"status": "Monjez V9 (Unified HTML + Smart Pagination ⚡)"})
 
 
 @app.route("/gemini", methods=["POST"])
@@ -109,24 +179,46 @@ def generate():
         letterhead_b64 = data.get("letterhead_image")
 
         style_prompt = get_style_prompt(style, mode)
+        doc_type = detect_document_type(user_msg)
 
         ref_note = ""
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        # 🚀 التوجيه الجديد: منع تغليف الصفحة بأي حدود أو أبعاد ثابتة
+        # Document type specific instructions
+        doc_type_instruction = ""
+        if doc_type == "single_page":
+            doc_type_instruction = """
+SINGLE-PAGE DOCUMENT DETECTED (Invoice/Certificate/Letter):
+- Design to fit ONE page. Keep content compact but READABLE (minimum font-size: 11px).
+- You may reduce spacing between elements slightly (margin: 6px instead of 12px).
+- You may reduce table cell padding slightly (padding: 5px instead of 7px).
+- NEVER make font smaller than 11px. Keep it readable.
+- If the content naturally fits one page, great. If it absolutely cannot fit, let it overflow naturally."""
+        elif doc_type == "multi_page":
+            doc_type_instruction = """
+MULTI-PAGE DOCUMENT DETECTED (Report/Study):
+- Use proper structure with clear section headings.
+- Each section heading MUST have at least 2-3 lines of content after it on the same page.
+- NEVER place a heading at the very bottom of a page with no content following it.
+- Tables should NOT be split across pages - the app handles this automatically.
+- Use generous spacing for readability."""
+
         prompt = f"""You are an Expert Document Typesetter in Mauritania.
 
 {style_prompt}
 {ref_note}
+{doc_type_instruction}
 
 CRITICAL RULES (MANDATORY):
 1. RETURN PURE HTML ONLY. Do NOT wrap the output in `<svg>` or `<foreignObject>`.
 2. NO SHORTENING: NEVER summarize or omit the user's data. Write everything out fully.
 3. NO LONG LINES: Do NOT use `<hr>` tags.
-4. PARAGRAPHS: Use proper `<p style="margin-bottom: 12px; text-align: justify; line-height: 1.7;">` for all text.
+4. PARAGRAPHS: Use proper `<p style="margin-bottom: 10px; text-align: justify; line-height: 1.65;">` for all text.
 5. Do NOT include `<html>`, `<head>`, or `<body>` tags. Just the structural elements (`<div>`, `<table>`, `<h1>`, `<p>`).
 6. NO PAGE WRAPPERS: DO NOT wrap the content in an outer page container (like `<div style="width:21cm...">`). DO NOT add black borders, shadows, or fixed width/height simulating a paper. The app handles the A4 paper UI natively. Just output the flowing text/tables.
+7. HEADINGS: Every heading (h1, h2, h3) must be followed by content. Never end a section with just a heading.
+8. TABLES: Always use `style="width:100%; border-collapse:collapse; table-layout:fixed;"` on tables.
 
 OUTPUT: Return raw HTML only."""
 
@@ -157,7 +249,7 @@ OUTPUT: Return raw HTML only."""
 
         clean_html = clean_html_output(resp.text or "")
         
-        logger.info(f"✅ Generated Pure HTML document (mode: {mode})")
+        logger.info(f"✅ Generated HTML (mode: {mode}, style: {style}, type: {doc_type})")
         return jsonify({"response": clean_html})
 
     except Exception as e:
@@ -190,6 +282,7 @@ CRITICAL RULES:
 4. TABLES: `width:100%; table-layout:fixed; word-wrap:break-word;`
 5. NO LONG LINES: Do not use `<hr>` tags.
 6. NO PAGE WRAPPERS: DO NOT wrap the content in an outer page container with fixed heights or borders.
+7. HEADINGS: Never leave a heading as the last element. Always ensure content follows.
 {img_note}
 
 OUTPUT FORMAT - JSON:
