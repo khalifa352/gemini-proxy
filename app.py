@@ -7,7 +7,7 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("Monjez_V9.5_Server")
+logger = logging.getLogger("Monjez_V9.6_Server")
 
 app = Flask(__name__)
 
@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V9.5 Server (Smart Formatting Ready 🪄)")
+                logger.info("✅ Monjez V9.6 Server (Smart Formatting & Bidi Protection Ready 🪄)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -136,7 +136,7 @@ def detect_document_type(user_msg):
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V9.5 Server Active ⚡"})
+    return jsonify({"status": "Monjez V9.6 Server Active ⚡"})
 
 @app.route("/gemini", methods=["POST"])
 def generate():
@@ -174,6 +174,7 @@ CRITICAL RULES:
 2. NO SHORTENING: NEVER summarize data. Write everything fully.
 3. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
 4. PARAGRAPHS: `<p style="margin-bottom: 10px; text-align: justify; line-height: 1.65;">`
+5. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
 
 OUTPUT: Return raw HTML only."""
 
@@ -221,6 +222,7 @@ CRITICAL RULES:
 1. Preserve all recent manual user edits. Apply ONLY the requested AI change.
 2. Return ONLY the modified PURE HTML content (no html/body tags).
 3. DO NOT wrap the content in outer page containers with fixed heights.
+4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222) and Latin/French text in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` so they don't flip backwards.
 {img_note}
 
 OUTPUT FORMAT - JSON:
@@ -263,12 +265,13 @@ def smart_format():
 The user has manually edited this document on a mobile device. It may have messy spacing, broken tags, or unstructured loose text.
 
 YOUR MISSION:
-1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Ensure headings (`<h1>`, `<h2>`) are used logically for titles and sections.
+1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Ensure headings (`<h1>`, `<h2>`) are used logically for titles and sections. Apply logical Text Alignments (Center titles, Justify paragraphs, etc.).
 2. FIX TABLES: If a table is broken or looks messy, fix its HTML structure. Ensure it uses `width:100%; border-collapse:collapse;`.
-3. TYPOGRAPHY: Apply professional spacing, grammar fixes (if there are obvious typos), and alignments.
+3. TYPOGRAPHY: Apply professional spacing and grammar fixes (only if there are obvious typos).
 4. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning the user wrote. ONLY improve the presentation and structure.
 5. PAGE BREAKS: If you see `<div class="manual-page-break"></div>`, KEEP IT exactly as it is. It is crucial for user pagination.
 6. NO WRAPPERS: Return ONLY the inner HTML elements. Do not wrap everything in a master `<div>` or `<svg>`.
+7. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222...) and foreign Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to fix any RTL/LTR flipping issues.
 
 {style_prompt}
 
@@ -276,7 +279,7 @@ OUTPUT FORMAT - JSON:
 {{"message": "تم تنسيق وترتيب المستند بنجاح ✨", "content": "<formatted HTML>"}}"""
 
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.1, max_output_tokens=16384)
-        cts = [f"MESSY HTML:\n{current_html}\n\nPlease format and organize this professionally."]
+        cts = [f"MESSY HTML:\n{current_html}\n\nPlease format, fix Bidi issues, align text, and organize this professionally."]
 
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
@@ -287,7 +290,7 @@ OUTPUT FORMAT - JSON:
         new_inner = rd.get("content", "") or rd.get("response", "")
         if not new_inner: new_inner = clean_html_output(resp.text or "")
 
-        logger.info("✅ Document Smartly Formatted")
+        logger.info("✅ Document Smartly Formatted & Bidi Fixed")
         return jsonify({"response": new_inner, "message": rd.get("message", "تم التنسيق ✨")})
 
     except Exception as e:
