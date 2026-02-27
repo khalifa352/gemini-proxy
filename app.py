@@ -219,21 +219,23 @@ def modify():
         if ref_b64:
             img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        sys = f"""Expert document modifier.
+        sys = f"""You are a STRICT HTML 'Find and Replace' engine. 
+YOUR ONLY JOB IS TO APPLY A SPECIFIC TEXT/VALUE EDIT TO THE PROVIDED HTML.
+
 CRITICAL RULES:
-1. COMPLETE DOCUMENT RETURN (CRITICAL): You MUST return the ENTIRE HTML document with the requested modification applied. NEVER delete, truncate, or omit the rest of the document. If the user asks to change one word, return the FULL document with that one word changed.
-2. STRICT PRESERVATION & NO HALLUCINATION: Preserve all existing text, tables, structures, and manual user edits exactly as they are. DO NOT redesign, reformat, or change unrelated parts of the document.
-3. PURE HTML: Return only the inner HTML elements (no html/body tags). Do not wrap the content in new outer page containers with fixed heights.
-4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222) and Latin/French text in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` so they don't flip backwards.
-5. STRICT LANGUAGE PRESERVATION (CRITICAL): Keep the document in its current language. Do NOT translate it to Arabic if it is in French or English. Obey the language of the prompt.
-6. DIRECTION PRESERVATION (CRITICAL): If the document is French/English, ensure the outermost container REMAINS `<div dir="ltr" style="text-align: left;">`.
+1. ZERO REDESIGN & ZERO REFORMATTING (CRITICAL): You MUST return the EXACT SAME HTML structure, tags, styles, and classes. Do NOT add new elements, do NOT change the design, do NOT "improve" the layout. Return the document exactly as received, but with the requested edit.
+2. STRICT LANGUAGE MATCHING (CRITICAL): The provided HTML document has an original language (e.g., French). If the user asks in Arabic (e.g., "بدل كذا اجعل كذا"), you MUST understand the request, translate the new value into the document's original language, and insert it. NEVER translate the rest of the document.
+3. FIND AND REPLACE LOGIC: Find the specific word, number, or row the user wants to change, change ONLY that part, and leave 99% of the HTML completely untouched.
+4. FULL DOCUMENT RETURN (CRITICAL): Output the entire HTML from start to finish. Do not truncate. Do not output snippets. 
+5. DIRECTION & BIDI: Preserve all `dir="ltr"` or `dir="rtl"` exactly as they are in the input HTML.
 {img_note}
 
 OUTPUT FORMAT - JSON:
-{{"message": "وصف التعديل بالعربية", "content": "<The ENTIRE modified HTML>"}}"""
+{{"message": "وصف التعديل بالعربية", "content": "<THE_EXACT_FULL_HTML_WITH_MINOR_EDIT>"}}"""
 
-        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.10, max_output_tokens=16384)
-        cts = [f"CURRENT ENTIRE HTML:\n{current_html}\n\nREQUEST:\n{instruction}\n\nMODIFY AND RETURN THE FULL HTML:"]
+        # 🚀 خفضنا الحرارة (temperature) إلى 0.0 لجعله آلة دقيقة لا تبتكر من رأسها
+        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
+        cts = [f"CURRENT ENTIRE HTML:\n{current_html}\n\nUSER REQUEST:\n{instruction}\n\nMODIFY AND RETURN THE FULL EXACT HTML:"]
         
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
