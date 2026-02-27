@@ -41,13 +41,6 @@ def call_gemini(model, contents, config, timeout):
         f = ex.submit(get_client().models.generate_content, model=model, contents=contents, config=config)
         return f.result(timeout=timeout)
 
-def extract_json(text):
-    try:
-        m = re.search(r"\{.*\}", text.replace("\n", " "), re.DOTALL)
-        if m: return json.loads(m.group(0))
-    except: pass
-    return {}
-
 def clean_html_output(raw_text):
     """Clean output from any Markdown wrapping, extract pure HTML, and remove editor artifacts"""
     raw = raw_text.strip()
@@ -60,7 +53,7 @@ def clean_html_output(raw_text):
     if div_match:
         raw = div_match.group(1)
         
-    # 🧹 تنظيف الأكواد المتبقية من وضع التعديل (مثل contenteditable)
+    # 🧹 تنظيف الأكواد المتبقية من وضع التعديل
     raw = re.sub(r'\s?contenteditable="[^"]*"', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable=\'[^\']*\'', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable', '', raw, flags=re.IGNORECASE)
@@ -114,10 +107,6 @@ TABLE DESIGN:
 INVOICE TABLE (If applicable):
 Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
 Total row in <tfoot>: "Total" colspan=3, amount in last column only."""
-
-# ══════════════════════════════════════════════════════════
-# DOCUMENT TYPE DETECTION
-# ══════════════════════════════════════════════════════════
 
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
@@ -215,10 +204,6 @@ def modify():
         instruction = data.get("instruction", "")
         ref_b64 = data.get("reference_image")
 
-        # 🚀 فحص مهم: التأكد من وصول الكود قبل التعديل لكي لا يهلوس من الصفر
-        if not current_html or current_html.strip() == "":
-            return jsonify({"error": "Failed", "details": "No CURRENT_HTML provided."}), 400
-
         img_note = ""
         if ref_b64:
             img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
@@ -227,21 +212,27 @@ def modify():
 You do NOT design. You do NOT create from scratch. You ONLY patch existing HTML.
 
 CRITICAL RULES:
-1. ZERO HALLUCINATION (CRITICAL): Do NOT invent fake names, fake companies, fake numbers, or dummy data. Use ONLY the data provided in the <CURRENT_HTML>.
-2. EXACT COPY-PASTE (CRITICAL): You MUST output the EXACT SAME HTML structure, styles, and text as the <CURRENT_HTML>. Only change the specific words, values, or numbers requested by the user.
-3. NO REDESIGN: Do not change colors, fonts, margins, layouts, or CSS classes.
-4. FULL DOCUMENT RETURN: You must return the COMPLETE HTML from start to finish. Do not truncate or use placeholders like "".
-5. LANGUAGE & BIDI: Keep the original language of the document. Do not translate it. Preserve all `dir="ltr"` and `dir="rtl"`.
+1. ZERO HALLUCINATION (CRITICAL): Do NOT invent fake data. Use ONLY the data provided in the <CURRENT_HTML>.
+2. EXACT COPY-PASTE (CRITICAL): Output the EXACT SAME HTML structure as <CURRENT_HTML>, but with the requested edit applied.
+3. NO REDESIGN: Do not change colors, fonts, or CSS classes.
+4. FULL DOCUMENT RETURN: Return the COMPLETE HTML. Do not truncate.
+5. LANGUAGE & BIDI: Keep the original language. Preserve all `dir="ltr"` and `dir="rtl"`.
 {img_note}
 
-OUTPUT FORMAT - JSON:
-{{"message": "وصف التعديل بالعربية", "content": "<FULL_MODIFIED_HTML>"}}"""
+OUTPUT FORMAT:
+Do NOT output JSON. You MUST output exactly like this:
+[MESSAGE]
+وصف قصير للتعديل باللغة العربية
+[/MESSAGE]
+[HTML]
+(ضع هنا كود الـ HTML المعدل كاملاً)
+[/HTML]"""
 
+        # الحرارة 0.0 تضمن الدقة المتناهية
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         
-        # 🚀 استخدام علامات XML لمنع الذكاء الاصطناعي من الخلط بين الأمر والكود الأصلي
         cts = [
-            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Return the FULL HTML with ONLY the specific requested change applied."
+            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact change and return the FULL HTML."
         ]
         
         if ref_b64:
@@ -252,17 +243,26 @@ OUTPUT FORMAT - JSON:
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
-        rd = extract_json(resp.text or "")
-        new_inner = rd.get("content", "") or rd.get("response", "")
-        if not new_inner: new_inner = clean_html_output(resp.text or "")
+        text = resp.text or ""
+        
+        # 🚀 استخراج الكود بأمان تام بعيداً عن أخطاء الـ JSON
+        msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
+        html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
+        
+        if html_match:
+            new_inner = html_match.group(1).strip()
+            message = msg_match.group(1).strip() if msg_match else "تم التعديل بنجاح ✨"
+        else:
+            new_inner = clean_html_output(text)
+            new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
+            message = "تم التعديل بنجاح ✨"
 
-        return jsonify({"response": new_inner, "message": rd.get("message", "تم التعديل")})
+        return jsonify({"response": new_inner, "message": message})
 
     except Exception as e:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
-# 🚀 المسار الجديد للتنسيق الذكي (Smart Formatting)
 @app.route("/format", methods=["POST"])
 def smart_format():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
@@ -278,35 +278,47 @@ def smart_format():
 The user has manually edited this document on a mobile device. It may have messy spacing, broken tags, or unstructured loose text.
 
 YOUR MISSION:
-1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Ensure headings (`<h1>`, `<h2>`) are used logically for titles and sections. Apply logical Text Alignments (Center titles, Justify paragraphs, etc.).
-2. FIX TABLES: If a table is broken or looks messy, fix its HTML structure. Ensure it uses `width:100%; border-collapse:collapse;`.
-3. TYPOGRAPHY: Apply professional spacing and grammar fixes (only if there are obvious typos).
-4. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning the user wrote. ONLY improve the presentation and structure.
-5. PAGE BREAKS: If you see `<div class="manual-page-break"></div>`, KEEP IT exactly as it is. It is crucial for user pagination.
-6. NO WRAPPERS: Return ONLY the inner HTML elements. Do not wrap everything in a master `<div>` or `<svg>`.
-7. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222...) and foreign Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to fix any RTL/LTR flipping issues.
-8. LANGUAGE PRESERVATION: DO NOT translate the text. Keep it in the user's original language.
-9. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the document is in French/English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, use `<div dir="rtl" style="text-align: right;">...</div>`.
+1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Ensure headings are used logically. Apply logical Text Alignments.
+2. FIX TABLES: If a table is broken, fix its HTML structure.
+3. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning. ONLY improve presentation.
+4. BIDI PROTECTION & LANGUAGE: Wrap phone numbers in `<span dir="ltr"...>`. DO NOT translate the text.
+5. DIRECTIONALITY: If document is French/English, wrap ENTIRE output in `<div dir="ltr" style="text-align: left;">`. If Arabic, use `dir="rtl"`.
 
 {style_prompt}
 
-OUTPUT FORMAT - JSON:
-{{"message": "تم تنسيق وترتيب المستند بنجاح ✨", "content": "<formatted HTML>"}}"""
+OUTPUT FORMAT:
+Do NOT output JSON. You MUST output exactly like this:
+[MESSAGE]
+تم تنسيق وترتيب المستند بنجاح ✨
+[/MESSAGE]
+[HTML]
+(ضع هنا كود الـ HTML المنسق كاملاً)
+[/HTML]"""
 
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.1, max_output_tokens=16384)
-        cts = [f"MESSY HTML:\n{current_html}\n\nPlease format, fix Bidi issues, align text, and organize this professionally."]
+        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format, fix Bidi issues, and align text professionally."]
 
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
-        rd = extract_json(resp.text or "")
-        new_inner = rd.get("content", "") or rd.get("response", "")
-        if not new_inner: new_inner = clean_html_output(resp.text or "")
+        text = resp.text or ""
+        
+        # 🚀 استخراج الكود بأمان
+        msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
+        html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
+        
+        if html_match:
+            new_inner = html_match.group(1).strip()
+            message = msg_match.group(1).strip() if msg_match else "تم التنسيق ✨"
+        else:
+            new_inner = clean_html_output(text)
+            new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
+            message = "تم التنسيق ✨"
 
-        logger.info("✅ Document Smartly Formatted & Bidi Fixed")
-        return jsonify({"response": new_inner, "message": rd.get("message", "تم التنسيق ✨")})
+        logger.info("✅ Document Smartly Formatted")
+        return jsonify({"response": new_inner, "message": message})
 
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
