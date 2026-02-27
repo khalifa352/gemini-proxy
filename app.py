@@ -221,19 +221,19 @@ def modify():
 
         sys = f"""Expert document modifier.
 CRITICAL RULES:
-1. STRICT PRESERVATION & NO HALLUCINATION: Preserve all recent manual user edits. Apply ONLY the requested AI change. DO NOT redesign, reformat, or change unrelated parts of the document unless asked.
-2. Return ONLY the modified PURE HTML content (no html/body tags).
-3. DO NOT wrap the content in outer page containers with fixed heights.
+1. COMPLETE DOCUMENT RETURN (CRITICAL): You MUST return the ENTIRE HTML document with the requested modification applied. NEVER delete, truncate, or omit the rest of the document. If the user asks to change one word, return the FULL document with that one word changed.
+2. STRICT PRESERVATION & NO HALLUCINATION: Preserve all existing text, tables, structures, and manual user edits exactly as they are. DO NOT redesign, reformat, or change unrelated parts of the document.
+3. PURE HTML: Return only the inner HTML elements (no html/body tags). Do not wrap the content in new outer page containers with fixed heights.
 4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222) and Latin/French text in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` so they don't flip backwards.
 5. STRICT LANGUAGE PRESERVATION (CRITICAL): Keep the document in its current language. Do NOT translate it to Arabic if it is in French or English. Obey the language of the prompt.
 6. DIRECTION PRESERVATION (CRITICAL): If the document is French/English, ensure the outermost container REMAINS `<div dir="ltr" style="text-align: left;">`.
 {img_note}
 
 OUTPUT FORMAT - JSON:
-{{"message": "وصف التعديل بالعربية", "content": "<modified HTML>"}}"""
+{{"message": "وصف التعديل بالعربية", "content": "<The ENTIRE modified HTML>"}}"""
 
-        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.15, max_output_tokens=16384)
-        cts = [f"CURRENT HTML:\n{current_html}\n\nREQUEST:\n{instruction}\n\nMODIFY:"]
+        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.10, max_output_tokens=16384)
+        cts = [f"CURRENT ENTIRE HTML:\n{current_html}\n\nREQUEST:\n{instruction}\n\nMODIFY AND RETURN THE FULL HTML:"]
         
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
