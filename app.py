@@ -215,27 +215,34 @@ def modify():
         instruction = data.get("instruction", "")
         ref_b64 = data.get("reference_image")
 
+        # 🚀 فحص مهم: التأكد من وصول الكود قبل التعديل لكي لا يهلوس من الصفر
+        if not current_html or current_html.strip() == "":
+            return jsonify({"error": "Failed", "details": "No CURRENT_HTML provided."}), 400
+
         img_note = ""
         if ref_b64:
             img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        sys = f"""You are a STRICT HTML 'Find and Replace' engine. 
-YOUR ONLY JOB IS TO APPLY A SPECIFIC TEXT/VALUE EDIT TO THE PROVIDED HTML.
+        sys = f"""You are a STRICT HTML Code Editor and Find-and-Replace Engine.
+You do NOT design. You do NOT create from scratch. You ONLY patch existing HTML.
 
 CRITICAL RULES:
-1. ZERO REDESIGN & ZERO REFORMATTING (CRITICAL): You MUST return the EXACT SAME HTML structure, tags, styles, and classes. Do NOT add new elements, do NOT change the design, do NOT "improve" the layout. Return the document exactly as received, but with the requested edit.
-2. STRICT LANGUAGE MATCHING (CRITICAL): The provided HTML document has an original language (e.g., French). If the user asks in Arabic (e.g., "بدل كذا اجعل كذا"), you MUST understand the request, translate the new value into the document's original language, and insert it. NEVER translate the rest of the document.
-3. FIND AND REPLACE LOGIC: Find the specific word, number, or row the user wants to change, change ONLY that part, and leave 99% of the HTML completely untouched.
-4. FULL DOCUMENT RETURN (CRITICAL): Output the entire HTML from start to finish. Do not truncate. Do not output snippets. 
-5. DIRECTION & BIDI: Preserve all `dir="ltr"` or `dir="rtl"` exactly as they are in the input HTML.
+1. ZERO HALLUCINATION (CRITICAL): Do NOT invent fake names, fake companies, fake numbers, or dummy data. Use ONLY the data provided in the <CURRENT_HTML>.
+2. EXACT COPY-PASTE (CRITICAL): You MUST output the EXACT SAME HTML structure, styles, and text as the <CURRENT_HTML>. Only change the specific words, values, or numbers requested by the user.
+3. NO REDESIGN: Do not change colors, fonts, margins, layouts, or CSS classes.
+4. FULL DOCUMENT RETURN: You must return the COMPLETE HTML from start to finish. Do not truncate or use placeholders like "".
+5. LANGUAGE & BIDI: Keep the original language of the document. Do not translate it. Preserve all `dir="ltr"` and `dir="rtl"`.
 {img_note}
 
 OUTPUT FORMAT - JSON:
-{{"message": "وصف التعديل بالعربية", "content": "<THE_EXACT_FULL_HTML_WITH_MINOR_EDIT>"}}"""
+{{"message": "وصف التعديل بالعربية", "content": "<FULL_MODIFIED_HTML>"}}"""
 
-        # 🚀 خفضنا الحرارة (temperature) إلى 0.0 لجعله آلة دقيقة لا تبتكر من رأسها
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
-        cts = [f"CURRENT ENTIRE HTML:\n{current_html}\n\nUSER REQUEST:\n{instruction}\n\nMODIFY AND RETURN THE FULL EXACT HTML:"]
+        
+        # 🚀 استخدام علامات XML لمنع الذكاء الاصطناعي من الخلط بين الأمر والكود الأصلي
+        cts = [
+            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Return the FULL HTML with ONLY the specific requested change applied."
+        ]
         
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
