@@ -96,8 +96,8 @@ DESIGN ELEMENTS:
   Even rows: background:#fcfcfc;
 - Dividers: <div style="height:1px; background:linear-gradient(to left, #2980b9, transparent); margin:14px 0;"></div>
 
-INVOICE TABLE:
-Columns right-to-left: البيان/الوصف(50%) | السعر | الكمية | الإجمالي
+INVOICE TABLE (If applicable):
+Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language).
 Total row in <tfoot> with background:#ebf5fb; color:#1a5276; font-weight:bold."""
 
     # Default: formal
@@ -111,9 +111,9 @@ TABLE DESIGN:
 - td: padding:6px 8px; font-size:12px; border:1px solid #ddd; text-align:right;
 - Even rows: background:#f7f7f7;
 
-INVOICE TABLE:
-Columns right-to-left: البيان/الوصف(50%) | السعر | الكمية | الإجمالي
-Total row in <tfoot>: "الإجمالي المستحق" colspan=3, amount in last column only."""
+INVOICE TABLE (If applicable):
+Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language).
+Total row in <tfoot>: "Total" colspan=3, amount in last column only."""
 
 # ══════════════════════════════════════════════════════════
 # DOCUMENT TYPE DETECTION
@@ -175,6 +175,7 @@ CRITICAL RULES:
 3. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
 4. PARAGRAPHS: `<p style="margin-bottom: 10px; text-align: justify; line-height: 1.65;">`
 5. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
+6. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. If the user writes in French, the entire output MUST be in French. DO NOT translate to Arabic unless explicitly told to do so.
 
 OUTPUT: Return raw HTML only."""
 
@@ -219,10 +220,11 @@ def modify():
 
         sys = f"""Expert document modifier.
 CRITICAL RULES:
-1. Preserve all recent manual user edits. Apply ONLY the requested AI change.
+1. STRICT PRESERVATION & NO HALLUCINATION: Preserve all recent manual user edits. Apply ONLY the requested AI change. DO NOT redesign, reformat, or change unrelated parts of the document unless asked.
 2. Return ONLY the modified PURE HTML content (no html/body tags).
 3. DO NOT wrap the content in outer page containers with fixed heights.
 4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222) and Latin/French text in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` so they don't flip backwards.
+5. STRICT LANGUAGE PRESERVATION (CRITICAL): Keep the document in its current language. Do NOT translate it to Arabic if it is in French or English. Obey the language of the prompt.
 {img_note}
 
 OUTPUT FORMAT - JSON:
@@ -272,6 +274,7 @@ YOUR MISSION:
 5. PAGE BREAKS: If you see `<div class="manual-page-break"></div>`, KEEP IT exactly as it is. It is crucial for user pagination.
 6. NO WRAPPERS: Return ONLY the inner HTML elements. Do not wrap everything in a master `<div>` or `<svg>`.
 7. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222...) and foreign Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to fix any RTL/LTR flipping issues.
+8. LANGUAGE PRESERVATION: DO NOT translate the text. Keep it in the user's original language.
 
 {style_prompt}
 
