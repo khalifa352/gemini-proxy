@@ -89,15 +89,15 @@ COLOR PALETTE (Harmonious & Comfortable):
 - Dividers/Borders: #d5dbdb (Soft gray-blue)
 
 DESIGN ELEMENTS:
-- Section headings: color:#1a5276; border-right:3px solid #2980b9; padding-right:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
+- Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
 - Tables: Soft and clean styling.
-  th: background:#ebf5fb; color:#1a5276; padding:8px; font-size:12px; border:1px solid #d5dbdb; font-weight:bold;
-  td: padding:8px; font-size:12px; border:1px solid #d5dbdb; color:#2c3e50; text-align:right;
+  th: background:#ebf5fb; color:#1a5276; padding:8px; font-size:12px; border:1px solid #d5dbdb; font-weight:bold; text-align:start;
+  td: padding:8px; font-size:12px; border:1px solid #d5dbdb; color:#2c3e50; text-align:start;
   Even rows: background:#fcfcfc;
-- Dividers: <div style="height:1px; background:linear-gradient(to left, #2980b9, transparent); margin:14px 0;"></div>
+- Dividers: <div style="height:1px; background:linear-gradient(to right, #2980b9, transparent); opacity:0.5; margin:14px 0;"></div>
 
 INVOICE TABLE (If applicable):
-Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language).
+Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
 Total row in <tfoot> with background:#ebf5fb; color:#1a5276; font-weight:bold."""
 
     # Default: formal
@@ -107,12 +107,12 @@ TYPOGRAPHY: Title 16px bold centered. Sections 13px bold.
 Body 13px. NO bright colors. Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd.
 
 TABLE DESIGN:
-- th: background:#333; color:white; padding:7px; font-size:12px; border:1px solid #333;
-- td: padding:6px 8px; font-size:12px; border:1px solid #ddd; text-align:right;
+- th: background:#333; color:white; padding:7px; font-size:12px; border:1px solid #333; text-align:start;
+- td: padding:6px 8px; font-size:12px; border:1px solid #ddd; text-align:start;
 - Even rows: background:#f7f7f7;
 
 INVOICE TABLE (If applicable):
-Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language).
+Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
 Total row in <tfoot>: "Total" colspan=3, amount in last column only."""
 
 # ══════════════════════════════════════════════════════════
@@ -173,9 +173,10 @@ CRITICAL RULES:
 1. RETURN PURE HTML ONLY. NO `<svg>`, NO `<html>`, NO `<body>`. Just `<div>`, `<table>`, `<h1>`, `<p>`.
 2. NO SHORTENING: NEVER summarize data. Write everything fully.
 3. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
-4. PARAGRAPHS: `<p style="margin-bottom: 10px; text-align: justify; line-height: 1.65;">`
+4. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
 5. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
 6. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. If the user writes in French, the entire output MUST be in French. DO NOT translate to Arabic unless explicitly told to do so.
+7. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the requested language is French or English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, wrap it in `<div dir="rtl" style="text-align: right;">...</div>`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -225,6 +226,7 @@ CRITICAL RULES:
 3. DO NOT wrap the content in outer page containers with fixed heights.
 4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222) and Latin/French text in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` so they don't flip backwards.
 5. STRICT LANGUAGE PRESERVATION (CRITICAL): Keep the document in its current language. Do NOT translate it to Arabic if it is in French or English. Obey the language of the prompt.
+6. DIRECTION PRESERVATION (CRITICAL): If the document is French/English, ensure the outermost container REMAINS `<div dir="ltr" style="text-align: left;">`.
 {img_note}
 
 OUTPUT FORMAT - JSON:
@@ -275,6 +277,7 @@ YOUR MISSION:
 6. NO WRAPPERS: Return ONLY the inner HTML elements. Do not wrap everything in a master `<div>` or `<svg>`.
 7. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (+222...) and foreign Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to fix any RTL/LTR flipping issues.
 8. LANGUAGE PRESERVATION: DO NOT translate the text. Keep it in the user's original language.
+9. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the document is in French/English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, use `<div dir="rtl" style="text-align: right;">...</div>`.
 
 {style_prompt}
 
