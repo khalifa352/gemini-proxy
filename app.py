@@ -345,18 +345,23 @@ Do NOT output JSON. You MUST output exactly like this:
 # 🚀 NEW: DESIGN GENERATION (Fast Fallback & Timeout Protection)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Direct & Safe Call)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     try:
         from google import genai as g
         from google.genai import types as t
-        import concurrent.futures
         
         k = os.environ.get("GOOGLE_API_KEY")
         if not k:
-            return jsonify({"error": "API Key Missing"}), 500
+            return jsonify({"error": "Failed", "details": "API Key Missing"}), 500
             
-        img_client = g.Client(api_key=k, http_options={"api_version": "v1"})
+        # 🚀 اتصال نظيف ومباشر بدون تعقيدات تسبب الـ Deadlock
+        client = g.Client(api_key=k)
+
         data = request.json
         user_prompt = data.get("prompt", "")
 
@@ -364,62 +369,37 @@ def generate_image():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
         enhanced_prompt = f"Professional, high-quality, commercial advertising design, creative graphic design, visually stunning. {user_prompt}"
-        logger.info(f"🎨 Starting Image Task... Prompt: {user_prompt[:50]}...")
 
-        # تم تقليل القائمة للنماذج الأهم لتقليل وقت البحث
-        models_to_try = [
-            'imagen-3.0-generate-001',      # الأحدث والأقوى
-            'imagen-3.0-fast-generate-001'  # الأسرع (إن وجد)
-        ]
+        logger.info(f"🎨 Sending request to Imagen 3... Prompt: {user_prompt[:50]}...")
 
-        img_bytes = None
-        used_model = None
-
-        # 🚀 دالة توليد الصورة ليتم استدعاؤها مع مؤقت زمني
-        def try_gen(model):
-            return img_client.models.generate_images(
-                model=model,
-                prompt=enhanced_prompt,
-                config=t.GenerateImagesConfig(
-                    number_of_images=1,
-                    output_mime_type="image/jpeg",
-                    aspect_ratio="1:1"
-                )
+        # 🚀 توليد مباشر وبسيط بدون ThreadPool لمنع شلل سيرفرات Render
+        result = client.models.generate_images(
+            model='imagen-3.0-generate-001',
+            prompt=enhanced_prompt,
+            config=t.GenerateImagesConfig(
+                number_of_images=1,
+                output_mime_type="image/jpeg",
+                aspect_ratio="1:1"
             )
+        )
 
-        for model_name in models_to_try:
-            try:
-                logger.info(f"🔄 Trying model: {model_name} (Max 25s)...")
-                
-                # إجبار النموذج على الرد خلال 25 ثانية وإلا ننتقل للتالي (لمنع قطع Render)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(try_gen, model_name)
-                    result = future.result(timeout=25) 
-
-                if result and result.generated_images:
-                    img_bytes = result.generated_images[0].image.image_bytes
-                    used_model = model_name
-                    break  # نجاح!
-                    
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"⚠️ Model {model_name} timed out (Took >25s). Skipping.")
-                continue
-            except Exception as e:
-                logger.warning(f"⚠️ Model {model_name} failed: {str(e)}")
-                continue 
-
-        if img_bytes:
+        if result and result.generated_images:
+            img_bytes = result.generated_images[0].image.image_bytes
             img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-            logger.info(f"✅ Design Generated Successfully using [{used_model}]")
-            return jsonify({"response": img_b64, "message": f"تم التصميم بنجاح ✨"})
+            logger.info("✅ Design Generated Successfully")
+            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
         else:
-            logger.error("❌ All models failed or unsupported.")
-            # إرجاع رد سريع للتطبيق بدلاً من الـ Timeout المزعج
-            return jsonify({"error": "Failed", "details": "ميزة توليد الصور غير مدعومة حالياً في مفتاح API الخاص بك، أو أن الخوادم مشغولة."}), 500
+            return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
 
     except Exception as e:
-        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        error_msg = str(e)
+        logger.error(f"Design Server Error: {error_msg}")
+        
+        # 🚀 إذا ردت جوجل بأن النموذج غير مدعوم في حسابك، نرسل الرسالة للتطبيق فوراً بدلاً من التجمد
+        if "404" in error_msg or "not found" in error_msg.lower():
+            return jsonify({"error": "Failed", "details": "عذراً، ميزة توليد الصور (Imagen 3) غير مدعومة أو غير مفعلة في مفتاح API الخاص بك حالياً."}), 500
+            
+        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء التوليد، يرجى المحاولة لاحقاً."}), 500
 
 
 
