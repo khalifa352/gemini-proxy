@@ -337,6 +337,10 @@ Do NOT output JSON. You MUST output exactly like this:
 # 🚀 NEW: DESIGN GENERATION (Nano Banana 2 / Imagen 3)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Smart Fallback Mechanism)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     try:
@@ -347,41 +351,65 @@ def generate_image():
         if not k:
             return jsonify({"error": "API Key Missing"}), 500
             
-        # 🚀 الحل الجراحي: إنشاء عميل جديد مخصص للصور بدون قيد v1beta
-        img_client = g.Client(api_key=k)
+        # استخدام الإصدار الافتراضي المخصص للصور
+        img_client = g.Client(api_key=k, http_options={"api_version": "v1"})
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        ref_b64 = data.get("reference_image") 
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
+        # تحسين الوصف لضمان نتيجة احترافية
         enhanced_prompt = f"Professional, high-quality, commercial advertising design, creative graphic design, visually stunning. {user_prompt}"
 
-        logger.info(f"🎨 Generating Design with Imagen 3... Prompt: {user_prompt[:50]}...")
+        logger.info(f"🎨 Starting Image Generation Task... Prompt: {user_prompt[:50]}...")
 
-        # استخدام العميل الجديد لتوليد الصورة
-        result = img_client.models.generate_images(
-            model='imagen-3.0-generate-001',
-            prompt=enhanced_prompt,
-            config=t.GenerateImagesConfig(
-                number_of_images=1,
-                output_mime_type="image/jpeg",
-                aspect_ratio="1:1"
-            )
-        )
+        # 🚀 قائمة أفضل النماذج بالترتيب من الأقوى للأقدم كخطة بديلة (Fallback)
+        models_to_try = [
+            'imagen-3.0-generate-001',      # الخيار الأول: الأقوى والأحدث (Imagen 3)
+            'imagen-3.0-fast-generate-001', # الخيار الثاني: النسخة السريعة
+            'imagegeneration@006',          # الخيار الثالث: نموذج مستقر ومجرب (Imagen 2)
+            'imagegeneration@005'           # الخيار الأخير للإصدارات الأقدم
+        ]
 
-        if result.generated_images:
-            img_bytes = result.generated_images[0].image.image_bytes
+        img_bytes = None
+        used_model = None
+
+        # 🚀 خوارزمية البحث التلقائي عن النموذج المدعوم
+        for model_name in models_to_try:
+            try:
+                logger.info(f"🔄 Trying model: {model_name}...")
+                result = img_client.models.generate_images(
+                    model=model_name,
+                    prompt=enhanced_prompt,
+                    config=t.GenerateImagesConfig(
+                        number_of_images=1,
+                        output_mime_type="image/jpeg",
+                        aspect_ratio="1:1"
+                    )
+                )
+                if result.generated_images:
+                    img_bytes = result.generated_images[0].image.image_bytes
+                    used_model = model_name
+                    break  # نجح التوليد! نكسر الحلقة ونتوقف عن البحث
+                    
+            except Exception as e:
+                # إذا فشل النموذج، نطبع الخطأ بصمت وننتقل للنموذج التالي
+                logger.warning(f"⚠️ Model {model_name} failed or unsupported: {str(e)}")
+                continue 
+
+        # 🚀 التحقق من النتيجة النهائية
+        if img_bytes:
             img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-            logger.info("✅ Design Generated Successfully")
-            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+            logger.info(f"✅ Design Generated Successfully using [{used_model}]")
+            return jsonify({"response": img_b64, "message": f"تم التصميم بنجاح ✨ ({used_model})"})
         else:
-            return jsonify({"error": "Failed", "details": "لم يقم النموذج بتوليد الصورة، قد يكون بسبب قيود المحتوى."}), 500
+            logger.error("❌ All models failed to generate the image.")
+            return jsonify({"error": "Failed", "details": "عذراً، جميع نماذج توليد الصور غير متاحة حالياً لحسابك. تأكد من صلاحيات مفتاح API الخاص بك."}), 500
 
     except Exception as e:
-        logger.error(f"Design Error: {str(e)}", exc_info=True)
+        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
