@@ -339,22 +339,21 @@ Do NOT output JSON. You MUST output exactly like this:
 # ══════════════════════════════════════════════════════════
 # 🚀 NEW: DESIGN GENERATION (Vertex AI / GCP Key Integration)
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Vertex AI Direct REST API)
+# ══════════════════════════════════════════════════════════
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
+    import urllib.request
+    import urllib.error
+    
     try:
-        from google import genai as g
-        from google.genai import types as t
-        
-        # 🚀 قراءة المفتاح الجديد الخاص بـ Vertex AI من إعدادات Render
-        # (استخدمنا الاسمين تحسباً لأي خطأ إملائي في الشرطة أو الشرطة السفلية)
+        # 🚀 قراءة مفتاح Vertex AI
         k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY2")
         
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود في إعدادات السيرفر."}), 500
-            
-        # الاتصال باستخدام مفتاح المؤسسات
-        client = g.Client(api_key=k)
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
@@ -362,63 +361,65 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🧠 Step 1: Enhancing prompt with Gemini Flash for: {user_prompt}")
+        logger.info(f"🎨 Sending direct REST request to Vertex AI (Imagen 3)...")
 
-        # 🚀 المرحلة الأولى: هندسة الأوامر (لتحويل طلبك البسيط لصورة احترافية واقعية)
-        sys_instruct = """You are a world-class AI art director. 
-Translate the user's request to English and expand it into a BREATHTAKING, highly detailed prompt for an image generation model.
-- Focus on premium product photography, hyper-realism, and elegant composition.
-- Avoid flat vector or cartoon looks unless explicitly requested.
-- Specify cinematic lighting, 8k resolution, and textures.
-OUTPUT ONLY THE ENGLISH PROMPT. No introductions."""
+        # 🚀 تعزيز الوصف ليكون احترافياً وواقعياً كأنه خارج من ChatGPT Pro
+        enhanced_prompt = f"Ultra-realistic photorealistic photography, 8k resolution, cinematic lighting, shot on 35mm lens, highly detailed, lifelike textures. Commercial advertising quality. NO vector, NO cartoon. Subject: {user_prompt}"
 
-        try:
-            enhance_resp = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=user_prompt,
-                config=t.GenerateContentConfig(
-                    system_instruction=sys_instruct,
-                    temperature=0.7
-                )
-            )
-            expanded_prompt = enhance_resp.text.strip()
-            logger.info(f"✨ Enhanced Prompt: {expanded_prompt}")
-        except Exception as e:
-            logger.warning(f"Failed to enhance prompt. Using original. Error: {e}")
-            expanded_prompt = f"Ultra-realistic photorealistic photography, highly detailed. {user_prompt}"
-
-        # 🚀 المرحلة الثانية: إرسال الوصف المعزز إلى نموذج Imagen 3
-        logger.info("🎨 Step 2: Generating image with Imagen 3 (Vertex Key)...")
+        # 🚀 بناء الرابط المباشر (مثل كود الـ curl الذي اكتشفته تماماً) ولكن لنموذج الصور
+        url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/imagen-3.0-generate-001:predict?key={k}"
         
-        result = client.models.generate_images(
-            model='imagen-3.0-generate-001',
-            prompt=expanded_prompt,
-            config=t.GenerateImagesConfig(
-                number_of_images=1,
-                output_mime_type="image/jpeg",
-                aspect_ratio="1:1"
-            )
-        )
-
-        if result and result.generated_images:
-            img_bytes = result.generated_images[0].image.image_bytes
-            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-            logger.info("✅ Vertex AI Design Generated Successfully")
-            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-        else:
-            return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
-
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Design Server Error: {error_msg}")
+        headers = {
+            "Content-Type": "application/json"
+        }
         
-        # رسائل خطأ دقيقة لفهم ما يحدث في الكواليس
-        if "404" in error_msg or "not found" in error_msg.lower():
-            return jsonify({"error": "Failed", "details": "حساب Vertex AI يمنع الوصول لنموذج الصور (تحقق من إعدادات الفوترة أو الموقع في منصة Google Cloud)."}), 500
-        elif "403" in error_msg or "permission" in error_msg.lower():
-            return jsonify({"error": "Failed", "details": "مفتاح Vertex لا يمتلك صلاحية الوصول لهذه الواجهة."}), 500
+        # هيكل الطلب المخصص لنموذج Imagen 3 في Vertex AI
+        payload = {
+            "instances": [
+                {
+                    "prompt": enhanced_prompt
+                }
+            ],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "1:1",
+                "outputOptions": {
+                    "mimeType": "image/jpeg"
+                }
+            }
+        }
+
+        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
+        
+        # إرسال الطلب مباشرة
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode('utf-8'))
             
-        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء التوليد، يرجى المحاولة لاحقاً."}), 500
+            # استخراج الصورة من الرد
+            if "predictions" in result and len(result["predictions"]) > 0:
+                img_b64 = result["predictions"][0].get("bytesBase64Encoded")
+                if img_b64:
+                    logger.info("✅ Vertex AI Design Generated Successfully (Direct REST)")
+                    return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+            
+            return jsonify({"error": "Failed", "details": "النموذج لم يرجع الصورة بشكل صحيح."}), 500
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        logger.error(f"Vertex API Error: {error_body}")
+        
+        # معالجة أخطاء Vertex AI وتوضيحها
+        if e.code == 404:
+             return jsonify({"error": "Failed", "details": "نموذج الصور لا يزال قيد التفعيل في حساب Vertex الخاص بك، قد يستغرق الأمر بعض الوقت."}), 500
+        elif e.code == 403:
+             return jsonify({"error": "Failed", "details": "مفتاح Vertex الخاص بك لا يملك صلاحية الوصول إلى Imagen 3."}), 500
+             
+        return jsonify({"error": "Failed", "details": f"خطأ من خوادم Vertex: {e.code}"}), 500
+        
+    except Exception as e:
+        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء الاتصال بالخادم."}), 500
+
 
 
 
