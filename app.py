@@ -152,7 +152,6 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🚀 إضافة قواعد الحفاظ على النص الجاهز ومنع التوليد الوهمي
         prompt = f"""You are an Expert Document Typesetter in Mauritania.
 
 {style_prompt}
@@ -215,7 +214,6 @@ def modify():
         if ref_b64:
             img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        # 🚀 إضافة أوامر (CASCADING UPDATES) لإجبار الذكاء على حساب المجموع عند تغيير السعر وتحديث الفقرات المتصلة
         sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
@@ -330,6 +328,52 @@ Do NOT output JSON. You MUST output exactly like this:
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Nano Banana 2 / Imagen 3)
+# ══════════════════════════════════════════════════════════
+
+@app.route("/generate_image", methods=["POST"])
+def generate_image():
+    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
+
+    try:
+        data = request.json
+        user_prompt = data.get("prompt", "")
+        # نستقبل الصورة المرجعية إن وجدت لدمجها أو الاستفادة منها مستقبلاً
+        ref_b64 = data.get("reference_image") 
+
+        if not user_prompt.strip():
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
+
+        # تحسين الـ Prompt لضمان جودة استثنائية للإعلانات والشعارات
+        enhanced_prompt = f"Professional, high-quality, commercial advertising design, creative graphic design, visually stunning. {user_prompt}"
+
+        logger.info(f"🎨 Generating Design with Imagen 3... Prompt: {user_prompt[:50]}...")
+
+        # استخدام نموذج Imagen 3 (الاسم البرمجي لأفضل نماذج الصور في جوجل حالياً)
+        result = get_client().models.generate_images(
+            model='imagen-3.0-generate-001',
+            prompt=enhanced_prompt,
+            config=get_types().GenerateImagesConfig(
+                number_of_images=1,
+                output_mime_type="image/jpeg",
+                aspect_ratio="1:1" # صيغة مربعة مثالية للسوشيال ميديا والإعلانات
+            )
+        )
+
+        if result.generated_images:
+            img_bytes = result.generated_images[0].image.image_bytes
+            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+            logger.info("✅ Design Generated Successfully")
+            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+        else:
+            return jsonify({"error": "Failed", "details": "لم يقم النموذج بتوليد الصورة، قد يكون بسبب قيود المحتوى."}), 500
+
+    except Exception as e:
+        logger.error(f"Design Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
