@@ -200,39 +200,48 @@ def modify():
 
     try:
         data = request.json
-        current_html = data.get("current_html", "")
-        instruction = data.get("instruction", "")
+        
+        # 🚀 التقاط الكود بأي اسم يرسله التطبيق لتجنب فقدان المستند
+        current_html = data.get("current_html") or data.get("currentSVG") or data.get("current_svg") or data.get("htmlContent") or ""
+        instruction = data.get("instruction") or data.get("prompt") or ""
         ref_b64 = data.get("reference_image")
+        
+        # 🚀 صمام أمان: إذا كان الكود فارغاً، نرفض التعديل لكي لا يهلوس الذكاء ويصمم من خياله
+        if not current_html.strip():
+            logger.error("❌ ERROR: current_html is empty! AI will hallucinate if allowed.")
+            return jsonify({"error": "Failed", "details": "لم يتم العثور على محتوى المستند الحالي لإجراء التعديل الذكي. يرجى المحاولة مرة أخرى."}), 400
 
         img_note = ""
         if ref_b64:
             img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        sys = f"""You are a STRICT HTML Code Editor and Find-and-Replace Engine.
-You do NOT design. You do NOT create from scratch. You ONLY patch existing HTML.
+        # 🚀 أوامر صارمة جداً (Surgical Edit) تمنعه من التصميم من الصفر
+        sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
+You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
-CRITICAL RULES:
-1. ZERO HALLUCINATION (CRITICAL): Do NOT invent fake data. Use ONLY the data provided in the <CURRENT_HTML>.
-2. EXACT COPY-PASTE (CRITICAL): Output the EXACT SAME HTML structure as <CURRENT_HTML>, but with the requested edit applied.
-3. NO REDESIGN: Do not change colors, fonts, or CSS classes.
-4. FULL DOCUMENT RETURN: Return the COMPLETE HTML. Do not truncate.
-5. LANGUAGE & BIDI: Keep the original language. Preserve all `dir="ltr"` and `dir="rtl"`.
+CRITICAL RULES (DO NOT DISOBEY):
+1. ZERO HALLUCINATION: Do NOT invent a new document. Do NOT rewrite from scratch.
+2. EXACT COPY-PASTE: You MUST output the EXACT SAME HTML structure, classes, and styles provided in <CURRENT_HTML>.
+3. SURGICAL EDIT: Find the specific element mentioned in <USER_REQUEST> (e.g., a specific price, name, or word) and change ONLY that exact part. 
+4. NO REDESIGN: Keep all fonts, colors, layouts, and tables entirely untouched unless the user explicitly asks to change them.
+5. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders.
+6. LANGUAGE & BIDI: Keep the original language. Preserve all `dir="ltr"` and `dir="rtl"`.
 {img_note}
 
 OUTPUT FORMAT:
 Do NOT output JSON. You MUST output exactly like this:
 [MESSAGE]
-وصف قصير للتعديل باللغة العربية
+وصف قصير للتعديل باللغة العربية (مثال: تم تعديل السعر المطلوب)
 [/MESSAGE]
 [HTML]
 (ضع هنا كود الـ HTML المعدل كاملاً)
 [/HTML]"""
 
-        # الحرارة 0.0 تضمن الدقة المتناهية
+        # الحرارة 0.0 تضمن الدقة المتناهية وعدم الإبداع
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         
         cts = [
-            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact change and return the FULL HTML."
+            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return the FULL updated HTML."
         ]
         
         if ref_b64:
@@ -245,7 +254,7 @@ Do NOT output JSON. You MUST output exactly like this:
 
         text = resp.text or ""
         
-        # 🚀 استخراج الكود بأمان تام بعيداً عن أخطاء الـ JSON
+        # استخراج الكود بأمان تام
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
         
@@ -260,6 +269,7 @@ Do NOT output JSON. You MUST output exactly like this:
         return jsonify({"response": new_inner, "message": message})
 
     except Exception as e:
+        logger.error(f"Modify Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
@@ -305,7 +315,7 @@ Do NOT output JSON. You MUST output exactly like this:
 
         text = resp.text or ""
         
-        # 🚀 استخراج الكود بأمان
+        # استخراج الكود بأمان
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
         
