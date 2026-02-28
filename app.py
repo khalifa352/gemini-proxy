@@ -333,32 +333,42 @@ Do NOT output JSON. You MUST output exactly like this:
 # 🚀 NEW: DESIGN GENERATION (Nano Banana 2 / Imagen 3)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Nano Banana 2 / Imagen 3)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
-    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
-
     try:
+        from google import genai as g
+        from google.genai import types as t
+        
+        k = os.environ.get("GOOGLE_API_KEY")
+        if not k:
+            return jsonify({"error": "API Key Missing"}), 500
+            
+        # 🚀 الحل الجراحي: إنشاء عميل جديد مخصص للصور بدون قيد v1beta
+        img_client = g.Client(api_key=k)
+
         data = request.json
         user_prompt = data.get("prompt", "")
-        # نستقبل الصورة المرجعية إن وجدت لدمجها أو الاستفادة منها مستقبلاً
         ref_b64 = data.get("reference_image") 
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        # تحسين الـ Prompt لضمان جودة استثنائية للإعلانات والشعارات
         enhanced_prompt = f"Professional, high-quality, commercial advertising design, creative graphic design, visually stunning. {user_prompt}"
 
         logger.info(f"🎨 Generating Design with Imagen 3... Prompt: {user_prompt[:50]}...")
 
-        # استخدام نموذج Imagen 3 (الاسم البرمجي لأفضل نماذج الصور في جوجل حالياً)
-        result = get_client().models.generate_images(
+        # استخدام العميل الجديد لتوليد الصورة
+        result = img_client.models.generate_images(
             model='imagen-3.0-generate-001',
             prompt=enhanced_prompt,
-            config=get_types().GenerateImagesConfig(
+            config=t.GenerateImagesConfig(
                 number_of_images=1,
                 output_mime_type="image/jpeg",
-                aspect_ratio="1:1" # صيغة مربعة مثالية للسوشيال ميديا والإعلانات
+                aspect_ratio="1:1"
             )
         )
 
@@ -373,6 +383,7 @@ def generate_image():
     except Exception as e:
         logger.error(f"Design Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 
 if __name__ == "__main__":
