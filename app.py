@@ -333,18 +333,24 @@ Do NOT output JSON. You MUST output exactly like this:
 # 🚀 NEW: DESIGN GENERATION (Context-Aware Prompter + Imagen 3.0.002)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Official Safe SDK + Context Aware)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
-    import urllib.request
-    import urllib.error
-    import json
-    
     try:
-        # 🚀 قراءة مفتاح Vertex AI
-        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY2")
+        from google import genai as g
+        from google.genai import types as t
+        
+        # 🚀 قراءة المفتاح من إعدادات Render (يدعم كلا الاسمين)
+        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح Google غير موجود في السيرفر."}), 500
+
+        # استخدام المكتبة الرسمية الآمنة لمنع الـ Timeout
+        client = g.Client(api_key=k, http_options={"api_version": "v1"})
 
         data = request.json
         user_prompt = data.get("prompt", "")
@@ -352,94 +358,65 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🧠 Step 1: Context-Aware Prompting via Gemini 2.5 Flash for: {user_prompt}")
+        logger.info(f"🧠 Step 1: Context-Aware Prompting via Gemini 2.5 Flash...")
 
-        # 🚀 المرحلة الأولى: المدير الفني الذكي (يفهم السياق: مطبوعات أم سوشيال ميديا؟)
-        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
-The user will provide a brief idea in Arabic. Your task is to UNDERSTAND THE CONTEXT and translate/expand it into a MASTERPIECE English prompt for Imagen 3.
-
+        sys_instruct = """You are an elite Art Director and Prompt Engineer.
+The user will provide an idea in Arabic. UNDERSTAND THE CONTEXT and translate/expand it into a MASTERPIECE English prompt for Imagen 3.
 CRITICAL RULES:
-1. UNDERSTAND THE MEDIUM (CONTEXT-AWARE): 
-   - IF PRINT (e.g., مطبوعات, كرت شخصي, فلاير, بنر, ملصق, business card, flyer, poster): Design a professional PRINT layout. Focus on elegant negative space for text insertion, clean typography-ready composition, high-resolution print aesthetic, and balanced framing suitable for physical printing.
-   - IF SOCIAL MEDIA / GENERAL AD: Make it visually striking, hyper-realistic, with commercial studio lighting and dynamic angles.
-2. QUALITY: Always specify 8k resolution, premium photography or top-tier commercial graphic design, and cinematic lighting.
-3. CULTURE (STRICT): IF the design includes people, lifestyle, or environments, YOU MUST explicitly make them reflect the Mauritanian culture. Men must wear the traditional 'Daraa' (Boubou), women must wear the traditional 'Melhfa'. The environment should reflect Mauritania (e.g., Sahara dunes, Nouakchott vibe, traditional tents).
-4. Do NOT output flat vector or cartoon styles unless explicitly requested by the user.
-5. OUTPUT ONLY THE ENGLISH PROMPT. No intros, no extra text."""
+1. CONTEXT-AWARE: 
+   - IF PRINT (e.g., مطبوعات, كرت شخصي, فلاير): Design a professional PRINT layout with elegant negative space for text insertion.
+   - IF SOCIAL MEDIA / AD: Make it visually striking, hyper-realistic, with commercial studio lighting.
+2. QUALITY: Always specify 8k resolution and premium commercial design.
+3. CULTURE (STRICT): IF the design includes people or environments, YOU MUST explicitly make them reflect the Mauritanian culture (Men in Daraa/Boubou, Women in Melhfa, Nouakchott vibe).
+4. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
-        gemini_url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key={k}"
-        gemini_payload = {
-            "contents": [{
-                "role": "user",
-                "parts": [{"text": user_prompt}]
-            }],
-            "systemInstruction": {
-                "role": "system",
-                "parts": [{"text": sys_instruct}]
-            },
-            "generationConfig": {
-                "temperature": 0.7
-            }
-        }
-
-        req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
-        
         try:
-            with urllib.request.urlopen(req_gemini, timeout=15) as response:
-                gemini_result = json.loads(response.read().decode('utf-8'))
-                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
-                logger.info(f"✨ Super Prompt: {expanded_prompt}")
+            enhance_resp = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=user_prompt,
+                config=t.GenerateContentConfig(system_instruction=sys_instruct, temperature=0.7)
+            )
+            expanded_prompt = enhance_resp.text.strip()
+            logger.info(f"✨ Super Prompt: {expanded_prompt}")
         except Exception as e:
-            logger.warning(f"Failed to enhance prompt, using fallback. Error: {e}")
-            expanded_prompt = f"Professional high-quality design, 8k resolution, Mauritanian cultural context if people are included. {user_prompt}"
+            logger.warning(f"Failed to enhance prompt: {e}")
+            expanded_prompt = f"Professional 8k resolution Mauritanian cultural design, premium quality: {user_prompt}"
 
-        # 🚀 المرحلة الثانية: إرسال الوصف المعزز إلى أقوى نماذج الصور (Imagen 3.0 Generate 002)
-        logger.info("🎨 Step 2: Generating image with Imagen 3.0 Generate 002...")
+        logger.info("🎨 Step 2: Generating image with Imagen 3...")
         
-        imagen_url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/imagen-3.0-generate-002:predict?key={k}"
+        img_bytes = None
         
-        imagen_payload = {
-            "instances": [
-                {
-                    "prompt": expanded_prompt
-                }
-            ],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": "1:1",
-                "outputOptions": {
-                    "mimeType": "image/jpeg"
-                }
-            }
-        }
+        # 🚀 خوارزمية ذكية: نجرب الإصدار 002 أولاً، وإذا لم يكن مفصولاً بحسابك، نستخدم 001 المضمون
+        try:
+            result = client.models.generate_images(
+                model='imagen-3.0-generate-002',
+                prompt=expanded_prompt,
+                config=t.GenerateImagesConfig(number_of_images=1, output_mime_type="image/jpeg", aspect_ratio="1:1")
+            )
+            img_bytes = result.generated_images[0].image.image_bytes
+            logger.info("✅ Used Imagen 3.0 Generate 002")
+        except Exception as e_002:
+            logger.warning(f"Model 002 unavailable, switching to 001. Reason: {str(e_002)}")
+            result = client.models.generate_images(
+                model='imagen-3.0-generate-001',
+                prompt=expanded_prompt,
+                config=t.GenerateImagesConfig(number_of_images=1, output_mime_type="image/jpeg", aspect_ratio="1:1")
+            )
+            img_bytes = result.generated_images[0].image.image_bytes
+            logger.info("✅ Used Imagen 3.0 Generate 001")
 
-        req_imagen = urllib.request.Request(imagen_url, data=json.dumps(imagen_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
-        
-        with urllib.request.urlopen(req_imagen, timeout=60) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            
-            if "predictions" in result and len(result["predictions"]) > 0:
-                img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                if img_b64:
-                    logger.info("✅ PRO Mauritanian Design Generated Successfully!")
-                    return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-            
-            return jsonify({"error": "Failed", "details": "النموذج لم يرجع الصورة بشكل صحيح."}), 500
+        if img_bytes:
+            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+        else:
+            return jsonify({"error": "Failed", "details": "النموذج لم يرجع الصورة."}), 500
 
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        logger.error(f"Vertex API Error: {error_body}")
-        
-        if e.code == 404:
-             return jsonify({"error": "Failed", "details": "نموذج الصور غير مفعل بعد في حساب Vertex، أو أن المفتاح يحتاج لترقية الفوترة."}), 500
-        elif e.code == 403:
-             return jsonify({"error": "Failed", "details": "مفتاح Vertex لا يملك الصلاحية. تأكد من إعدادات الـ API."}), 500
-             
-        return jsonify({"error": "Failed", "details": f"خطأ من خوادم Vertex: {e.code}"}), 500
-        
     except Exception as e:
         logger.error(f"Design Server Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء الاتصال بالخادم."}), 500
+        if "404" in str(e):
+             return jsonify({"error": "Failed", "details": "نموذج الصور لم يتفعل كلياً في حسابك المدفوع بعد، قد يحتاج بضع ساعات إضافية."}), 500
+        return jsonify({"error": "Failed", "details": f"حدث خطأ أثناء الاتصال: {str(e)}"}), 500
+
 
 
 
