@@ -337,20 +337,22 @@ Do NOT output JSON. You MUST output exactly like this:
 # 🚀 NEW: DESIGN GENERATION (Official Safe SDK + Context Aware)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Gemini 3 Nano Banana Pro/Flash)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
+    import base64
     try:
         from google import genai as g
         from google.genai import types as t
         
-        # 🚀 قراءة المفتاح من إعدادات Render (يدعم كلا الاسمين)
+        # 🚀 قراءة المفتاح من إعدادات Render
         k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح Google غير موجود في السيرفر."}), 500
-
-        # استخدام المكتبة الرسمية الآمنة لمنع الـ Timeout
-        client = g.Client(api_key=k, http_options={"api_version": "v1"})
 
         data = request.json
         user_prompt = data.get("prompt", "")
@@ -358,64 +360,85 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🧠 Step 1: Context-Aware Prompting via Gemini 2.5 Flash...")
+        logger.info(f"🎨 Generating image with Nano Banana for: {user_prompt}")
 
-        sys_instruct = """You are an elite Art Director and Prompt Engineer.
-The user will provide an idea in Arabic. UNDERSTAND THE CONTEXT and translate/expand it into a MASTERPIECE English prompt for Imagen 3.
+        client = g.Client(api_key=k)
+
+        # 🚀 تعليمات النظام الصارمة (النموذج الجديد ذكي جداً وسيطبقها حرفياً أثناء الرسم)
+        sys_instruct = """You are an elite Art Director and Image Generator.
+The user will provide a brief idea in Arabic. You MUST GENERATE A MASTERPIECE IMAGE based on this idea.
 CRITICAL RULES:
-1. CONTEXT-AWARE: 
-   - IF PRINT (e.g., مطبوعات, كرت شخصي, فلاير): Design a professional PRINT layout with elegant negative space for text insertion.
-   - IF SOCIAL MEDIA / AD: Make it visually striking, hyper-realistic, with commercial studio lighting.
-2. QUALITY: Always specify 8k resolution and premium commercial design.
-3. CULTURE (STRICT): IF the design includes people or environments, YOU MUST explicitly make them reflect the Mauritanian culture (Men in Daraa/Boubou, Women in Melhfa, Nouakchott vibe).
-4. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
+1. CONTEXT: IF the idea implies PRINT (مطبوعات, كرت, فلاير): Design a clean layout with negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting.
+2. QUALITY: Ultra-realistic photorealistic photography, 8k resolution, cinematic lighting. NO vector or cartoon unless explicitly requested.
+3. CULTURE (STRICT): If people, lifestyle, or environments are included, they MUST reflect Mauritanian culture (Men wearing traditional Daraa/Boubou, Women wearing traditional Melhfa, Mauritanian Sahara or Nouakchott vibe).
+Generate the highest quality professional image."""
 
-        try:
-            enhance_resp = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=user_prompt,
-                config=t.GenerateContentConfig(system_instruction=sys_instruct, temperature=0.7)
-            )
-            expanded_prompt = enhance_resp.text.strip()
-            logger.info(f"✨ Super Prompt: {expanded_prompt}")
-        except Exception as e:
-            logger.warning(f"Failed to enhance prompt: {e}")
-            expanded_prompt = f"Professional 8k resolution Mauritanian cultural design, premium quality: {user_prompt}"
-
-        logger.info("🎨 Step 2: Generating image with Imagen 3...")
-        
+        prompt_text = f"Generate an image for this request: {user_prompt}"
         img_bytes = None
-        
-        # 🚀 خوارزمية ذكية: نجرب الإصدار 002 أولاً، وإذا لم يكن مفصولاً بحسابك، نستخدم 001 المضمون
-        try:
-            result = client.models.generate_images(
-                model='imagen-3.0-generate-002',
-                prompt=expanded_prompt,
-                config=t.GenerateImagesConfig(number_of_images=1, output_mime_type="image/jpeg", aspect_ratio="1:1")
-            )
-            img_bytes = result.generated_images[0].image.image_bytes
-            logger.info("✅ Used Imagen 3.0 Generate 002")
-        except Exception as e_002:
-            logger.warning(f"Model 002 unavailable, switching to 001. Reason: {str(e_002)}")
-            result = client.models.generate_images(
-                model='imagen-3.0-generate-001',
-                prompt=expanded_prompt,
-                config=t.GenerateImagesConfig(number_of_images=1, output_mime_type="image/jpeg", aspect_ratio="1:1")
-            )
-            img_bytes = result.generated_images[0].image.image_bytes
-            logger.info("✅ Used Imagen 3.0 Generate 001")
+        used_model = None
 
+        # 🚀 الخيار الأول: الوحش الاحترافي (Nano Banana Pro)
+        primary_model = "gemini-3-pro-image-preview"
+        
+        try:
+            logger.info(f"🔄 Trying Primary Model: {primary_model}")
+            response = client.models.generate_content(
+                model=primary_model,
+                contents=prompt_text,
+                config=t.GenerateContentConfig(
+                    system_instruction=sys_instruct,
+                    temperature=0.7
+                )
+            )
+            
+            if response.parts:
+                for part in response.parts:
+                    if part.inline_data is not None:
+                        img_bytes = part.inline_data.data
+                        used_model = primary_model
+                        break
+        except Exception as e_pro:
+            logger.warning(f"⚠️ Primary model ({primary_model}) failed: {str(e_pro)}. Falling back...")
+
+        # 🚀 الخيار الثاني: الوحش السريع (Nano Banana 2 / Flash Image)
+        if not img_bytes:
+            fallback_model = "gemini-3.1-flash-image-preview"
+            try:
+                logger.info(f"🔄 Trying Fallback Model: {fallback_model}")
+                fb_response = client.models.generate_content(
+                    model=fallback_model,
+                    contents=prompt_text,
+                    config=t.GenerateContentConfig(
+                        system_instruction=sys_instruct,
+                        temperature=0.7
+                    )
+                )
+                
+                if fb_response.parts:
+                    for part in fb_response.parts:
+                        if part.inline_data is not None:
+                            img_bytes = part.inline_data.data
+                            used_model = fallback_model
+                            break
+            except Exception as e_flash:
+                logger.error(f"❌ Fallback model ({fallback_model}) also failed: {str(e_flash)}")
+
+        # 🚀 إرسال النتيجة للتطبيق
         if img_bytes:
             img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+            logger.info(f"✅ Design Generated Successfully using [{used_model}]")
             return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
         else:
-            return jsonify({"error": "Failed", "details": "النموذج لم يرجع الصورة."}), 500
+            return jsonify({"error": "Failed", "details": "النموذج لم يرجع الصورة. تأكد من أن الوصف لا يخالف سياسات الأمان أو أن النموذج مدعوم في مفتاحك."}), 500
 
     except Exception as e:
         logger.error(f"Design Server Error: {str(e)}", exc_info=True)
-        if "404" in str(e):
-             return jsonify({"error": "Failed", "details": "نموذج الصور لم يتفعل كلياً في حسابك المدفوع بعد، قد يحتاج بضع ساعات إضافية."}), 500
-        return jsonify({"error": "Failed", "details": f"حدث خطأ أثناء الاتصال: {str(e)}"}), 500
+        error_msg = str(e).lower()
+        if "404" in error_msg or "not found" in error_msg:
+             return jsonify({"error": "Failed", "details": "نموذج صور Gemini (Nano Banana) غير متاح في مفتاحك حالياً."}), 500
+        elif "403" in error_msg:
+             return jsonify({"error": "Failed", "details": "لا تملك الصلاحية للوصول إلى نماذج الصور الجديدة."}), 500
+        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء الاتصال بخوادم Gemini للصور."}), 500
 
 
 
