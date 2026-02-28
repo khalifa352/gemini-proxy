@@ -333,13 +333,16 @@ Do NOT output JSON. You MUST output exactly like this:
 # 🚀 NEW: DESIGN GENERATION (OpenAI DALL-E 3 Integration)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (ChatGPT Pro Pipeline Replica)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
     import urllib.error
     
     try:
-        # 🚀 جلب مفتاح OpenAI من إعدادات المنصة
         openai_key = os.environ.get("OPENAI_API_KEY")
         if not openai_key:
             return jsonify({"error": "Failed", "details": "مفتاح OPENAI_API_KEY غير موجود في إعدادات السيرفر."}), 500
@@ -350,34 +353,64 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        # تحسين الوصف لضمان نتيجة إعلانية احترافية
-        enhanced_prompt = f"Professional, high-quality, commercial advertising design, creative graphic design, visually stunning. {user_prompt}"
+        logger.info(f"🧠 Step 1: Rewriting prompt like ChatGPT Pro for: {user_prompt}")
 
-        logger.info(f"🎨 Sending request to OpenAI DALL-E 3... Prompt: {user_prompt[:50]}...")
-
-        # إعداد الطلب المباشر لواجهة OpenAI
-        url = "https://api.openai.com/v1/images/generations"
-        headers = {
+        # 🚀 المرحلة الأولى: استخدام الذكاء اللغوي لتوسيع الطلب (كما يفعل ChatGPT تماماً)
+        chat_url = "https://api.openai.com/v1/chat/completions"
+        chat_headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {openai_key}"
         }
-        payload = {
-            "model": "dall-e-3",
-            "prompt": enhanced_prompt,
-            "n": 1,
-            "size": "1024x1024",
-            "response_format": "b64_json" # نطلب الصورة بصيغة Base64 لترسل للتطبيق مباشرة
+        
+        system_instruction = """You are a world-class AI art director and prompt engineer. 
+The user will give you a brief idea (likely in Arabic). Your job is to translate it to English and expand it into a BREATHTAKING, highly detailed prompt for DALL-E 3.
+- If it's a commercial/ad design: Focus on premium product photography, studio lighting, hyper-realism, and elegant composition.
+- Avoid flat vector or cartoon looks unless explicitly requested.
+- Focus on camera angles, textures (e.g., glossy, matte, metallic), and mood.
+OUTPUT ONLY THE ENGLISH PROMPT. No introductions."""
+
+        chat_payload = {
+            "model": "gpt-4o-mini", # سريع جداً وذكي في كتابة الأوامر (Prompts)
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.7
         }
 
-        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
+        chat_req = urllib.request.Request(chat_url, data=json.dumps(chat_payload).encode('utf-8'), headers=chat_headers)
         
-        # تنفيذ الطلب
-        with urllib.request.urlopen(req, timeout=60) as response:
+        try:
+            with urllib.request.urlopen(chat_req, timeout=15) as chat_response:
+                chat_result = json.loads(chat_response.read().decode('utf-8'))
+                expanded_prompt = chat_result["choices"][0]["message"]["content"].strip()
+                logger.info(f"✨ Expanded Prompt: {expanded_prompt}")
+        except Exception as e:
+            logger.warning(f"Failed to expand prompt, falling back to original. Error: {e}")
+            expanded_prompt = f"Ultra-realistic photorealistic photography, highly detailed. {user_prompt}"
+
+        # 🚀 المرحلة الثانية: إرسال الوصف الاحترافي لمحرك الصور بجودة HD
+        logger.info("🎨 Step 2: Generating image with DALL-E 3 (HD/Natural)...")
+        
+        dalle_url = "https://api.openai.com/v1/images/generations"
+        dalle_payload = {
+            "model": "dall-e-3",
+            "prompt": expanded_prompt, # الوصف المعزز
+            "n": 1,
+            "size": "1024x1024",
+            "quality": "hd",
+            "style": "natural",
+            "response_format": "b64_json"
+        }
+
+        dalle_req = urllib.request.Request(dalle_url, data=json.dumps(dalle_payload).encode('utf-8'), headers=chat_headers)
+        
+        with urllib.request.urlopen(dalle_req, timeout=60) as response:
             result = json.loads(response.read().decode('utf-8'))
             
             if "data" in result and len(result["data"]) > 0:
                 img_b64 = result["data"][0]["b64_json"]
-                logger.info("✅ Design Generated Successfully by DALL-E 3")
+                logger.info("✅ PRO Design Generated Successfully")
                 return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
             else:
                 return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
@@ -386,7 +419,6 @@ def generate_image():
         error_body = e.read().decode('utf-8')
         logger.error(f"OpenAI API Error: {error_body}")
         
-        # معالجة أخطاء الرصيد أو المحتوى المرفوض من OpenAI
         if e.code == 401:
             return jsonify({"error": "Failed", "details": "مفتاح OpenAI غير صحيح."}), 500
         elif e.code == 400 and "content_policy_violation" in error_body:
