@@ -336,16 +336,25 @@ Do NOT output JSON. You MUST output exactly like this:
 # ══════════════════════════════════════════════════════════
 # 🚀 NEW: DESIGN GENERATION (ChatGPT Pro Pipeline Replica)
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Vertex AI / GCP Key Integration)
+# ══════════════════════════════════════════════════════════
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
-    import urllib.request
-    import urllib.error
-    
     try:
-        openai_key = os.environ.get("OPENAI_API_KEY")
-        if not openai_key:
-            return jsonify({"error": "Failed", "details": "مفتاح OPENAI_API_KEY غير موجود في إعدادات السيرفر."}), 500
+        from google import genai as g
+        from google.genai import types as t
+        
+        # 🚀 قراءة المفتاح الجديد الخاص بـ Vertex AI من إعدادات Render
+        # (استخدمنا الاسمين تحسباً لأي خطأ إملائي في الشرطة أو الشرطة السفلية)
+        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY2")
+        
+        if not k:
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود في إعدادات السيرفر."}), 500
+            
+        # الاتصال باستخدام مفتاح المؤسسات
+        client = g.Client(api_key=k)
 
         data = request.json
         user_prompt = data.get("prompt", "")
@@ -353,83 +362,62 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🧠 Step 1: Rewriting prompt like ChatGPT Pro for: {user_prompt}")
+        logger.info(f"🧠 Step 1: Enhancing prompt with Gemini Flash for: {user_prompt}")
 
-        # 🚀 المرحلة الأولى: استخدام الذكاء اللغوي لتوسيع الطلب (كما يفعل ChatGPT تماماً)
-        chat_url = "https://api.openai.com/v1/chat/completions"
-        chat_headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {openai_key}"
-        }
-        
-        system_instruction = """You are a world-class AI art director and prompt engineer. 
-The user will give you a brief idea (likely in Arabic). Your job is to translate it to English and expand it into a BREATHTAKING, highly detailed prompt for DALL-E 3.
-- If it's a commercial/ad design: Focus on premium product photography, studio lighting, hyper-realism, and elegant composition.
+        # 🚀 المرحلة الأولى: هندسة الأوامر (لتحويل طلبك البسيط لصورة احترافية واقعية)
+        sys_instruct = """You are a world-class AI art director. 
+Translate the user's request to English and expand it into a BREATHTAKING, highly detailed prompt for an image generation model.
+- Focus on premium product photography, hyper-realism, and elegant composition.
 - Avoid flat vector or cartoon looks unless explicitly requested.
-- Focus on camera angles, textures (e.g., glossy, matte, metallic), and mood.
+- Specify cinematic lighting, 8k resolution, and textures.
 OUTPUT ONLY THE ENGLISH PROMPT. No introductions."""
 
-        chat_payload = {
-            "model": "gpt-4o-mini", # سريع جداً وذكي في كتابة الأوامر (Prompts)
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.7
-        }
-
-        chat_req = urllib.request.Request(chat_url, data=json.dumps(chat_payload).encode('utf-8'), headers=chat_headers)
-        
         try:
-            with urllib.request.urlopen(chat_req, timeout=15) as chat_response:
-                chat_result = json.loads(chat_response.read().decode('utf-8'))
-                expanded_prompt = chat_result["choices"][0]["message"]["content"].strip()
-                logger.info(f"✨ Expanded Prompt: {expanded_prompt}")
+            enhance_resp = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=user_prompt,
+                config=t.GenerateContentConfig(
+                    system_instruction=sys_instruct,
+                    temperature=0.7
+                )
+            )
+            expanded_prompt = enhance_resp.text.strip()
+            logger.info(f"✨ Enhanced Prompt: {expanded_prompt}")
         except Exception as e:
-            logger.warning(f"Failed to expand prompt, falling back to original. Error: {e}")
+            logger.warning(f"Failed to enhance prompt. Using original. Error: {e}")
             expanded_prompt = f"Ultra-realistic photorealistic photography, highly detailed. {user_prompt}"
 
-        # 🚀 المرحلة الثانية: إرسال الوصف الاحترافي لمحرك الصور بجودة HD
-        logger.info("🎨 Step 2: Generating image with DALL-E 3 (HD/Natural)...")
+        # 🚀 المرحلة الثانية: إرسال الوصف المعزز إلى نموذج Imagen 3
+        logger.info("🎨 Step 2: Generating image with Imagen 3 (Vertex Key)...")
         
-        dalle_url = "https://api.openai.com/v1/images/generations"
-        dalle_payload = {
-            "model": "dall-e-3",
-            "prompt": expanded_prompt, # الوصف المعزز
-            "n": 1,
-            "size": "1024x1024",
-            "quality": "hd",
-            "style": "natural",
-            "response_format": "b64_json"
-        }
+        result = client.models.generate_images(
+            model='imagen-3.0-generate-001',
+            prompt=expanded_prompt,
+            config=t.GenerateImagesConfig(
+                number_of_images=1,
+                output_mime_type="image/jpeg",
+                aspect_ratio="1:1"
+            )
+        )
 
-        dalle_req = urllib.request.Request(dalle_url, data=json.dumps(dalle_payload).encode('utf-8'), headers=chat_headers)
-        
-        with urllib.request.urlopen(dalle_req, timeout=60) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            
-            if "data" in result and len(result["data"]) > 0:
-                img_b64 = result["data"][0]["b64_json"]
-                logger.info("✅ PRO Design Generated Successfully")
-                return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-            else:
-                return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
+        if result and result.generated_images:
+            img_bytes = result.generated_images[0].image.image_bytes
+            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+            logger.info("✅ Vertex AI Design Generated Successfully")
+            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+        else:
+            return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
 
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        logger.error(f"OpenAI API Error: {error_body}")
-        
-        if e.code == 401:
-            return jsonify({"error": "Failed", "details": "مفتاح OpenAI غير صحيح."}), 500
-        elif e.code == 400 and "content_policy_violation" in error_body:
-            return jsonify({"error": "Failed", "details": "عذراً، الوصف يحتوي على كلمات تخالف سياسة الأمان."}), 400
-        elif e.code == 429:
-            return jsonify({"error": "Failed", "details": "عذراً، نفد رصيد حساب OpenAI الخاص بك."}), 500
-            
-        return jsonify({"error": "Failed", "details": f"خطأ من خوادم OpenAI: {e.code}"}), 500
-        
     except Exception as e:
-        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
+        error_msg = str(e)
+        logger.error(f"Design Server Error: {error_msg}")
+        
+        # رسائل خطأ دقيقة لفهم ما يحدث في الكواليس
+        if "404" in error_msg or "not found" in error_msg.lower():
+            return jsonify({"error": "Failed", "details": "حساب Vertex AI يمنع الوصول لنموذج الصور (تحقق من إعدادات الفوترة أو الموقع في منصة Google Cloud)."}), 500
+        elif "403" in error_msg or "permission" in error_msg.lower():
+            return jsonify({"error": "Failed", "details": "مفتاح Vertex لا يمتلك صلاحية الوصول لهذه الواجهة."}), 500
+            
         return jsonify({"error": "Failed", "details": "حدث خطأ أثناء التوليد، يرجى المحاولة لاحقاً."}), 500
 
 
