@@ -330,37 +330,19 @@ Do NOT output JSON. You MUST output exactly like this:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 # ══════════════════════════════════════════════════════════
-# 🚀 NEW: DESIGN GENERATION (Nano Banana 2 / Imagen 3)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# 🚀 NEW: DESIGN GENERATION (Nano Banana 2 / Imagen 3)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# 🚀 NEW: DESIGN GENERATION (Smart Fallback Mechanism)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# 🚀 NEW: DESIGN GENERATION (Fast Fallback & Timeout Protection)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# 🚀 NEW: DESIGN GENERATION (Direct & Safe Call)
+# 🚀 NEW: DESIGN GENERATION (OpenAI DALL-E 3 Integration)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
+    import urllib.request
+    import urllib.error
+    
     try:
-        from google import genai as g
-        from google.genai import types as t
-        
-        k = os.environ.get("GOOGLE_API_KEY")
-        if not k:
-            return jsonify({"error": "Failed", "details": "API Key Missing"}), 500
-            
-        # 🚀 اتصال نظيف ومباشر بدون تعقيدات تسبب الـ Deadlock
-        client = g.Client(api_key=k)
+        # 🚀 جلب مفتاح OpenAI من إعدادات المنصة
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_key:
+            return jsonify({"error": "Failed", "details": "مفتاح OPENAI_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
@@ -368,37 +350,54 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
+        # تحسين الوصف لضمان نتيجة إعلانية احترافية
         enhanced_prompt = f"Professional, high-quality, commercial advertising design, creative graphic design, visually stunning. {user_prompt}"
 
-        logger.info(f"🎨 Sending request to Imagen 3... Prompt: {user_prompt[:50]}...")
+        logger.info(f"🎨 Sending request to OpenAI DALL-E 3... Prompt: {user_prompt[:50]}...")
 
-        # 🚀 توليد مباشر وبسيط بدون ThreadPool لمنع شلل سيرفرات Render
-        result = client.models.generate_images(
-            model='imagen-3.0-generate-001',
-            prompt=enhanced_prompt,
-            config=t.GenerateImagesConfig(
-                number_of_images=1,
-                output_mime_type="image/jpeg",
-                aspect_ratio="1:1"
-            )
-        )
+        # إعداد الطلب المباشر لواجهة OpenAI
+        url = "https://api.openai.com/v1/images/generations"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {openai_key}"
+        }
+        payload = {
+            "model": "dall-e-3",
+            "prompt": enhanced_prompt,
+            "n": 1,
+            "size": "1024x1024",
+            "response_format": "b64_json" # نطلب الصورة بصيغة Base64 لترسل للتطبيق مباشرة
+        }
 
-        if result and result.generated_images:
-            img_bytes = result.generated_images[0].image.image_bytes
-            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-            logger.info("✅ Design Generated Successfully")
-            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-        else:
-            return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
-
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Design Server Error: {error_msg}")
+        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
         
-        # 🚀 إذا ردت جوجل بأن النموذج غير مدعوم في حسابك، نرسل الرسالة للتطبيق فوراً بدلاً من التجمد
-        if "404" in error_msg or "not found" in error_msg.lower():
-            return jsonify({"error": "Failed", "details": "عذراً، ميزة توليد الصور (Imagen 3) غير مدعومة أو غير مفعلة في مفتاح API الخاص بك حالياً."}), 500
+        # تنفيذ الطلب
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode('utf-8'))
             
+            if "data" in result and len(result["data"]) > 0:
+                img_b64 = result["data"][0]["b64_json"]
+                logger.info("✅ Design Generated Successfully by DALL-E 3")
+                return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+            else:
+                return jsonify({"error": "Failed", "details": "النموذج لم يقم بإرجاع أي صورة."}), 500
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        logger.error(f"OpenAI API Error: {error_body}")
+        
+        # معالجة أخطاء الرصيد أو المحتوى المرفوض من OpenAI
+        if e.code == 401:
+            return jsonify({"error": "Failed", "details": "مفتاح OpenAI غير صحيح."}), 500
+        elif e.code == 400 and "content_policy_violation" in error_body:
+            return jsonify({"error": "Failed", "details": "عذراً، الوصف يحتوي على كلمات تخالف سياسة الأمان."}), 400
+        elif e.code == 429:
+            return jsonify({"error": "Failed", "details": "عذراً، نفد رصيد حساب OpenAI الخاص بك."}), 500
+            
+        return jsonify({"error": "Failed", "details": f"خطأ من خوادم OpenAI: {e.code}"}), 500
+        
+    except Exception as e:
+        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": "حدث خطأ أثناء التوليد، يرجى المحاولة لاحقاً."}), 500
 
 
