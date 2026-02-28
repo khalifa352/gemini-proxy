@@ -152,6 +152,7 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
+        # 🚀 إضافة قواعد الحفاظ على النص الجاهز ومنع التوليد الوهمي
         prompt = f"""You are an Expert Document Typesetter in Mauritania.
 
 {style_prompt}
@@ -160,12 +161,13 @@ def generate():
 
 CRITICAL RULES:
 1. RETURN PURE HTML ONLY. NO `<svg>`, NO `<html>`, NO `<body>`. Just `<div>`, `<table>`, `<h1>`, `<p>`.
-2. NO SHORTENING: NEVER summarize data. Write everything fully.
-3. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
-4. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
-5. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
-6. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. If the user writes in French, the entire output MUST be in French. DO NOT translate to Arabic unless explicitly told to do so.
-7. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the requested language is French or English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, wrap it in `<div dir="rtl" style="text-align: right;">...</div>`.
+2. CONTENT PRESERVATION (SCENARIO A - FULL TEXT): If the user provides ready-made text/content (like a full report or study), use it EXACTLY as provided. Do NOT add, remove, or summarize anything. Do NOT invent fake footers, signatures, or institutional names (e.g., do not randomly add "Nouakchott Institute"). Only fix obvious spelling errors.
+3. CONTENT GENERATION (SCENARIO B - BRIEF REQUEST): If the user provides only brief instructions (e.g., "Create an invoice" or "Design a certificate"), design a professional structure based ONLY on the provided info. NEVER invent fake personal data, fake companies, or fake numbers. Leave blank placeholders if data is missing.
+4. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
+5. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
+6. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
+7. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. DO NOT translate to Arabic unless explicitly told to do so.
+8. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the requested language is French or English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, wrap it in `<div dir="rtl" style="text-align: right;">...</div>`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -201,12 +203,10 @@ def modify():
     try:
         data = request.json
         
-        # 🚀 التقاط الكود بأي اسم يرسله التطبيق لتجنب فقدان المستند
         current_html = data.get("current_html") or data.get("currentSVG") or data.get("current_svg") or data.get("htmlContent") or ""
         instruction = data.get("instruction") or data.get("prompt") or ""
         ref_b64 = data.get("reference_image")
         
-        # 🚀 صمام أمان: إذا كان الكود فارغاً، نرفض التعديل لكي لا يهلوس الذكاء ويصمم من خياله
         if not current_html.strip():
             logger.error("❌ ERROR: current_html is empty! AI will hallucinate if allowed.")
             return jsonify({"error": "Failed", "details": "لم يتم العثور على محتوى المستند الحالي لإجراء التعديل الذكي. يرجى المحاولة مرة أخرى."}), 400
@@ -215,14 +215,14 @@ def modify():
         if ref_b64:
             img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
-        # 🚀 أوامر صارمة جداً (Surgical Edit) تمنعه من التصميم من الصفر
+        # 🚀 إضافة أوامر (CASCADING UPDATES) لإجبار الذكاء على حساب المجموع عند تغيير السعر وتحديث الفقرات المتصلة
         sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
 CRITICAL RULES (DO NOT DISOBEY):
 1. ZERO HALLUCINATION: Do NOT invent a new document. Do NOT rewrite from scratch.
 2. EXACT COPY-PASTE: You MUST output the EXACT SAME HTML structure, classes, and styles provided in <CURRENT_HTML>.
-3. SURGICAL EDIT: Find the specific element mentioned in <USER_REQUEST> (e.g., a specific price, name, or word) and change ONLY that exact part. 
+3. SURGICAL EDIT & LOGICAL CONSISTENCY (CRITICAL): Find the specific element mentioned in <USER_REQUEST> and change it. IF your change affects other parts of the document (e.g., changing a price/quantity means the "Total" MUST be recalculated and mathematically updated, or changing a name/date means updating it across connected paragraphs), you MUST apply these cascading secondary updates automatically so the document remains logically accurate.
 4. NO REDESIGN: Keep all fonts, colors, layouts, and tables entirely untouched unless the user explicitly asks to change them.
 5. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders.
 6. LANGUAGE & BIDI: Keep the original language. Preserve all `dir="ltr"` and `dir="rtl"`.
@@ -237,11 +237,10 @@ Do NOT output JSON. You MUST output exactly like this:
 (ضع هنا كود الـ HTML المعدل كاملاً)
 [/HTML]"""
 
-        # الحرارة 0.0 تضمن الدقة المتناهية وعدم الإبداع
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         
         cts = [
-            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return the FULL updated HTML."
+            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change (including mathematical recalculations if needed) and return the FULL updated HTML."
         ]
         
         if ref_b64:
@@ -254,7 +253,6 @@ Do NOT output JSON. You MUST output exactly like this:
 
         text = resp.text or ""
         
-        # استخراج الكود بأمان تام
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
         
@@ -315,7 +313,6 @@ Do NOT output JSON. You MUST output exactly like this:
 
         text = resp.text or ""
         
-        # استخراج الكود بأمان
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
         
