@@ -328,7 +328,6 @@ Do NOT output JSON. You MUST output exactly like this:
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -393,7 +392,9 @@ RULES:
         ]
 
         for model_id, model_name, timeout in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
+            # 🚀 تم التصحيح هنا: استخدام خوادم Vertex AI التي تعمل في منطقتك بدلاً من AI Studio
+            url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_id}:generateContent?key={k}"
+            
             try:
                 logger.info(f"🚀 Trying {model_name} ({model_id})...")
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
@@ -421,6 +422,7 @@ RULES:
     except Exception as e:
         logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+
 
 
 
