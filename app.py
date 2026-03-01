@@ -334,7 +334,6 @@ def generate_image():
     import urllib.request
     import urllib.error
     import json
-    import base64
 
     try:
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API-KEY2")
@@ -348,139 +347,80 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        logger.info(f"🎨 Generating design with Nano Banana 2...")
+        logger.info(f"🎨 Generating with Nano Banana 2...")
 
-        # ══════════════════════════════════════════════════════
-        # Nano Banana 2 (gemini-3.1-flash-image-preview)
-        # نفس النموذج الذي يستخدمه تطبيق Gemini على الهاتف
-        # ══════════════════════════════════════════════════════
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key={k}"
-
-        # ── System Instruction: المدير الفني مدمج داخل النموذج ──
         system_text = """You are an elite creative designer and art director.
 RULES:
 1. Generate EXACTLY what the user describes with maximum professional quality.
 2. You understand Arabic perfectly - respond to Arabic prompts with stunning visuals.
 3. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
-4. For social media designs: Visually striking, commercial studio lighting, vibrant colors.
+4. For social media: Visually striking, commercial studio lighting, vibrant colors.
 5. For logos and branding: Clean, scalable, professional design with clear typography.
-6. CULTURAL CONTEXT: If people or lifestyle elements are included, reflect Mauritanian culture (Men in Daraa/Boubou, Women in Melhfa).
+6. CULTURAL CONTEXT: If people are included, reflect Mauritanian culture (Men in Daraa/Boubou, Women in Melhfa).
 7. Render any Arabic text inside images with perfect spelling and beautiful typography.
-8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style as appropriate.
-9. If a reference image (logo/photo) is provided, incorporate it naturally into the design."""
+8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
+9. If a reference image is provided, incorporate it naturally into the design."""
 
-        # ── بناء المحتوى (نص + صورة مرجعية إن وجدت) ──
         user_parts = [{"text": user_prompt}]
-
         if reference_image:
-            # تنظيف Base64 من أي prefix
             clean_b64 = reference_image
             if "," in clean_b64:
                 clean_b64 = clean_b64.split(",", 1)[1]
-
             user_parts.append({
                 "inlineData": {
                     "mimeType": "image/jpeg",
                     "data": clean_b64
                 }
             })
-            logger.info("📎 Reference image attached to request")
+            logger.info("📎 Reference image attached")
 
         payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": user_parts
-                }
-            ],
-            "systemInstruction": {
-                "parts": [{"text": system_text}]
-            },
+            "contents": [{"role": "user", "parts": user_parts}],
+            "systemInstruction": {"parts": [{"text": system_text}]},
             "generationConfig": {
                 "responseModalities": ["IMAGE", "TEXT"],
                 "temperature": 0.7,
-                "imageConfig": {
-                    "aspectRatio": "1:1"
-                }
+                "imageConfig": {"aspectRatio": "1:1"}
             }
         }
 
         headers = {"Content-Type": "application/json"}
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode('utf-8'),
-            headers=headers
-        )
 
-        with urllib.request.urlopen(req, timeout=90) as response:
-            result = json.loads(response.read().decode('utf-8'))
+        # ✅ المحاولة 1: Nano Banana 2
+        models = [
+            ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
+            ("gemini-2.5-flash-preview-image-generation", "Gemini 2.5 Flash Image", 90),
+        ]
 
-        # ── استخراج الصورة من الرد ──
-        candidates = result.get("candidates", [])
-        if not candidates:
-            logger.error(f"❌ No candidates in response: {json.dumps(result)[:500]}")
-            return jsonify({"error": "Failed", "details": "النموذج لم يُرجع نتائج."}), 500
-
-        parts = candidates[0].get("content", {}).get("parts", [])
-
-        for part in parts:
-            if "inlineData" in part:
-                img_b64 = part["inlineData"]["data"]
-                mime = part["inlineData"].get("mimeType", "image/png")
-                logger.info(f"✅ Design generated successfully ({mime}, {len(img_b64)} chars)")
-                return jsonify({
-                    "response": img_b64,
-                    "message": "تم التصميم بنجاح ✨ (Nano Banana 2)"
-                })
-
-        # إذا لم توجد صورة، ربما النموذج رد بنص فقط
-        text_response = ""
-        for part in parts:
-            if "text" in part:
-                text_response += part["text"]
-
-        logger.error(f"❌ No image in response. Text only: {text_response[:300]}")
-        return jsonify({
-            "error": "Failed",
-            "details": f"النموذج رد بنص فقط بدون صورة: {text_response[:200]}"
-        }), 500
-
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        logger.error(f"❌ API HTTP Error {e.code}: {error_body[:500]}")
-
-        # ── محاولة احتياطية: Nano Banana Pro ──
-        if "gemini-3.1-flash" in url:
-            logger.info("🔄 Retrying with Nano Banana Pro...")
+        for model_id, model_name, timeout in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
             try:
-                fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent?key={k}"
-                payload["generationConfig"]["responseModalities"] = ["IMAGE", "TEXT"]
-                req2 = urllib.request.Request(
-                    fallback_url,
-                    data=json.dumps(payload).encode('utf-8'),
-                    headers=headers
-                )
-                with urllib.request.urlopen(req2, timeout=90) as resp2:
-                    result2 = json.loads(resp2.read().decode('utf-8'))
+                logger.info(f"🚀 Trying {model_name} ({model_id})...")
+                req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
+                with urllib.request.urlopen(req, timeout=timeout) as response:
+                    result = json.loads(response.read().decode('utf-8'))
 
-                parts2 = result2.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                for part in parts2:
+                parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                for part in parts:
                     if "inlineData" in part:
-                        logger.info("✅ Generated with fallback model")
+                        logger.info(f"✅ Generated with {model_name}")
                         return jsonify({
                             "response": part["inlineData"]["data"],
-                            "message": "تم التصميم بنجاح ✨"
+                            "message": f"تم التصميم بنجاح ✨ ({model_name})"
                         })
-            except Exception as e2:
-                logger.error(f"❌ Fallback also failed: {e2}")
 
-        return jsonify({"error": "Failed", "details": f"خطأ من الخوادم: {e.code}"}), 500
+                logger.warning(f"⚠️ {model_name} returned no image")
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                logger.warning(f"❌ {model_name} HTTP {e.code}: {error_body[:300]}")
+            except Exception as e:
+                logger.warning(f"❌ {model_name} failed: {e}")
+
+        return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة."}), 500
 
     except Exception as e:
         logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"خطأ: {str(e)}"}), 500
-
-
+        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
 
 
 
