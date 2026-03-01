@@ -335,6 +335,7 @@ def generate_image():
     import json
 
     try:
+        # قراءة مفتاح Vertex AI
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API-KEY2")
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
@@ -346,21 +347,24 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        logger.info(f"🎨 Generating with Nano Banana 2...")
+        logger.info(f"🎨 Generating with Nano Banana Pro/2...")
 
+        # 🚀 تعليمات النظام الصارمة جداً (منع الموكاب + فرض البيئة الموريتانية)
         system_text = """You are an elite creative designer and art director.
 RULES:
 1. Generate EXACTLY what the user describes with maximum professional quality.
-2. You understand Arabic perfectly - respond to Arabic prompts with stunning visuals.
-3. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
-4. For social media: Visually striking, commercial studio lighting, vibrant colors.
-5. For logos and branding: Clean, scalable, professional design with clear typography.
-6. CULTURAL CONTEXT: If people are included, reflect Mauritanian culture (Men in Daraa/Boubou, Women in Melhfa).
+2. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly. This section is dedicated to modern professional logos, print materials, and social media.
+3. For logos and branding: Clean, scalable, flat professional design with clear typography. NO 3D mockups.
+4. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
+5. For social media: Visually striking, commercial studio lighting, vibrant colors.
+6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
 7. Render any Arabic text inside images with perfect spelling and beautiful typography.
 8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
 9. If a reference image is provided, incorporate it naturally into the design."""
 
         user_parts = [{"text": user_prompt}]
+        
+        # معالجة الصورة المرجعية إن وجدت
         if reference_image:
             clean_b64 = reference_image
             if "," in clean_b64:
@@ -385,14 +389,15 @@ RULES:
 
         headers = {"Content-Type": "application/json"}
 
-        # ✅ المحاولة 1: Nano Banana 2
+        # 🚀 ترتيب النماذج من الأقوى (Pro) إلى الأسرع (Flash)
         models = [
+            ("gemini-3-pro-image-preview", "Nano Banana Pro", 120),
             ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
             ("gemini-2.5-flash-preview-image-generation", "Gemini 2.5 Flash Image", 90),
         ]
 
         for model_id, model_name, timeout in models:
-            # 🚀 تم التصحيح هنا: استخدام خوادم Vertex AI التي تعمل في منطقتك بدلاً من AI Studio
+            # استخدام خوادم Vertex AI لاختراق الحظر
             url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_id}:generateContent?key={k}"
             
             try:
@@ -422,6 +427,7 @@ RULES:
     except Exception as e:
         logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+
 
 
 
