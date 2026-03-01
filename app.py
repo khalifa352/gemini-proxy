@@ -332,115 +332,64 @@ Do NOT output JSON. You MUST output exactly like this:
 # ══════════════════════════════════════════════════════════
 # 🚀 NEW: DESIGN GENERATION (Imagen 4.0 Ultra + Super Prompter)
 # ══════════════════════════════════════════════════════════
-
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
-    import urllib.error
     import json
-    
+
     try:
-        # 🚀 قراءة مفتاح Vertex AI الذي أثبت نجاحه
-        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY2")
-        
+        k = os.environ.get("GOOGLE_API_KEY2")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
-
         if not user_prompt.strip():
-            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
+        # ✅ Nano Banana 2 - نفس النموذج الذي في تطبيق Gemini
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key={k}"
 
-        # 🚀 المرحلة 1: المدير الفني الذكي
-        gemini_url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key={k}"
-        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
-The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen 4 Ultra.
-CRITICAL RULES:
-1. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space, precise text rendering context. IF SOCIAL MEDIA: Visually striking, commercial studio lighting, complex scenes.
-2. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless requested.
-3. CULTURE (STRICT): If people/lifestyle are included, they MUST reflect Mauritanian culture (Men in Daraa/Boubou, Women in Melhfa, Mauritanian vibe).
-4. OUTPUT ONLY THE ENGLISH PROMPT."""
-
-        gemini_payload = {
-            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-            "systemInstruction": {"role": "system", "parts": [{"text": sys_instruct}]},
-            "generationConfig": {"temperature": 0.7}
-        }
-
-        try:
-            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req_gemini, timeout=15) as response:
-                gemini_result = json.loads(response.read().decode('utf-8'))
-                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
-                logger.info(f"✨ Super Prompt: {expanded_prompt}")
-        except Exception as e:
-            logger.warning(f"Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"Ultra-realistic photorealistic photography, 8k resolution, cinematic lighting, precise text, Mauritanian cultural context. Subject: {user_prompt}"
-
-        logger.info(f"🎨 Step 2: Generating image (Hunting for Imagen 4 Ultra)...")
-
-        headers = {"Content-Type": "application/json"}
         payload = {
-            "instances": [{"prompt": expanded_prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": "1:1",
-                "outputOptions": {"mimeType": "image/jpeg"}
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": user_prompt}]
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["IMAGE", "TEXT"],
+                "imageConfig": {
+                    "aspectRatio": "1:1"
+                }
             }
         }
 
-        # 🚀 المحاولة الأولى: الوحش (Imagen 4.0 Ultra)
-        url_4_ultra = f"https://aiplatform.googleapis.com/v1/publishers/google/models/imagen-4.0-ultra-generate-001:predict?key={k}"
-        try:
-            req_4_ultra = urllib.request.Request(url_4_ultra, data=json.dumps(payload).encode('utf-8'), headers=headers)
-            with urllib.request.urlopen(req_4_ultra, timeout=60) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                if "predictions" in result and len(result["predictions"]) > 0:
-                    img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                    if img_b64:
-                        logger.info("✅ Design Generated (Imagen 4.0 Ultra)")
-                        return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-        except Exception as e_ultra:
-            logger.warning(f"Imagen 4 Ultra failed ({e_ultra}), switching to Imagen 4 Base...")
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers
+        )
 
-        # 🚀 المحاولة الثانية: الأساسي (Imagen 4.0 Generate)
-        url_4_base = f"https://aiplatform.googleapis.com/v1/publishers/google/models/imagen-4.0-generate-001:predict?key={k}"
-        try:
-            req_4_base = urllib.request.Request(url_4_base, data=json.dumps(payload).encode('utf-8'), headers=headers)
-            with urllib.request.urlopen(req_4_base, timeout=60) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                if "predictions" in result and len(result["predictions"]) > 0:
-                    img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                    if img_b64:
-                        logger.info("✅ Design Generated (Imagen 4.0 Base)")
-                        return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-        except Exception as e_base:
-            logger.warning(f"Imagen 4 Base failed ({e_base}), falling back to proven Imagen 3...")
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode('utf-8'))
 
-        # 🚀 المحاولة الثالثة: المضمون الذي أثبت نجاحه معك (Imagen 3.0 Generate 001)
-        url_3 = f"https://aiplatform.googleapis.com/v1/publishers/google/models/imagen-3.0-generate-001:predict?key={k}"
-        try:
-            req_3 = urllib.request.Request(url_3, data=json.dumps(payload).encode('utf-8'), headers=headers)
-            with urllib.request.urlopen(req_3, timeout=60) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                if "predictions" in result and len(result["predictions"]) > 0:
-                    img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                    if img_b64:
-                        logger.info("✅ Design Generated (Proven Imagen 3.0)")
-                        return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode('utf-8')
-            logger.error(f"Vertex API Error (All Models Failed): {error_body}")
-            return jsonify({"error": "Failed", "details": f"خطأ من خوادم Vertex: {e.code}"}), 500
+        # استخراج الصورة من الرد
+        parts = result["candidates"][0]["content"]["parts"]
+        for part in parts:
+            if "inlineData" in part:
+                img_b64 = part["inlineData"]["data"]
+                return jsonify({
+                    "response": img_b64,
+                    "message": "تم التصميم بنجاح ✨"
+                })
 
-        return jsonify({"error": "Failed", "details": "النماذج لم ترجع الصورة بشكل صحيح."}), 500
+        return jsonify({"error": "Failed", "details": "لم يتم إرجاع صورة."}), 500
 
     except Exception as e:
-        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء الاتصال بالخادم."}), 500
+        logger.error(f"Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
 
