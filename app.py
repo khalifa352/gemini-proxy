@@ -152,21 +152,36 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        prompt = f"""You are an Expert Document Typesetter in Mauritania.
+        # 🛠 هنا تم تحديث الـ Prompt بالكامل ليعالج السيناريوهين بذكاء
+        prompt = f"""You are an Expert Document Creator and Typesetter in Mauritania.
 
 {style_prompt}
 {ref_note}
 {doc_type_instruction}
 
-CRITICAL RULES:
+CRITICAL RULES FOR CONTENT (READ CAREFULLY):
+Analyze the user's input to determine which scenario applies:
+
+➡ SCENARIO 1: THE USER PROVIDED READY-MADE TEXT OR DATA
+If the user provides a full text, article, or specific data to be formatted:
+- YOUR ROLE: Creative Editor & Expert Typesetter.
+- RULE: You MUST use their core content. You MAY correct spelling and grammar errors.
+- RULE: You MAY creatively organize the text to make it look professional (e.g., turning a block of text into a beautiful table, a list of bullet points, or logical sections if it makes obvious sense).
+- RULE: STRICTLY FORBIDDEN to change the core meaning, summarize, or add unrequested bulk content (like fake introductions, fake conclusions, fake signatures, or fake institutional names like "Nouakchott Institute"). Elevate their exact content creatively.
+
+➡ SCENARIO 2: THE USER PROVIDED A BRIEF REQUEST (e.g., "Create an invoice", "Write research about X", "Make a registration form")
+If the user is asking you to generate a document or research from scratch:
+- YOUR ROLE: Expert Content Creator.
+- RULE: Be proactive and comprehensive. If it's a form, create all logical input fields naturally. If it's an invoice, create the standard table (Item, Qty, Price, Total) without needing step-by-step instructions. If it's research, provide highly accurate, professional, and reliable content.
+- RULE: ZERO HALLUCINATION OF IDENTITIES. Do NOT invent fake personal names, phone numbers, or companies. Use professional placeholders like [اسم الشركة] or [التاريخ] if needed.
+
+TECHNICAL RULES:
 1. RETURN PURE HTML ONLY. NO `<svg>`, NO `<html>`, NO `<body>`. Just `<div>`, `<table>`, `<h1>`, `<p>`.
-2. CONTENT PRESERVATION (SCENARIO A - FULL TEXT): If the user provides ready-made text/content (like a full report or study), use it EXACTLY as provided. Do NOT add, remove, or summarize anything. Do NOT invent fake footers, signatures, or institutional names (e.g., do not randomly add "Nouakchott Institute"). Only fix obvious spelling errors.
-3. CONTENT GENERATION (SCENARIO B - BRIEF REQUEST): If the user provides only brief instructions (e.g., "Create an invoice" or "Design a certificate"), design a professional structure based ONLY on the provided info. NEVER invent fake personal data, fake companies, or fake numbers. Leave blank placeholders if data is missing.
-4. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
-5. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
-6. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
-7. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. DO NOT translate to Arabic unless explicitly told to do so.
-8. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the requested language is French or English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, wrap it in `<div dir="rtl" style="text-align: right;">...</div>`.
+2. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
+3. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
+4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
+5. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. DO NOT translate to Arabic unless explicitly told to do so.
+6. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the requested language is French or English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, wrap it in `<div dir="rtl" style="text-align: right;">...</div>`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -193,6 +208,7 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 
 @app.route("/modify", methods=["POST"])
