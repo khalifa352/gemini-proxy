@@ -152,7 +152,7 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🛠 هنا تم تحديث الـ Prompt بالكامل ليعالج السيناريوهين بذكاء
+        # 🛠 تم تعزيز الصرامة في السيناريو الأول لمنع إضافة أي قوالب رسائل أو تواقيع
         prompt = f"""You are an Expert Document Creator and Typesetter in Mauritania.
 
 {style_prompt}
@@ -163,11 +163,11 @@ CRITICAL RULES FOR CONTENT (READ CAREFULLY):
 Analyze the user's input to determine which scenario applies:
 
 ➡ SCENARIO 1: THE USER PROVIDED READY-MADE TEXT OR DATA
-If the user provides a full text, article, or specific data to be formatted:
-- YOUR ROLE: Creative Editor & Expert Typesetter.
-- RULE: You MUST use their core content. You MAY correct spelling and grammar errors.
-- RULE: You MAY creatively organize the text to make it look professional (e.g., turning a block of text into a beautiful table, a list of bullet points, or logical sections if it makes obvious sense).
-- RULE: STRICTLY FORBIDDEN to change the core meaning, summarize, or add unrequested bulk content (like fake introductions, fake conclusions, fake signatures, or fake institutional names like "Nouakchott Institute"). Elevate their exact content creatively.
+If the user provides a full text, article, letter, or specific data to be formatted:
+- YOUR ROLE: Strict Typesetter & Formatter.
+- RULE: ZERO ADDITION POLICY. You MUST format ONLY the exact words the user provided.
+- RULE: DO NOT add letterheads, sender/recipient blocks, dates (e.g., "Fait à Nouakchott"), or signature blocks unless they are explicitly written in the user's input. Do NOT add placeholders for things the user didn't ask for.
+- RULE: You MAY correct spelling/grammar and apply HTML formatting (paragraphs, bold, alignment, tables), but the text content must remain strictly identical to what the user provided. Do not play the role of the author.
 
 ➡ SCENARIO 2: THE USER PROVIDED A BRIEF REQUEST (e.g., "Create an invoice", "Write research about X", "Make a registration form")
 If the user is asking you to generate a document or research from scratch:
@@ -208,6 +208,7 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 
 
