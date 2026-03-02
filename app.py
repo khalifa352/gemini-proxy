@@ -342,14 +342,16 @@ def generate_image():
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        reference_image = data.get("reference_image", None)
+        # 🚀 استقبال المقاس ومصفوفة الصور من التطبيق
+        reference_images = data.get("reference_images", []) 
+        aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        logger.info(f"🎨 Generating with Nano Banana Pro/2...")
+        logger.info(f"🎨 Generating with Nano Banana Pro/2 (Ratio: {aspect_ratio})...")
 
-        # 🚀 تعليمات النظام الصارمة جداً (منع الموكاب + فرض البيئة الموريتانية)
+        # تعليمات النظام الصارمة جداً (منع الموكاب + فرض البيئة الموريتانية)
         system_text = """You are an elite creative designer and art director.
 RULES:
 1. Generate EXACTLY what the user describes with maximum professional quality.
@@ -360,13 +362,13 @@ RULES:
 6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
 7. Render any Arabic text inside images with perfect spelling and beautiful typography.
 8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
-9. If a reference image is provided, incorporate it naturally into the design."""
+9. If reference images are provided, incorporate them naturally into the design or modify them according to instructions."""
 
         user_parts = [{"text": user_prompt}]
         
-        # معالجة الصورة المرجعية إن وجدت
-        if reference_image:
-            clean_b64 = reference_image
+        # 🚀 معالجة مصفوفة الصور (دعم أكثر من صورة أو التعديل التكراري)
+        for b64_img in reference_images:
+            clean_b64 = b64_img
             if "," in clean_b64:
                 clean_b64 = clean_b64.split(",", 1)[1]
             user_parts.append({
@@ -375,7 +377,9 @@ RULES:
                     "data": clean_b64
                 }
             })
-            logger.info("📎 Reference image attached")
+            
+        if reference_images:
+            logger.info(f"📎 {len(reference_images)} Reference image(s) attached")
 
         payload = {
             "contents": [{"role": "user", "parts": user_parts}],
@@ -383,13 +387,14 @@ RULES:
             "generationConfig": {
                 "responseModalities": ["IMAGE", "TEXT"],
                 "temperature": 0.7,
-                "imageConfig": {"aspectRatio": "1:1"}
+                # 🚀 تمرير المقاس الديناميكي للنموذج
+                "imageConfig": {"aspectRatio": aspect_ratio}
             }
         }
 
         headers = {"Content-Type": "application/json"}
 
-        # 🚀 ترتيب النماذج من الأقوى (Pro) إلى الأسرع (Flash)
+        # ترتيب النماذج من الأقوى إلى الأسرع
         models = [
             ("gemini-3-pro-image-preview", "Nano Banana Pro", 120),
             ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
@@ -397,7 +402,6 @@ RULES:
         ]
 
         for model_id, model_name, timeout in models:
-            # استخدام خوادم Vertex AI لاختراق الحظر
             url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_id}:generateContent?key={k}"
             
             try:
@@ -427,6 +431,7 @@ RULES:
     except Exception as e:
         logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+
 
 
 
