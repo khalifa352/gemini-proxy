@@ -352,23 +352,22 @@ def generate_image():
     import json
 
     try:
-        # قراءة مفتاح Vertex AI
-        k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API-KEY2")
+        # 🛠 التعديل الأول: استخدام المفتاح الأساسي كبديل احتياطي لمنع الانهيار الفوري
+        k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
+            logger.error("❌ API Key is missing!")
             return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        # 🚀 استقبال المقاس ومصفوفة الصور من التطبيق
         reference_images = data.get("reference_images", []) 
         aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        logger.info(f"🎨 Generating with Nano Banana Pro/2 (Ratio: {aspect_ratio})...")
+        logger.info(f"🎨 Generating Image (Ratio: {aspect_ratio})...")
 
-        # تعليمات النظام الصارمة جداً (منع الموكاب + فرض البيئة الموريتانية)
         system_text = """You are an elite creative designer and art director.
 RULES:
 1. Generate EXACTLY what the user describes with maximum professional quality.
@@ -383,7 +382,6 @@ RULES:
 
         user_parts = [{"text": user_prompt}]
         
-        # 🚀 معالجة مصفوفة الصور (دعم أكثر من صورة أو التعديل التكراري)
         for b64_img in reference_images:
             clean_b64 = b64_img
             if "," in clean_b64:
@@ -398,28 +396,27 @@ RULES:
         if reference_images:
             logger.info(f"📎 {len(reference_images)} Reference image(s) attached")
 
+        # 🛠 التعديل الثاني: ضبط Payload لتوافق سيرفرات Gemini وعدم رفضها
         payload = {
             "contents": [{"role": "user", "parts": user_parts}],
             "systemInstruction": {"parts": [{"text": system_text}]},
             "generationConfig": {
-                "responseModalities": ["IMAGE", "TEXT"],
-                "temperature": 0.7,
-                # 🚀 تمرير المقاس الديناميكي للنموذج
-                "imageConfig": {"aspectRatio": aspect_ratio}
+                "responseModalities": ["IMAGE"], # يجب أن تكون IMAGE فقط
+                "temperature": 0.7
             }
         }
 
         headers = {"Content-Type": "application/json"}
 
-        # ترتيب النماذج من الأقوى إلى الأسرع
         models = [
             ("gemini-3-pro-image-preview", "Nano Banana Pro", 120),
             ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
-            ("gemini-2.5-flash-preview-image-generation", "Gemini 2.5 Flash Image", 90),
+            ("gemini-2.5-flash", "Gemini 2.5 Flash", 90),
         ]
 
         for model_id, model_name, timeout in models:
-            url = f"[https://aiplatform.googleapis.com/v1/publishers/google/models/](https://aiplatform.googleapis.com/v1/publishers/google/models/){model_id}:generateContent?key={k}"
+            # 🛠 التعديل الثالث: استخدام الرابط الصحيح الذي يقبل المفاتيح (generativelanguage)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
             
             try:
                 logger.info(f"🚀 Trying {model_name} ({model_id})...")
@@ -448,6 +445,7 @@ RULES:
     except Exception as e:
         logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
