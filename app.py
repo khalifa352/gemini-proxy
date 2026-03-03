@@ -211,7 +211,6 @@ OUTPUT: Return raw HTML only."""
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
-
 @app.route("/modify", methods=["POST"])
 def modify():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
@@ -345,6 +344,7 @@ Do NOT output JSON. You MUST output exactly like this:
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -419,7 +419,7 @@ RULES:
         ]
 
         for model_id, model_name, timeout in models:
-            url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_id}:generateContent?key={k}"
+            url = f"[https://aiplatform.googleapis.com/v1/publishers/google/models/](https://aiplatform.googleapis.com/v1/publishers/google/models/){model_id}:generateContent?key={k}"
             
             try:
                 logger.info(f"🚀 Trying {model_name} ({model_id})...")
@@ -448,11 +448,6 @@ RULES:
     except Exception as e:
         logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
-
-
-
-
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
