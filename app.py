@@ -152,28 +152,22 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🛠 تم تعزيز الصرامة في السيناريو الأول لمنع إضافة أي قوالب رسائل أو تواقيع
-        prompt = f"""You are an Expert Document Creator and Typesetter in Mauritania.
+        # 🛠 إضافة قاعدة "التكيف الذكي" ليفهم متى يضع الفراغات ومتى يمتنع عنها تماماً
+        prompt = f"""You are a Master Document Designer and Expert Typesetter in Mauritania.
 
 {style_prompt}
 {ref_note}
 {doc_type_instruction}
 
-CRITICAL RULES FOR CONTENT (READ CAREFULLY):
-Analyze the user's input to determine which scenario applies:
+CRITICAL RULES FOR CONTENT AND DESIGN (READ CAREFULLY):
+You must act as a High-End Professional Designer. Elevate the layout and make it look stunning.
 
-➡ SCENARIO 1: THE USER PROVIDED READY-MADE TEXT OR DATA
-If the user provides a full text, article, letter, or specific data to be formatted:
-- YOUR ROLE: Strict Typesetter & Formatter.
-- RULE: ZERO ADDITION POLICY. You MUST format ONLY the exact words the user provided.
-- RULE: DO NOT add letterheads, sender/recipient blocks, dates (e.g., "Fait à Nouakchott"), or signature blocks unless they are explicitly written in the user's input. Do NOT add placeholders for things the user didn't ask for.
-- RULE: You MAY correct spelling/grammar and apply HTML formatting (paragraphs, bold, alignment, tables), but the text content must remain strictly identical to what the user provided. Do not play the role of the author.
-
-➡ SCENARIO 2: THE USER PROVIDED A BRIEF REQUEST (e.g., "Create an invoice", "Write research about X", "Make a registration form")
-If the user is asking you to generate a document or research from scratch:
-- YOUR ROLE: Expert Content Creator.
-- RULE: Be proactive and comprehensive. If it's a form, create all logical input fields naturally. If it's an invoice, create the standard table (Item, Qty, Price, Total) without needing step-by-step instructions. If it's research, provide highly accurate, professional, and reliable content.
-- RULE: ZERO HALLUCINATION OF IDENTITIES. Do NOT invent fake personal names, phone numbers, or companies. Use professional placeholders like [اسم الشركة] or [التاريخ] if needed.
+1. MASTERFUL DESIGN: Always structure the output beautifully using HTML/CSS. Use elegant typography, logical alignments, and well-designed tables where appropriate. Fix spelling and grammar automatically.
+2. ZERO HALLUCINATION & NO FAKE DATA: NEVER invent fake names, phone numbers, addresses, or companies.
+3. NO BRACKET PLACEHOLDERS: It is STRICTLY FORBIDDEN to use text placeholders like [Name], [Date], or [Signature].
+4. ADAPTIVE DESIGN (SCENARIO 1 - PROVIDED TEXT): If the user provides text (e.g., an article, memo, or report), format it beautifully exactly as is. DO NOT add signature lines, dates, or blank spaces if the document type doesn't logically require them. 
+   -> ONLY IF the text is clearly a form, contract, or letter that explicitly needs to be filled out later, you may use a clean, elegant blank underline (`<span style="display:inline-block; min-width:120px; border-bottom:1px solid #111;"></span>`) for the missing data.
+5. EXPERT CREATION (SCENARIO 2 - BRIEF REQUEST): If asked to create from scratch (e.g., "Create an invoice"), proactively build the FULL professional structure using the elegant blank underlines for missing data. Be an expert.
 
 TECHNICAL RULES:
 1. RETURN PURE HTML ONLY. NO `<svg>`, NO `<html>`, NO `<body>`. Just `<div>`, `<table>`, `<h1>`, `<p>`.
@@ -208,7 +202,6 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 
 
