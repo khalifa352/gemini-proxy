@@ -152,30 +152,39 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🛠 إضافة قاعدة "التكيف الذكي" ليفهم متى يضع الفراغات ومتى يمتنع عنها تماماً
-        prompt = f"""You are a Master Document Designer and Expert Typesetter in Mauritania.
+        # 🛠 الضربة القاضية للاجتهاد المفرط: قائمة ممنوعات صارمة جداً في السيناريو الأول
+        prompt = f"""You are an Expert Document Typesetter.
 
 {style_prompt}
 {ref_note}
 {doc_type_instruction}
 
-CRITICAL RULES FOR CONTENT AND DESIGN (READ CAREFULLY):
-You must act as a High-End Professional Designer. Elevate the layout and make it look stunning.
+CRITICAL RULES - CHOOSE SCENARIO 1 OR 2:
 
-1. MASTERFUL DESIGN: Always structure the output beautifully using HTML/CSS. Use elegant typography, logical alignments, and well-designed tables where appropriate. Fix spelling and grammar automatically.
-2. ZERO HALLUCINATION & NO FAKE DATA: NEVER invent fake names, phone numbers, addresses, or companies.
-3. NO BRACKET PLACEHOLDERS: It is STRICTLY FORBIDDEN to use text placeholders like [Name], [Date], or [Signature].
-4. ADAPTIVE DESIGN (SCENARIO 1 - PROVIDED TEXT): If the user provides text (e.g., an article, memo, or report), format it beautifully exactly as is. DO NOT add signature lines, dates, or blank spaces if the document type doesn't logically require them. 
-   -> ONLY IF the text is clearly a form, contract, or letter that explicitly needs to be filled out later, you may use a clean, elegant blank underline (`<span style="display:inline-block; min-width:120px; border-bottom:1px solid #111;"></span>`) for the missing data.
-5. EXPERT CREATION (SCENARIO 2 - BRIEF REQUEST): If asked to create from scratch (e.g., "Create an invoice"), proactively build the FULL professional structure using the elegant blank underlines for missing data. Be an expert.
+➡ SCENARIO 1: TEXT FORMATTING (USER PROVIDED THE CONTENT)
+If the user provides a draft, text, article, or letter:
+- YOUR ONLY JOB is to format their EXACT text into beautiful HTML (CSS, spacing, typography, paragraphs).
+- STRICT PROHIBITION (ZERO ADDITION): Do NOT add a single word of content.
+- DO NOT add headers or company names.
+- DO NOT add titles (e.g., "LETTRE DE PARTENARIAT").
+- DO NOT add an "Objet / Subject" line if the user didn't write one.
+- DO NOT add recipient addresses (e.g., "À l'attention de").
+- DO NOT add signature lines, stamps, or footers (e.g., "Signature & Cachet", "Généré par...").
+- JUST format the words the user gave you. Nothing more, nothing less.
+
+➡ SCENARIO 2: DOCUMENT GENERATION (USER ASKS YOU TO WRITE IT)
+If the user gives a brief instruction (e.g., "Create an invoice", "Write a letter for X"):
+- Generate the full professional structure (tables, fields, subject lines).
+- Use elegant blank underlines `<span style="border-bottom:1px solid #111; display:inline-block; min-width:120px;"></span>` for missing data. NO brackets like [Name].
+- ZERO HALLUCINATION: No fake names, numbers, or companies.
 
 TECHNICAL RULES:
-1. RETURN PURE HTML ONLY. NO `<svg>`, NO `<html>`, NO `<body>`. Just `<div>`, `<table>`, `<h1>`, `<p>`.
-2. NO PAGE WRAPPERS: DO NOT wrap content in an outer page container with fixed heights or borders.
+1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
+2. NO PAGE WRAPPERS with fixed heights.
 3. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
-4. BIDI PROTECTION (CRITICAL): Wrap ALL phone numbers (e.g., +222...) and Latin/French words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>` to prevent RTL text flipping.
-5. EXACT LANGUAGE MATCH (CRITICAL): You MUST generate the document in the EXACT LANGUAGE requested by the user. DO NOT translate to Arabic unless explicitly told to do so.
-6. DIRECTIONALITY & ALIGNMENT (CRITICAL): If the requested language is French or English, you MUST wrap the ENTIRE output in exactly ONE `<div dir="ltr" style="text-align: left;">...</div>`. If Arabic, wrap it in `<div dir="rtl" style="text-align: right;">...</div>`.
+4. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
+5. EXACT LANGUAGE MATCH: Keep the user's language.
+6. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -202,7 +211,6 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 
 @app.route("/modify", methods=["POST"])
