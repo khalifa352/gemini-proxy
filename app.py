@@ -152,8 +152,8 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🛠 الضربة القاضية للاجتهاد المفرط: قائمة ممنوعات صارمة جداً في السيناريو الأول
-        prompt = f"""You are an Expert Document Typesetter.
+        # 🛠 التوازن الذهبي: مصمم مبدع جداً، لكنه يحترم حدود النص الأصلي
+        prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
 {style_prompt}
 {ref_note}
@@ -163,18 +163,14 @@ CRITICAL RULES - CHOOSE SCENARIO 1 OR 2:
 
 ➡ SCENARIO 1: TEXT FORMATTING (USER PROVIDED THE CONTENT)
 If the user provides a draft, text, article, or letter:
-- YOUR ONLY JOB is to format their EXACT text into beautiful HTML (CSS, spacing, typography, paragraphs).
-- STRICT PROHIBITION (ZERO ADDITION): Do NOT add a single word of content.
-- DO NOT add headers or company names.
-- DO NOT add titles (e.g., "LETTRE DE PARTENARIAT").
-- DO NOT add an "Objet / Subject" line if the user didn't write one.
-- DO NOT add recipient addresses (e.g., "À l'attention de").
-- DO NOT add signature lines, stamps, or footers (e.g., "Signature & Cachet", "Généré par...").
-- JUST format the words the user gave you. Nothing more, nothing less.
+- YOUR GOAL: Make their exact text look visually STUNNING and PROFESSIONAL using HTML/CSS.
+- RULE 1 (STYLE THE EXISTING): If the user included titles, dates, or addresses in their text, you MUST format them beautifully (e.g., use <h1> for their titles, proper alignment for their addresses). Elevate their content!
+- RULE 2 (NO INVENTIONS): STRICTLY FORBIDDEN to invent or append missing elements. If the user didn't write a signature block, DO NOT add one. If they didn't write a subject line (Objet), DO NOT invent one.
+- RULE 3: Fix spelling/grammar, organize paragraphs, and apply elegant typography, but the actual textual content must remain 100% faithful to their input.
 
-➡ SCENARIO 2: DOCUMENT GENERATION (USER ASKS YOU TO WRITE IT)
+➡ SCENARIO 2: DOCUMENT GENERATION (USER ASKS YOU TO WRITE IT FROM SCRATCH)
 If the user gives a brief instruction (e.g., "Create an invoice", "Write a letter for X"):
-- Generate the full professional structure (tables, fields, subject lines).
+- Act as an Expert Content Creator. Generate the FULL professional structure (tables, fields, subject lines).
 - Use elegant blank underlines `<span style="border-bottom:1px solid #111; display:inline-block; min-width:120px;"></span>` for missing data. NO brackets like [Name].
 - ZERO HALLUCINATION: No fake names, numbers, or companies.
 
