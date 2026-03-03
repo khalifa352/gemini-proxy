@@ -152,7 +152,7 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🛠 تم إضافة قوانين صارمة لمنع الإطارات الخارجية ومنع محاكاة الرأسية
+        # 🛠 تم دمج كافة القواعد الصارمة + التوزيع الرأسي الذكي للمستندات القصيرة
         prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
 {style_prompt}
@@ -177,11 +177,12 @@ If the user gives a brief instruction (e.g., "Create an invoice", "Write a lette
 TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
 2. NO BORDERS AROUND DOCUMENT (CRITICAL ❌): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE), shadows, or fixed heights. The background must remain entirely transparent and free of bounding boxes.
-3. NO FAKE LETTERHEADS: Assume the document will be printed on a beautiful, pre-designed official letterhead paper. DO NOT simulate logos, company names, or header contact info at the very top unless explicitly written by the user. Focus ONLY on beautifully formatting the body and content of the document.
-4. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
-5. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
-6. EXACT LANGUAGE MATCH: Keep the user's language.
-7. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
+3. NO FAKE LETTERHEADS: Assume the document will be printed on a beautiful, pre-designed official letterhead paper. DO NOT simulate logos, company names, or header contact info at the very top unless explicitly written by the user.
+4. SMART VERTICAL DISTRIBUTION (ADAPTIVE LAYOUT ⚖️): Evaluate the content length before generating HTML. If the document is VERY SHORT (e.g., a brief letter, certificate, or single paragraph), center it elegantly on the page to avoid an ugly empty bottom half. Use a wrapper like `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px;">`. If the document is long, just let it flow naturally.
+5. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
+6. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
+7. EXACT LANGUAGE MATCH: Keep the user's language.
+8. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -208,6 +209,7 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 
 @app.route("/modify", methods=["POST"])
