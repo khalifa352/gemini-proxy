@@ -152,7 +152,7 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # 🛠 التوازن الذهبي: مصمم مبدع جداً، لكنه يحترم حدود النص الأصلي
+        # 🛠 تم إضافة قوانين صارمة لمنع الإطارات الخارجية ومنع محاكاة الرأسية
         prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
 {style_prompt}
@@ -174,13 +174,14 @@ If the user gives a brief instruction (e.g., "Create an invoice", "Write a lette
 - Use elegant blank underlines `<span style="border-bottom:1px solid #111; display:inline-block; min-width:120px;"></span>` for missing data. NO brackets like [Name].
 - ZERO HALLUCINATION: No fake names, numbers, or companies.
 
-TECHNICAL RULES:
+TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
-2. NO PAGE WRAPPERS with fixed heights.
-3. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
-4. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
-5. EXACT LANGUAGE MATCH: Keep the user's language.
-6. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
+2. NO BORDERS AROUND DOCUMENT (CRITICAL ❌): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE), shadows, or fixed heights. The background must remain entirely transparent and free of bounding boxes.
+3. NO FAKE LETTERHEADS: Assume the document will be printed on a beautiful, pre-designed official letterhead paper. DO NOT simulate logos, company names, or header contact info at the very top unless explicitly written by the user. Focus ONLY on beautifully formatting the body and content of the document.
+4. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
+5. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
+6. EXACT LANGUAGE MATCH: Keep the user's language.
+7. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
 
 OUTPUT: Return raw HTML only."""
 
