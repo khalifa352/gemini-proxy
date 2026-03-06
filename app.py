@@ -102,12 +102,26 @@ When Arabic and French/English text appear on the SAME line (e.g., "عميل ...
 3. NEVER duplicate the separator line. NEVER break these pairs into two rows. They MUST remain visually on one horizontal line exactly as in the original image.
 4. This applies to ALL inline label pairs, field headers, and any text with dots/dashes/colons between two languages.
 
-RULE C – PROFESSIONAL QUALITY ASSURANCE:
+RULE C – INLINE BIDI PROTECTION FOR LABELS WITH PUNCTUATION (CRITICAL ⚠️):
+Arabic text followed or preceded by colons, dots, dashes, or underlines (e.g., "تاريخ:...........", "الاسم: ___") often gets visually REVERSED by the browser's bidi algorithm, showing "...........:تاريخ" instead. To PREVENT this:
+1. ALWAYS wrap each Arabic label + its punctuation together inside: `<span dir="rtl" style="unicode-bidi:embed; display:inline-block;">تاريخ:..........</span>`.
+2. If the label has a fillable blank area after it, use: `<div dir="rtl" style="display:flex; align-items:center;"><span>تاريخ:</span><span style="flex:1; border-bottom:1px dotted #333; margin-right:6px; min-width:50px;"></span></div>`.
+3. For French/English labels with punctuation, wrap in: `<span dir="ltr" style="unicode-bidi:embed; display:inline-block;">Date:...........</span>`.
+4. This rule applies to EVERY label or field in the document that has punctuation marks (colons, dots, dashes, underlines) adjacent to Arabic or Latin text. Leave NOTHING to the browser's default bidi algorithm.
+
+RULE D – PROFESSIONAL QUALITY ASSURANCE:
 After cloning, ensure the output looks clean and professional:
 1. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
 2. Consistent spacing: uniform gaps between rows, no random large/small gaps.
 3. Table cells must have equal padding and aligned borders.
-4. If the original image has imperfections, reproduce the CONTENT faithfully but ensure the HTML rendering is clean and well-structured."""
+4. If the original image has imperfections, reproduce the CONTENT faithfully but ensure the HTML rendering is clean and well-structured.
+
+RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN ❌):
+You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT:
+1. Add any outer border, stroke, shadow, or bounding box around the cloned content.
+2. Add any page frame, card wrapper, or container with visible edges.
+3. The background must remain fully transparent with NO simulated page edges.
+4. Reproduce ONLY what is printed ON the paper — not the paper itself."""
 
     if style == "modern":
         return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
