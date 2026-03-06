@@ -198,16 +198,20 @@ def generate():
         doc_type = detect_document_type(user_msg)
 
         # 🚀 كشف اتجاه الصفحة وأبعادها
-        page_dimensions = {
-            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait (طولي)"},
-            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape (عرضي)"},
-            "a3": {"w": 842, "h": 1191, "orientation": "portrait (طولي A3)"},
-            "a5": {"w": 420, "h": 595, "orientation": "portrait (طولي A5)"},
+       page_dimensions = {
+            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait"},
+            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape"},
+            "a3": {"w": 842, "h": 1191, "orientation": "portrait A3"},
+            "a5": {"w": 420, "h": 595, "orientation": "portrait A5"},
         }
         page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
-        orientation_instruction = f"""PAGE FORMAT: {page_info['orientation']} — Target width: {page_info['w']}px, height: {page_info['h']}px.
-{"LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally — use the full width, keep content compact vertically. Tables and columns should spread WIDE not TALL. Do NOT generate a tall portrait-style layout." if page_info['w'] > page_info['h'] else ""}"""
+        is_landscape = page_info["w"] > page_info["h"]
 
+        landscape_extra = ""
+        if is_landscape:
+            landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width, keep content compact vertically. Tables and columns should spread WIDE not TALL. Do NOT generate a tall portrait-style layout."
+
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " CRITICAL PAGE FILLING RULES: The generated HTML content MUST fill the page naturally and professionally. Do NOT leave excessive white space or oversized margins. Content should be well-centered, properly aligned, and proportionally sized to fit the target page dimensions. Text must NOT appear tiny or shifted to one side. Tables must use full available width. All elements must be properly aligned with consistent margins. For bilingual documents: Arabic ALWAYS on the RIGHT side, French/English ALWAYS on the LEFT side — this positioning must NEVER flip regardless of page orientation."
         ref_note = ""
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
