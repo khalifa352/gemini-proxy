@@ -67,7 +67,29 @@ def clean_html_output(raw_text):
 def get_style_prompt(style, mode):
     if mode == "simulation":
         return """CLONING: Reproduce EXACTLY text/tables from the reference image.
-IGNORE logos, stamps, signatures. Do NOT invent data."""
+IGNORE logos, stamps, signatures. Do NOT invent data.
+
+⚠️ EXCEPTIONAL SCENARIO – STANDALONE CIRCULAR STAMP (MANDATORY):
+If the attached image is a SINGLE circular stamp (rubber stamp, official seal) and NOT a full document page, the following rules override everything else:
+1. ABSOLUTELY FORBIDDEN to invent, fabricate, or hallucinate any certificate, document body, or surrounding text. You must produce ONLY the stamp reproduction.
+2. You MUST reproduce the stamp as an inline <svg> element:
+   - Use <circle> elements for the stamp's circular borders (outer ring, inner ring, etc.).
+   - Use <path> with arc definitions and <textPath> to render curved/circular text exactly as it appears in the original image, preserving the correct reading direction and curvature.
+   - Place any center text (names, emblems, stars, symbols) using <text> with x/y positioning centered inside the SVG.
+   - Match colors faithfully (typically dark blue, red, or black).
+   - Set a reasonable viewBox (e.g., "0 0 250 250") and width/height.
+3. This is the ONLY scenario where <svg> output is permitted. For all other document types, <svg> remains strictly forbidden.
+4. Output the <svg> element directly with NO surrounding HTML wrapper, NO invented document, NO certificate text.
+
+⚠️ BILINGUAL DOCUMENT LAYOUT LOCK (Arabic + French/English – MANDATORY):
+If the reference image contains a dual-language side-by-side layout (e.g., Arabic on the right side and French/English on the left side, or vice versa), you MUST strictly lock the visual column positions to prevent any horizontal flip:
+1. The OUTER wrapper container MUST use dir="ltr" to establish a stable left-to-right column order that matches the original image. NEVER use dir="rtl" on the outer wrapper for bilingual documents.
+2. Use a two-column structure (CSS flexbox with `display:flex;` or a two-cell `<table>`) where each column has its OWN explicit direction:
+   - Left column: dir="ltr" style="text-align:left;" → for French/English content.
+   - Right column: dir="rtl" style="text-align:right;" → for Arabic content.
+3. If the original image has Arabic on the LEFT and French on the RIGHT (reversed layout), reproduce that exact arrangement – always match the image's visual positioning.
+4. Each column must be self-contained with its own dir attribute. Do NOT rely on CSS float or any property that could be affected by a parent RTL context.
+5. This layout lock ensures the cloned document visually matches the original reference image pixel-for-pixel in column arrangement."""
 
     if style == "modern":
         return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
@@ -152,6 +174,12 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
+        # ── قاعدة SVG: مسموح فقط لسيناريو الختم في وضع المحاكاة ──
+        if mode == "simulation":
+            svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario described above in the style instructions. For all other simulation documents, `<svg>` remains forbidden)."
+        else:
+            svg_rule = "NO `<svg>`, `<html>`, `<body>`."
+
         # 🛠 تم دمج كافة القواعد الصارمة + التوزيع الرأسي الذكي للمستندات القصيرة
         prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
@@ -175,7 +203,7 @@ If the user gives a brief instruction (e.g., "Create an invoice", "Write a lette
 - ZERO HALLUCINATION: No fake names, numbers, or companies.
 
 TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
-1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
+1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
 2. NO BORDERS AROUND DOCUMENT (CRITICAL ❌): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE), shadows, or fixed heights. The background must remain entirely transparent and free of bounding boxes.
 3. NO FAKE LETTERHEADS: Assume the document will be printed on a beautiful, pre-designed official letterhead paper. DO NOT simulate logos, company names, or header contact info at the very top unless explicitly written by the user.
 4. SMART VERTICAL DISTRIBUTION (ADAPTIVE LAYOUT ⚖️): Evaluate the content length before generating HTML. If the document is VERY SHORT (e.g., a brief letter, certificate, or single paragraph), center it elegantly on the page to avoid an ugly empty bottom half. Use a wrapper like `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px;">`. If the document is long, just let it flow naturally.
@@ -183,6 +211,14 @@ TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 6. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
 7. EXACT LANGUAGE MATCH: Keep the user's language.
 8. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
+9. BILINGUAL DOCUMENT LAYOUT LOCK (CRITICAL FOR DUAL-LANGUAGE CONTENT ⚠️): If the document contains TWO languages side by side (e.g., Arabic + French, Arabic + English), you MUST prevent horizontal flipping by following these strict rules:
+   - The OUTER wrapper MUST use `dir="ltr"` to establish a stable, predictable column order. NEVER use `dir="rtl"` on the outer wrapper of a bilingual document.
+   - Use a two-column layout (CSS `display:flex;` or a two-cell `<table>`) where:
+     • LEFT column: `dir="rtl" style="text-align:right; width:50%;"` → Arabic content.
+     • RIGHT column: `dir="ltr" style="text-align:left; width:50%;"` → French/English content.
+   - Each column MUST have its own explicit `dir` attribute. Do NOT rely on inheritance from a parent RTL context.
+   - Shared headers or titles that span both columns should be centered and wrapped in their own `dir`-appropriate container.
+   - This rule applies to invoices, certificates, contracts, letters, or ANY document the user requests in two languages side by side.
 
 OUTPUT: Return raw HTML only."""
 
