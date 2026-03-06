@@ -87,19 +87,20 @@ If the reference image contains a dual-language layout, you MUST strictly lock v
 RULE A – SIDE-BY-SIDE COLUMNS (two separate columns of text):
 1. The OUTER wrapper MUST use dir="ltr" to lock a stable left-to-right column rendering order. NEVER use dir="rtl" on the outer wrapper.
 2. Use a two-column structure (`display:flex;` or a two-cell `<table>`) where each column has its OWN explicit direction:
-   - Left column: dir="ltr" style="text-align:left;" → for French/English content.
-   - Right column: dir="rtl" style="text-align:right;" → for Arabic content.
-3. Always match the image's visual positioning. If the original has Arabic LEFT and French RIGHT, reproduce that exact arrangement.
+   - RIGHT column (order:2): `dir="rtl" style="text-align:right; width:50%;"` → Arabic content (Arabic is ALWAYS on the RIGHT side).
+   - LEFT column (order:1): `dir="ltr" style="text-align:left; width:50%;"` → French/English content (French/English is ALWAYS on the LEFT side).
+3. In HTML source, write the LEFT (French) column FIRST, then the RIGHT (Arabic) column SECOND. Combined with the parent `dir="ltr"`, this naturally places French on the left and Arabic on the right without needing CSS order.
 4. Each column must be self-contained with its own dir attribute. Do NOT rely on float or parent RTL inheritance.
 
 RULE B – INLINE BILINGUAL PAIRS ON THE SAME LINE (CRITICAL ⚠️):
 When Arabic and French/English text appear on the SAME line (e.g., "عميل .............. Client", or field labels like "الاسم / Nom"), you MUST keep them on a SINGLE line:
 1. Use a single-row flex container: `<div style="display:flex; justify-content:space-between; align-items:center; width:100%; direction:ltr;">`.
-2. Place the RIGHT-side text (usually Arabic) in: `<span dir="rtl" style="text-align:right;">عميل</span>`.
-3. Place the LEFT-side text (usually French) in: `<span dir="ltr" style="text-align:left;">Client</span>`.
-4. For dotted/dashed separators between them, use a SINGLE flex-grow middle element: `<span style="flex:1; border-bottom:1px dotted #333; margin:0 6px; min-width:30px;"></span>`.
-5. NEVER duplicate the separator line. NEVER break these pairs into two rows. They MUST remain visually on one horizontal line exactly as in the original image.
-6. This applies to ALL inline label pairs, field headers, and any text with dots/dashes/colons between two languages.
+2. In HTML source order, write LEFT text FIRST and RIGHT text LAST:
+   - FIRST child (appears LEFT): `<span dir="ltr" style="text-align:left;">Client</span>` → French/English.
+   - MIDDLE child (separator): `<span style="flex:1; border-bottom:1px dotted #333; margin:0 6px; min-width:30px;"></span>`.
+   - LAST child (appears RIGHT): `<span dir="rtl" style="text-align:right;">عميل</span>` → Arabic.
+3. NEVER duplicate the separator line. NEVER break these pairs into two rows. They MUST remain visually on one horizontal line exactly as in the original image.
+4. This applies to ALL inline label pairs, field headers, and any text with dots/dashes/colons between two languages.
 
 RULE C – PROFESSIONAL QUALITY ASSURANCE:
 After cloning, ensure the output looks clean and professional:
