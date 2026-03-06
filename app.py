@@ -186,15 +186,28 @@ def generate():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
 
     try:
-        data = request.json
+                data = request.json
         user_msg = data.get("message", "")
         mode = data.get("mode", "documents")
         style = data.get("style", "formal")
+        page_size = data.get("pageSize", "a4Portrait")
         reference_b64 = data.get("reference_image")
         letterhead_b64 = data.get("letterhead_image")
 
         style_prompt = get_style_prompt(style, mode)
         doc_type = detect_document_type(user_msg)
+
+        # 🚀 كشف اتجاه الصفحة وأبعادها
+        page_dimensions = {
+            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait (طولي)"},
+            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape (عرضي)"},
+            "a3": {"w": 842, "h": 1191, "orientation": "portrait (طولي A3)"},
+            "a5": {"w": 420, "h": 595, "orientation": "portrait (طولي A5)"},
+        }
+        page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
+        orientation_instruction = f"""PAGE FORMAT: {page_info['orientation']} — Target width: {page_info['w']}px, height: {page_info['h']}px.
+{"LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally — use the full width, keep content compact vertically. Tables and columns should spread WIDE not TALL. Do NOT generate a tall portrait-style layout." if page_info['w'] > page_info['h'] else ""}"""
+
 
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -213,11 +226,13 @@ def generate():
             svg_rule = "NO `<svg>`, `<html>`, `<body>`."
 
         # 🛠 تم دمج كافة القواعد الصارمة + التوزيع الرأسي الذكي للمستندات القصيرة
-        prompt = f"""You are a Master Document Designer and Expert Typesetter.
+               prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
 {style_prompt}
+{orientation_instruction}
 {ref_note}
 {doc_type_instruction}
+
 
 CRITICAL RULES - CHOOSE SCENARIO 1 OR 2:
 
