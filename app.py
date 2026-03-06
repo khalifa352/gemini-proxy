@@ -186,7 +186,7 @@ def generate():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
 
     try:
-                data = request.json
+        data = request.json
         user_msg = data.get("message", "")
         mode = data.get("mode", "documents")
         style = data.get("style", "formal")
@@ -208,7 +208,6 @@ def generate():
         orientation_instruction = f"""PAGE FORMAT: {page_info['orientation']} — Target width: {page_info['w']}px, height: {page_info['h']}px.
 {"LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally — use the full width, keep content compact vertically. Tables and columns should spread WIDE not TALL. Do NOT generate a tall portrait-style layout." if page_info['w'] > page_info['h'] else ""}"""
 
-
         ref_note = ""
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
@@ -226,7 +225,7 @@ def generate():
             svg_rule = "NO `<svg>`, `<html>`, `<body>`."
 
         # 🛠 تم دمج كافة القواعد الصارمة + التوزيع الرأسي الذكي للمستندات القصيرة
-               prompt = f"""You are a Master Document Designer and Expert Typesetter.
+        prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
 {style_prompt}
 {orientation_instruction}
