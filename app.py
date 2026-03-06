@@ -82,14 +82,31 @@ If the attached image is a SINGLE circular stamp (rubber stamp, official seal) a
 4. Output the <svg> element directly with NO surrounding HTML wrapper, NO invented document, NO certificate text.
 
 ⚠️ BILINGUAL DOCUMENT LAYOUT LOCK (Arabic + French/English – MANDATORY):
-If the reference image contains a dual-language side-by-side layout (e.g., Arabic on the right side and French/English on the left side, or vice versa), you MUST strictly lock the visual column positions to prevent any horizontal flip:
-1. The OUTER wrapper container MUST use dir="ltr" to establish a stable left-to-right column order that matches the original image. NEVER use dir="rtl" on the outer wrapper for bilingual documents.
-2. Use a two-column structure (CSS flexbox with `display:flex;` or a two-cell `<table>`) where each column has its OWN explicit direction:
+If the reference image contains a dual-language layout, you MUST strictly lock visual positions to prevent any horizontal flip:
+
+RULE A – SIDE-BY-SIDE COLUMNS (two separate columns of text):
+1. The OUTER wrapper MUST use dir="ltr" to lock a stable left-to-right column rendering order. NEVER use dir="rtl" on the outer wrapper.
+2. Use a two-column structure (`display:flex;` or a two-cell `<table>`) where each column has its OWN explicit direction:
    - Left column: dir="ltr" style="text-align:left;" → for French/English content.
    - Right column: dir="rtl" style="text-align:right;" → for Arabic content.
-3. If the original image has Arabic on the LEFT and French on the RIGHT (reversed layout), reproduce that exact arrangement – always match the image's visual positioning.
-4. Each column must be self-contained with its own dir attribute. Do NOT rely on CSS float or any property that could be affected by a parent RTL context.
-5. This layout lock ensures the cloned document visually matches the original reference image pixel-for-pixel in column arrangement."""
+3. Always match the image's visual positioning. If the original has Arabic LEFT and French RIGHT, reproduce that exact arrangement.
+4. Each column must be self-contained with its own dir attribute. Do NOT rely on float or parent RTL inheritance.
+
+RULE B – INLINE BILINGUAL PAIRS ON THE SAME LINE (CRITICAL ⚠️):
+When Arabic and French/English text appear on the SAME line (e.g., "عميل .............. Client", or field labels like "الاسم / Nom"), you MUST keep them on a SINGLE line:
+1. Use a single-row flex container: `<div style="display:flex; justify-content:space-between; align-items:center; width:100%; direction:ltr;">`.
+2. Place the RIGHT-side text (usually Arabic) in: `<span dir="rtl" style="text-align:right;">عميل</span>`.
+3. Place the LEFT-side text (usually French) in: `<span dir="ltr" style="text-align:left;">Client</span>`.
+4. For dotted/dashed separators between them, use a SINGLE flex-grow middle element: `<span style="flex:1; border-bottom:1px dotted #333; margin:0 6px; min-width:30px;"></span>`.
+5. NEVER duplicate the separator line. NEVER break these pairs into two rows. They MUST remain visually on one horizontal line exactly as in the original image.
+6. This applies to ALL inline label pairs, field headers, and any text with dots/dashes/colons between two languages.
+
+RULE C – PROFESSIONAL QUALITY ASSURANCE:
+After cloning, ensure the output looks clean and professional:
+1. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
+2. Consistent spacing: uniform gaps between rows, no random large/small gaps.
+3. Table cells must have equal padding and aligned borders.
+4. If the original image has imperfections, reproduce the CONTENT faithfully but ensure the HTML rendering is clean and well-structured."""
 
     if style == "modern":
         return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
@@ -214,8 +231,9 @@ TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 9. BILINGUAL DOCUMENT LAYOUT LOCK (CRITICAL FOR DUAL-LANGUAGE CONTENT ⚠️): If the document contains TWO languages side by side (e.g., Arabic + French, Arabic + English), you MUST prevent horizontal flipping by following these strict rules:
    - The OUTER wrapper MUST use `dir="ltr"` to establish a stable, predictable column order. NEVER use `dir="rtl"` on the outer wrapper of a bilingual document.
    - Use a two-column layout (CSS `display:flex;` or a two-cell `<table>`) where:
-     • LEFT column: `dir="rtl" style="text-align:right; width:50%;"` → Arabic content.
-     • RIGHT column: `dir="ltr" style="text-align:left; width:50%;"` → French/English content.
+     • RIGHT column: `dir="rtl" style="text-align:right; width:50%;"` → Arabic content (Arabic is ALWAYS on the RIGHT side).
+     • LEFT column: `dir="ltr" style="text-align:left; width:50%;"` → French/English content (French/English is ALWAYS on the LEFT side).
+   - For INLINE bilingual pairs on the same line (e.g., "عميل ............ Client" or "الاسم / Nom"): use a single flex row `<div style="display:flex; justify-content:space-between; align-items:center; direction:ltr;">` with the French text on the left, a single `<span style="flex:1; border-bottom:1px dotted #333; margin:0 6px;">` separator in the middle, and Arabic text on the right. NEVER break these into two lines or duplicate the separator.
    - Each column MUST have its own explicit `dir` attribute. Do NOT rely on inheritance from a parent RTL context.
    - Shared headers or titles that span both columns should be centered and wrapped in their own `dir`-appropriate container.
    - This rule applies to invoices, certificates, contracts, letters, or ANY document the user requests in two languages side by side.
