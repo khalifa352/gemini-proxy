@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V9.6 Server (Smart Formatting & Bidi Protection Ready 🪄)")
+                logger.info("✅ Monjez V9.6 Server (Smart Formatting & Bidi Protection Ready)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -44,21 +44,20 @@ def call_gemini(model, contents, config, timeout):
 def clean_html_output(raw_text):
     """Clean output from any Markdown wrapping, extract pure HTML, and remove editor artifacts"""
     raw = raw_text.strip()
-    if raw.startswith("```"): 
+    if raw.startswith("```"):
         raw = re.sub(r"^```(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\n?```$", "", raw)
 
-    # Extract inner HTML if wrapped in SVG
-    div_match = re.search(r'<div[^>]*xmlns="[http://www.w3.org/1999/xhtml](http://www.w3.org/1999/xhtml)"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
+    div_match = re.search(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
     if div_match:
         raw = div_match.group(1)
-        
-    # 🧹 تنظيف الأكواد المتبقية من وضع التعديل
+
     raw = re.sub(r'\s?contenteditable="[^"]*"', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable=\'[^\']*\'', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable', '', raw, flags=re.IGNORECASE)
-        
+
     return raw.strip()
+
 
 # ══════════════════════════════════════════════════════════
 # STYLE PROMPTS - FORMAL vs MODERN
@@ -92,7 +91,7 @@ RULE A – SIDE-BY-SIDE COLUMNS (two separate columns of text):
 3. In HTML source, write the LEFT (French) column FIRST, then the RIGHT (Arabic) column SECOND. Combined with the parent `dir="ltr"`, this naturally places French on the left and Arabic on the right without needing CSS order.
 4. Each column must be self-contained with its own dir attribute. Do NOT rely on float or parent RTL inheritance.
 
-RULE B – INLINE BILINGUAL PAIRS ON THE SAME LINE (CRITICAL ⚠️):
+RULE B – INLINE BILINGUAL PAIRS ON THE SAME LINE (CRITICAL):
 When Arabic and French/English text appear on the SAME line (e.g., "عميل .............. Client", or field labels like "الاسم / Nom"), you MUST keep them on a SINGLE line:
 1. Use a single-row flex container: `<div style="display:flex; justify-content:space-between; align-items:center; width:100%; direction:ltr;">`.
 2. In HTML source order, write LEFT text FIRST and RIGHT text LAST:
@@ -102,21 +101,22 @@ When Arabic and French/English text appear on the SAME line (e.g., "عميل ...
 3. NEVER duplicate the separator line. NEVER break these pairs into two rows. They MUST remain visually on one horizontal line exactly as in the original image.
 4. This applies to ALL inline label pairs, field headers, and any text with dots/dashes/colons between two languages.
 
-RULE C – INLINE BIDI PROTECTION FOR LABELS WITH PUNCTUATION (CRITICAL ⚠️):
-Arabic text followed or preceded by colons, dots, dashes, or underlines (e.g., "تاريخ:...........", "الاسم: ___") often gets visually REVERSED by the browser's bidi algorithm, showing "...........:تاريخ" instead. To PREVENT this:
+RULE C – INLINE BIDI PROTECTION FOR LABELS WITH PUNCTUATION & SPACING (CRITICAL):
+Arabic text followed or preceded by colons, dots, dashes, or underlines often gets visually REVERSED by the browser's bidi algorithm. To PREVENT this:
 1. ALWAYS wrap each Arabic label + its punctuation together inside: `<span dir="rtl" style="unicode-bidi:embed; display:inline-block;">تاريخ:..........</span>`.
 2. If the label has a fillable blank area after it, use: `<div dir="rtl" style="display:flex; align-items:center;"><span>تاريخ:</span><span style="flex:1; border-bottom:1px dotted #333; margin-right:6px; min-width:50px;"></span></div>`.
 3. For French/English labels with punctuation, wrap in: `<span dir="ltr" style="unicode-bidi:embed; display:inline-block;">Date:...........</span>`.
-4. This rule applies to EVERY label or field in the document that has punctuation marks (colons, dots, dashes, underlines) adjacent to Arabic or Latin text. Leave NOTHING to the browser's default bidi algorithm.
+4. STRICT SPACING: Do NOT insert unjustified or random large spaces between words. Text must have natural, standard spacing. Fix any typos or obvious bad design from the original image to make the simulation highly professional.
 
-RULE D – PROFESSIONAL QUALITY ASSURANCE:
-After cloning, ensure the output looks clean and professional:
-1. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
-2. Consistent spacing: uniform gaps between rows, no random large/small gaps.
-3. Table cells must have equal padding and aligned borders.
-4. If the original image has imperfections, reproduce the CONTENT faithfully but ensure the HTML rendering is clean and well-structured.
+RULE D – PROFESSIONAL QUALITY ASSURANCE & FULL A4 ALIGNMENT:
+After cloning, ensure the output looks clean, balanced, and utilizes the full page:
+1. FULL PAGE WIDTH: Main containers MUST use `width: 100%;` and `margin: 0 auto;`. Ensure the document sits perfectly centered on the page.
+2. SYMMETRICAL ALIGNMENT: Fix any skewing or drifting to the left/right. The document MUST NOT be lopsided. All margins and paddings must be symmetrical.
+3. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
+4. Consistent spacing: uniform gaps between rows, no random large/small gaps.
+5. Table cells must have equal padding, aligned borders, and span the full appropriate width.
 
-RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN ❌):
+RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT:
 1. Add any outer border, stroke, shadow, or bounding box around the cloned content.
 2. Add any page frame, card wrapper, or container with visible edges.
@@ -162,6 +162,7 @@ INVOICE TABLE (If applicable):
 Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
 Total row in <tfoot>: "Total" colspan=3, amount in last column only."""
 
+
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
     single_page_keywords = ['فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon', 'شهادة', 'certificate', 'attestation', 'رسالة', 'letter', 'lettre', 'courrier', 'إيصال', 'receipt', 'reçu', 'تصريح', 'declaration', 'إذن', 'autorisation', 'بطاقة', 'card']
@@ -173,13 +174,15 @@ def detect_document_type(user_msg):
         if kw in msg_lower: return "multi_page"
     return "auto"
 
+
 # ══════════════════════════════════════════════════════════
 # API ROUTES
 # ══════════════════════════════════════════════════════════
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V9.6 Server Active ⚡"})
+    return jsonify({"status": "Monjez V9.6 Server Active"})
+
 
 @app.route("/gemini", methods=["POST"])
 def generate():
@@ -211,7 +214,7 @@ def generate():
         if is_landscape:
             landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width, keep content compact vertically. Tables and columns should spread WIDE not TALL. Do NOT generate a tall portrait-style layout."
 
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " CRITICAL PAGE FILLING RULES: The generated HTML content MUST fill the page naturally and professionally. Do NOT leave excessive white space or oversized margins. Content should be well-centered, properly aligned, and proportionally sized to fit the target page dimensions. Text must NOT appear tiny or shifted to one side. Tables must use full available width. All elements must be properly aligned with consistent margins. For bilingual documents: Arabic ALWAYS on the RIGHT side, French/English ALWAYS on the LEFT side — this positioning must NEVER flip regardless of page orientation."
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If the text and tables are oriented horizontally (Landscape), you MUST build a Landscape HTML layout, even if the uploaded image has blank margins making it look like a portrait screenshot. CRITICAL PAGE FILLING RULES: The generated HTML MUST fill the page naturally and professionally. Main containers must use `width: 100%; max-width: 100%;` and be centered with `margin: 0 auto;`. Do NOT leave excessive white space or asymmetrical margins. Content must be perfectly aligned and symmetrically distributed. Text must NOT appear tiny or shifted to one side. Tables must use full available width."
 
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -223,13 +226,11 @@ def generate():
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
-        # ── قاعدة SVG: مسموح فقط لسيناريو الختم في وضع المحاكاة ──
         if mode == "simulation":
             svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario described above in the style instructions. For all other simulation documents, `<svg>` remains forbidden)."
         else:
             svg_rule = "NO `<svg>`, `<html>`, `<body>`."
 
-        # 🛠 تم دمج كافة القواعد الصارمة + التوزيع الرأسي الذكي للمستندات القصيرة
         prompt = f"""You are a Master Document Designer and Expert Typesetter.
 
 {style_prompt}
@@ -254,18 +255,18 @@ If the user gives a brief instruction (e.g., "Create an invoice", "Write a lette
 
 TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
-2. NO BORDERS AROUND DOCUMENT (CRITICAL ❌): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE), shadows, or fixed heights. The background must remain entirely transparent and free of bounding boxes.
+2. NO BORDERS AROUND DOCUMENT (CRITICAL): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE), shadows, or fixed heights. The background must remain entirely transparent and free of bounding boxes.
 3. NO FAKE LETTERHEADS: Assume the document will be printed on a beautiful, pre-designed official letterhead paper. DO NOT simulate logos, company names, or header contact info at the very top unless explicitly written by the user.
-4. SMART VERTICAL DISTRIBUTION (ADAPTIVE LAYOUT ⚖️): Evaluate the content length before generating HTML. If the document is VERY SHORT (e.g., a brief letter, certificate, or single paragraph), center it elegantly on the page to avoid an ugly empty bottom half. Use a wrapper like `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px;">`. If the document is long, just let it flow naturally.
+4. SMART VERTICAL DISTRIBUTION (ADAPTIVE LAYOUT): Evaluate the content length before generating HTML. If the document is VERY SHORT (e.g., a brief letter, certificate, or single paragraph), center it elegantly on the page to avoid an ugly empty bottom half. Use a wrapper like `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px;">`. If the document is long, just let it flow naturally.
 5. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
 6. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
 7. EXACT LANGUAGE MATCH: Keep the user's language.
 8. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
-9. BILINGUAL DOCUMENT LAYOUT LOCK (CRITICAL FOR DUAL-LANGUAGE CONTENT ⚠️): If the document contains TWO languages side by side (e.g., Arabic + French, Arabic + English), you MUST prevent horizontal flipping by following these strict rules:
+9. BILINGUAL DOCUMENT LAYOUT LOCK (CRITICAL FOR DUAL-LANGUAGE CONTENT): If the document contains TWO languages side by side (e.g., Arabic + French, Arabic + English), you MUST prevent horizontal flipping by following these strict rules:
    - The OUTER wrapper MUST use `dir="ltr"` to establish a stable, predictable column order. NEVER use `dir="rtl"` on the outer wrapper of a bilingual document.
    - Use a two-column layout (CSS `display:flex;` or a two-cell `<table>`) where:
-     • RIGHT column: `dir="rtl" style="text-align:right; width:50%;"` → Arabic content (Arabic is ALWAYS on the RIGHT side).
-     • LEFT column: `dir="ltr" style="text-align:left; width:50%;"` → French/English content (French/English is ALWAYS on the LEFT side).
+     - RIGHT column: `dir="rtl" style="text-align:right; width:50%;"` → Arabic content (Arabic is ALWAYS on the RIGHT side).
+     - LEFT column: `dir="ltr" style="text-align:left; width:50%;"` → French/English content (French/English is ALWAYS on the LEFT side).
    - For INLINE bilingual pairs on the same line (e.g., "عميل ............ Client" or "الاسم / Nom"): use a single flex row `<div style="display:flex; justify-content:space-between; align-items:center; direction:ltr;">` with the French text on the left, a single `<span style="flex:1; border-bottom:1px dotted #333; margin:0 6px;">` separator in the middle, and Arabic text on the right. NEVER break these into two lines or duplicate the separator.
    - Each column MUST have its own explicit `dir` attribute. Do NOT rely on inheritance from a parent RTL context.
    - Shared headers or titles that span both columns should be centered and wrapped in their own `dir`-appropriate container.
@@ -274,10 +275,10 @@ TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 OUTPUT: Return raw HTML only."""
 
         contents = [user_msg] if user_msg else ["Create a formal document."]
-        
+
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
-        
+
         if letterhead_b64:
             contents.append("Ensure layout fits empty space below this letterhead.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
@@ -304,13 +305,13 @@ def modify():
 
     try:
         data = request.json
-        
+
         current_html = data.get("current_html") or data.get("currentSVG") or data.get("current_svg") or data.get("htmlContent") or ""
         instruction = data.get("instruction") or data.get("prompt") or ""
         ref_b64 = data.get("reference_image")
-        
+
         if not current_html.strip():
-            logger.error("❌ ERROR: current_html is empty! AI will hallucinate if allowed.")
+            logger.error("❌ ERROR: current_html is empty!")
             return jsonify({"error": "Failed", "details": "لم يتم العثور على محتوى المستند الحالي لإجراء التعديل الذكي. يرجى المحاولة مرة أخرى."}), 400
 
         img_note = ""
@@ -339,11 +340,11 @@ Do NOT output JSON. You MUST output exactly like this:
 [/HTML]"""
 
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
-        
+
         cts = [
             f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change (including mathematical recalculations if needed) and return the FULL updated HTML."
         ]
-        
+
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
@@ -353,10 +354,10 @@ Do NOT output JSON. You MUST output exactly like this:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         text = resp.text or ""
-        
+
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-        
+
         if html_match:
             new_inner = html_match.group(1).strip()
             message = msg_match.group(1).strip() if msg_match else "تم التعديل بنجاح ✨"
@@ -380,7 +381,7 @@ def smart_format():
         data = request.json
         current_html = data.get("current_html", "")
         style = data.get("style", "formal")
-        
+
         style_prompt = get_style_prompt(style, "documents")
 
         sys = f"""You are a Master Document Editor and Typesetter.
@@ -413,10 +414,10 @@ Do NOT output JSON. You MUST output exactly like this:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         text = resp.text or ""
-        
+
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-        
+
         if html_match:
             new_inner = html_match.group(1).strip()
             message = msg_match.group(1).strip() if msg_match else "تم التنسيق ✨"
@@ -432,6 +433,7 @@ Do NOT output JSON. You MUST output exactly like this:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -439,7 +441,6 @@ def generate_image():
     import json
 
     try:
-        # 🛠 التعديل الأول: استخدام المفتاح الأساسي كبديل احتياطي لمنع الانهيار الفوري
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
             logger.error("❌ API Key is missing!")
@@ -447,7 +448,7 @@ def generate_image():
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        reference_images = data.get("reference_images", []) 
+        reference_images = data.get("reference_images", [])
         aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
@@ -458,17 +459,17 @@ def generate_image():
         system_text = """You are an elite creative designer and art director.
 RULES:
 1. Generate EXACTLY what the user describes with maximum professional quality.
-2. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly. This section is dedicated to modern professional logos, print materials, and social media.
+2. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
 3. For logos and branding: Clean, scalable, flat professional design with clear typography. NO 3D mockups.
 4. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
 5. For social media: Visually striking, commercial studio lighting, vibrant colors.
-6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
+6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa).
 7. Render any Arabic text inside images with perfect spelling and beautiful typography.
 8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
 9. If reference images are provided, incorporate them naturally into the design or modify them according to instructions."""
 
         user_parts = [{"text": user_prompt}]
-        
+
         for b64_img in reference_images:
             clean_b64 = b64_img
             if "," in clean_b64:
@@ -479,16 +480,15 @@ RULES:
                     "data": clean_b64
                 }
             })
-            
+
         if reference_images:
             logger.info(f"📎 {len(reference_images)} Reference image(s) attached")
 
-        # 🛠 التعديل الثاني: ضبط Payload لتوافق سيرفرات Gemini وعدم رفضها
         payload = {
             "contents": [{"role": "user", "parts": user_parts}],
             "systemInstruction": {"parts": [{"text": system_text}]},
             "generationConfig": {
-                "responseModalities": ["IMAGE"], # يجب أن تكون IMAGE فقط
+                "responseModalities": ["IMAGE"],
                 "temperature": 0.7
             }
         }
@@ -502,9 +502,8 @@ RULES:
         ]
 
         for model_id, model_name, timeout in models:
-            # 🛠 التعديل الثالث: استخدام الرابط الصحيح الذي يقبل المفاتيح (generativelanguage)
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
-            
+
             try:
                 logger.info(f"🚀 Trying {model_name} ({model_id})...")
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
