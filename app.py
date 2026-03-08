@@ -108,13 +108,15 @@ Arabic text followed or preceded by colons, dots, dashes, or underlines often ge
 3. For French/English labels with punctuation, wrap in: `<span dir="ltr" style="unicode-bidi:embed; display:inline-block;">Date:...........</span>`.
 4. STRICT SPACING: Do NOT insert unjustified or random large spaces between words. Text must have natural, standard spacing. Fix any typos or obvious bad design from the original image to make the simulation highly professional.
 
-RULE D – PROFESSIONAL QUALITY ASSURANCE & FULL A4 ALIGNMENT:
-After cloning, ensure the output looks clean, balanced, and utilizes the full page:
-1. FULL PAGE WIDTH: Main containers MUST use `width: 100%;` and `margin: 0 auto;`. Ensure the document sits perfectly centered on the page.
-2. SYMMETRICAL ALIGNMENT: Fix any skewing or drifting to the left/right. The document MUST NOT be lopsided. All margins and paddings must be symmetrical.
-3. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
-4. Consistent spacing: uniform gaps between rows, no random large/small gaps.
-5. Table cells must have equal padding, aligned borders, and span the full appropriate width.
+RULE D – PROFESSIONAL QUALITY ASSURANCE & SINGLE-PAGE FIT:
+After cloning, ensure the output looks clean, balanced, and fits on ONE page:
+1. SINGLE PAGE PRIORITY: The cloned content MUST fit within a single page. Do NOT let content overflow to a second page. If the original document is a single page, your HTML output MUST also be a single page. Reduce font sizes slightly (minimum 10px) and tighten spacing if needed to fit everything.
+2. FULL PAGE WIDTH: Main containers MUST use `width: 100%;` and `margin: 0 auto;`. Ensure the document sits perfectly centered on the page.
+3. SYMMETRICAL ALIGNMENT: Fix any skewing or drifting to the left/right. The document MUST NOT be lopsided. All margins and paddings must be symmetrical.
+4. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
+5. Consistent spacing: uniform gaps between rows, no random large/small gaps. Use compact spacing (margin: 4px-8px between elements) to maximize page utilization.
+6. Table cells must have equal padding, aligned borders, and span the full appropriate width.
+7. Do NOT add unnecessary padding or margins that waste vertical space.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT:
