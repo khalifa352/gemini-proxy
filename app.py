@@ -66,6 +66,9 @@ def clean_html_output(raw_text):
 # ══════════════════════════════════════════════════════════
 # STYLE PROMPTS - FORMAL vs MODERN
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# STYLE PROMPTS - FORMAL vs MODERN
+# ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
     if mode == "simulation":
@@ -106,10 +109,11 @@ FIX: NEVER put the label, the colon, and the dots inside the same text node. You
      <span dir="rtl" style="font-weight:bold;">الزبون</span>
   </div>`
 
-RULE D – MAXIMIZE PAGE USAGE & CENTERING (CRITICAL - NO SKEWING):
-1. The outermost container MUST be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr;">`.
-2. Scale fonts appropriately: 13px-15px for body, 16px-20px for titles.
-3. Use uniform gaps (8px-12px) between rows to fill the page beautifully without random massive spaces.
+RULE D – MAXIMIZE PAGE USAGE & PREVENT OVERFLOW (CRITICAL ⚠️):
+1. STRICT PROHIBITION ON FIXED WIDTHS: NEVER use fixed pixel widths (like `width: 800px`, `min-width: 900px`) on ANY element or table. ALWAYS use percentages (e.g., `width: 100%`). Fixed pixels cause the document to get cut off horizontally!
+2. The outermost container MUST EXACTLY be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr; overflow-wrap:break-word; word-wrap:break-word;">`.
+3. PREVENT TEXT CUT-OFF: Do NOT use `white-space: nowrap;` on long paragraphs or wide table cells. Allow text to wrap naturally so it stays inside the page.
+4. Scale fonts dynamically: 13px-15px for body, 16px-20px for titles. If content is heavy, use slightly smaller fonts and tighter padding so it fully fits in one single page.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content.
@@ -144,6 +148,7 @@ TABLE DESIGN:
 - th: background:#333; color:white; padding:7px; border:1px solid #333;
 - td: padding:6px 8px; border:1px solid #ddd;
 - Even rows: background:#f7f7f7;"""
+
 
 
 def detect_document_type(user_msg):
@@ -193,9 +198,10 @@ def generate():
         page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
         is_landscape = page_info["w"] > page_info["h"]
 
-        landscape_extra = ""
-        if is_landscape:
-            landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width, keep content compact vertically."
+        landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width (`width: 100%`). Keep padding minimal and text compact to ensure nothing overflows horizontally or vertically."
+
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow."
+
 
         orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If the text and tables are oriented horizontally (Landscape), you MUST build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%;` and be centered with `margin: 0 auto;`. Tables must use full available width."
         ref_note = ""
