@@ -63,6 +63,10 @@ def clean_html_output(raw_text):
 # STYLE PROMPTS - FORMAL vs MODERN
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# STYLE PROMPTS - FORMAL vs MODERN
+# ══════════════════════════════════════════════════════════
+
 def get_style_prompt(style, mode):
     if mode == "simulation":
         return """CLONING: Reproduce EXACTLY text/tables from the reference image.
@@ -103,12 +107,18 @@ FIX: NEVER put the label, the colon, and the dots inside the same text node. You
   </div>`
 
 RULE D – MAXIMIZE PAGE USAGE & CENTERING (CRITICAL - NO SKEWING):
-1. The outermost container MUST be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr;">`. (Lock the whole page to LTR to prevent global flipping).
+1. The outermost container MUST be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr;">`.
 2. Scale fonts appropriately: 13px-15px for body, 16px-20px for titles.
 3. Use uniform gaps (8px-12px) between rows to fill the page beautifully without random massive spaces.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
-You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content."""
+You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content.
+
+RULE F – CAMERA DISTORTION & LOGICAL RECONSTRUCTION (CRITICAL FOR PHOTOS ⚠️):
+If the image was taken with a phone camera and appears vertically stretched, warped, or includes background context (like a desk or table):
+1. IGNORE the physical distortion and stretch. DO NOT make tables or rows abnormally tall.
+2. USE LOGICAL DEDUCTION: An invoice, receipt, or letter has standard, compact proportions. Reconstruct the document in its NATURAL format.
+3. Keep table rows compact and logically spaced. DO NOT span a standard single-page invoice across multiple pages just because the camera angle made the photo tall. Keep it tight and contained!"""
 
     if style == "modern":
         return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
