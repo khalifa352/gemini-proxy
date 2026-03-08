@@ -108,15 +108,16 @@ Arabic text followed or preceded by colons, dots, dashes, or underlines often ge
 3. For French/English labels with punctuation, wrap in: `<span dir="ltr" style="unicode-bidi:embed; display:inline-block;">Date:...........</span>`.
 4. STRICT SPACING: Do NOT insert unjustified or random large spaces between words. Text must have natural, standard spacing. Fix any typos or obvious bad design from the original image to make the simulation highly professional.
 
-RULE D – PROFESSIONAL QUALITY ASSURANCE & SINGLE-PAGE FIT:
-After cloning, ensure the output looks clean, balanced, and fits on ONE page:
-1. SINGLE PAGE PRIORITY: The cloned content MUST fit within a single page. Do NOT let content overflow to a second page. If the original document is a single page, your HTML output MUST also be a single page. Reduce font sizes slightly (minimum 10px) and tighten spacing if needed to fit everything.
-2. FULL PAGE WIDTH: Main containers MUST use `width: 100%;` and `margin: 0 auto;`. Ensure the document sits perfectly centered on the page.
-3. SYMMETRICAL ALIGNMENT: Fix any skewing or drifting to the left/right. The document MUST NOT be lopsided. All margins and paddings must be symmetrical.
-4. Consistent alignment: all similar elements (labels, values, separators) must be uniformly aligned across the document.
-5. Consistent spacing: uniform gaps between rows, no random large/small gaps. Use compact spacing (margin: 4px-8px between elements) to maximize page utilization.
-6. Table cells must have equal padding, aligned borders, and span the full appropriate width.
-7. Do NOT add unnecessary padding or margins that waste vertical space.
+RULE D – MAXIMIZE PAGE USAGE & SINGLE-PAGE FIT (CRITICAL):
+The cloned content MUST fill the page generously while staying within ONE single page:
+1. SCALE TO FIT: Use font sizes between 12px-15px for body text and 16px-20px for titles. Tables should have generous cell padding (8px-12px). The content should feel LARGE and fill most of the page area, NOT appear small or cramped in the center.
+2. SINGLE PAGE ONLY: Content MUST NOT overflow to a second page. If needed, reduce spacing slightly to keep everything on one page, but NEVER shrink text below 11px.
+3. FULL PAGE WIDTH: Main containers MUST use `width: 100%;` and `margin: 0 auto;`. Tables must stretch to full available width.
+4. MINIMAL MARGINS: Use small outer margins (10px-15px max). Do NOT waste space with large padding or margins. The content should extend close to the page edges.
+5. SYMMETRICAL ALIGNMENT: Fix any skewing or drifting. The document MUST be perfectly centered and balanced.
+6. Consistent spacing: uniform gaps between rows (6px-10px). No random large gaps that waste vertical space.
+7. Table cells must have equal padding, aligned borders, and span the full width.
+8. VERTICAL FILL: If content is short, increase font sizes and spacing to fill the page naturally. The goal is a professional document that uses 85-95% of the page area.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT:
