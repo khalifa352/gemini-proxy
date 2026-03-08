@@ -44,11 +44,12 @@ def call_gemini(model, contents, config, timeout):
 def clean_html_output(raw_text):
     """Clean output from any Markdown wrapping, extract pure HTML, and remove editor artifacts"""
     raw = raw_text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"\n?```$", "", raw)
+    # تم تغيير طريقة كتابة العلامات لمنع نظام الدردشة من كسر الكود
+    if raw.startswith("`" * 3):
+        raw = re.sub(r"^`{3}(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"\n?`{3}$", "", raw)
 
-    div_match = re.search(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
+    div_match = re.search(r'<div[^>]*xmlns="[http://www.w3.org/1999/xhtml](http://www.w3.org/1999/xhtml)"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
     if div_match:
         raw = div_match.group(1)
 
@@ -71,99 +72,72 @@ IGNORE logos, stamps, signatures. Do NOT invent data.
 ⚠️ EXCEPTIONAL SCENARIO – STANDALONE CIRCULAR STAMP (MANDATORY):
 If the attached image is a SINGLE circular stamp (rubber stamp, official seal) and NOT a full document page, the following rules override everything else:
 1. ABSOLUTELY FORBIDDEN to invent, fabricate, or hallucinate any certificate, document body, or surrounding text. You must produce ONLY the stamp reproduction.
-2. You MUST reproduce the stamp as an inline <svg> element:
-   - Use <circle> elements for the stamp's circular borders (outer ring, inner ring, etc.).
-   - Use <path> with arc definitions and <textPath> to render curved/circular text exactly as it appears in the original image, preserving the correct reading direction and curvature.
-   - Place any center text (names, emblems, stars, symbols) using <text> with x/y positioning centered inside the SVG.
-   - Match colors faithfully (typically dark blue, red, or black).
-   - Set a reasonable viewBox (e.g., "0 0 250 250") and width/height.
-3. This is the ONLY scenario where <svg> output is permitted. For all other document types, <svg> remains strictly forbidden.
-4. Output the <svg> element directly with NO surrounding HTML wrapper, NO invented document, NO certificate text.
+2. You MUST reproduce the stamp as an inline <svg> element. Match colors and text exactly.
 
 ⚠️ BILINGUAL DOCUMENT LAYOUT LOCK (Arabic + French/English – MANDATORY):
 If the reference image contains a dual-language layout, you MUST strictly lock visual positions to prevent any horizontal flip:
 
-RULE A – SIDE-BY-SIDE COLUMNS (two separate columns of text):
-1. The OUTER wrapper MUST use dir="ltr" to lock a stable left-to-right column rendering order. NEVER use dir="rtl" on the outer wrapper.
-2. Use a two-column structure (`display:flex;` or a two-cell `<table>`) where each column has its OWN explicit direction:
-   - RIGHT column (order:2): `dir="rtl" style="text-align:right; width:50%;"` → Arabic content (Arabic is ALWAYS on the RIGHT side).
-   - LEFT column (order:1): `dir="ltr" style="text-align:left; width:50%;"` → French/English content (French/English is ALWAYS on the LEFT side).
-3. In HTML source, write the LEFT (French) column FIRST, then the RIGHT (Arabic) column SECOND. Combined with the parent `dir="ltr"`, this naturally places French on the left and Arabic on the right without needing CSS order.
-4. Each column must be self-contained with its own dir attribute. Do NOT rely on float or parent RTL inheritance.
+RULE A – SIDE-BY-SIDE COLUMNS:
+1. The OUTER wrapper MUST use dir="ltr". NEVER use dir="rtl" on the outer wrapper.
+2. RIGHT column (order:2): `dir="rtl" style="text-align:right; width:50%;"` → Arabic.
+3. LEFT column (order:1): `dir="ltr" style="text-align:left; width:50%;"` → French/English.
 
-RULE B – INLINE BILINGUAL PAIRS ON THE SAME LINE (CRITICAL):
-When Arabic and French/English text appear on the SAME line (e.g., "عميل .............. Client", or field labels like "الاسم / Nom"), you MUST keep them on a SINGLE line:
-1. Use a single-row flex container: `<div style="display:flex; justify-content:space-between; align-items:center; width:100%; direction:ltr;">`.
-2. In HTML source order, write LEFT text FIRST and RIGHT text LAST:
-   - FIRST child (appears LEFT): `<span dir="ltr" style="text-align:left;">Client</span>` → French/English.
-   - MIDDLE child (separator): `<span style="flex:1; border-bottom:1px dotted #333; margin:0 6px; min-width:30px;"></span>`.
-   - LAST child (appears RIGHT): `<span dir="rtl" style="text-align:right;">عميل</span>` → Arabic.
-3. NEVER duplicate the separator line. NEVER break these pairs into two rows. They MUST remain visually on one horizontal line exactly as in the original image.
-4. This applies to ALL inline label pairs, field headers, and any text with dots/dashes/colons between two languages.
+RULE B – INLINE BILINGUAL PAIRS (CRITICAL):
+For SAME line text (e.g., "عميل .............. Client"):
+1. Use flex container: `<div style="display:flex; justify-content:space-between; align-items:center; width:100%; direction:ltr;">`.
+2. LEFT child: `<span dir="ltr">Client</span>`. MIDDLE: separator. RIGHT: `<span dir="rtl">عميل</span>`.
 
-RULE C – INLINE BIDI PROTECTION FOR LABELS WITH PUNCTUATION & SPACING (CRITICAL):
-Arabic text followed or preceded by colons, dots, dashes, or underlines often gets visually REVERSED by the browser's bidi algorithm. To PREVENT this:
-1. ALWAYS wrap each Arabic label + its punctuation together inside: `<span dir="rtl" style="unicode-bidi:embed; display:inline-block;">تاريخ:..........</span>`.
-2. If the label has a fillable blank area after it, use: `<div dir="rtl" style="display:flex; align-items:center;"><span>تاريخ:</span><span style="flex:1; border-bottom:1px dotted #333; margin-right:6px; min-width:50px;"></span></div>`.
-3. For French/English labels with punctuation, wrap in: `<span dir="ltr" style="unicode-bidi:embed; display:inline-block;">Date:...........</span>`.
-4. STRICT SPACING: Do NOT insert unjustified or random large spaces between words. Text must have natural, standard spacing. Fix any typos or obvious bad design from the original image to make the simulation highly professional.
+RULE C – BULLETPROOF BIDI PROTECTION & ANTI-REFLECTION (GUARANTEED FIX ⚠️):
+To 100% guarantee that colons, dashes, and dots NEVER flip to the wrong side of the word (e.g., preventing "......:Date" or ":.........التاريخ"):
+1. ALWAYS use the `<bdi>` tag around the text part, followed by the punctuation. Example: `<span dir="rtl"><bdi>التاريخ</bdi>: ........</span>`
+2. Alternatively, use strict isolation: `<span dir="rtl" style="unicode-bidi: isolate;">التاريخ: ........</span>`. NEVER use `embed`.
+3. For fillable blanks, use Flexbox with strict layout: `<div dir="rtl" style="display:flex; align-items:baseline; gap:5px;"><bdi>التاريخ</bdi><span>:</span><span style="flex-grow:1; border-bottom:1px dotted #333; min-width:50px;"></span></div>`.
+4. NEVER rely on the browser's default text direction for mixed punctuation. Always isolate!
 
 RULE D – MAXIMIZE PAGE USAGE & SINGLE-PAGE FIT (CRITICAL):
 The cloned content MUST fill the page generously while staying within ONE single page:
-1. SCALE TO FIT: Use font sizes between 12px-15px for body text and 16px-20px for titles. Tables should have generous cell padding (8px-12px). The content should feel LARGE and fill most of the page area, NOT appear small or cramped in the center.
-2. SINGLE PAGE ONLY: Content MUST NOT overflow to a second page. If needed, reduce spacing slightly to keep everything on one page, but NEVER shrink text below 11px.
+1. SCALE TO FIT: Use font sizes between 12px-15px for body text and 16px-20px for titles. Tables should have generous cell padding (8px-12px).
+2. SINGLE PAGE ONLY: Content MUST NOT overflow to a second page. Reduce spacing slightly to keep everything on one page if needed.
 3. FULL PAGE WIDTH: Main containers MUST use `width: 100%;` and `margin: 0 auto;`. Tables must stretch to full available width.
-4. MINIMAL MARGINS: Use small outer margins (10px-15px max). Do NOT waste space with large padding or margins. The content should extend close to the page edges.
-5. SYMMETRICAL ALIGNMENT: Fix any skewing or drifting. The document MUST be perfectly centered and balanced.
-6. Consistent spacing: uniform gaps between rows (6px-10px). No random large gaps that waste vertical space.
-7. Table cells must have equal padding, aligned borders, and span the full width.
-8. VERTICAL FILL: If content is short, increase font sizes and spacing to fill the page naturally. The goal is a professional document that uses 85-95% of the page area.
+4. MINIMAL MARGINS: Use small outer margins (10px-15px max). Do NOT waste space.
+5. Symmetrical alignment and uniform gaps between rows (6px-10px).
+6. VERTICAL FILL: If content is short, increase font sizes and spacing to fill the page naturally.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
-You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT:
-1. Add any outer border, stroke, shadow, or bounding box around the cloned content.
-2. Add any page frame, card wrapper, or container with visible edges.
-3. The background must remain fully transparent with NO simulated page edges.
-4. Reproduce ONLY what is printed ON the paper — not the paper itself."""
+You are cloning ONLY the CONTENT visible inside the document image. Add NO outer borders, strokes, or page shadows.
+
+RULE F – STRICT SPACING & NO WEIRD GAPS (ANTI-BREAKING EDIT RULE ⚠️):
+To ensure the document remains perfectly editable by the user without words sticking together or massive gaps appearing:
+1. NEVER use `text-align: justify;`. It breaks word spacing in contenteditable mode. ALWAYS use `text-align: right;` (for Arabic) or `text-align: left;` (for French/English).
+2. NEVER use multiple non-breaking spaces (`&nbsp;&nbsp;&nbsp;`) to align elements. This is forbidden.
+3. NEVER use `justify-content: space-between;` on regular text paragraphs. ONLY use it when aligning two completely separate objects (like a label on the far right and a value on the far left).
+4. Use CSS `gap: 10px;` in flex containers for safe spacing instead of margins or empty text nodes. Text must flow naturally so editing it is smooth."""
 
     if style == "modern":
         return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
 
 TYPOGRAPHY: Title 17px bold, dark slate. Section headings 14px bold with a subtle colored right-border.
 
-COLOR PALETTE (Harmonious & Comfortable):
-- Text: #2c3e50 (Dark slate, softer and more elegant than pure black)
-- Primary/Headings: #1a5276 (Deep elegant blue)
-- Accents/Borders: #2980b9 (Calm professional blue)
-- Subtle Backgrounds: #f8f9fa (Off-white/light gray), #ebf5fb (Very pale blue for table headers & section backgrounds)
-- Dividers/Borders: #d5dbdb (Soft gray-blue)
+COLOR PALETTE:
+- Text: #2c3e50
+- Primary/Headings: #1a5276
+- Accents/Borders: #2980b9
+- Backgrounds: #f8f9fa, #ebf5fb
 
 DESIGN ELEMENTS:
 - Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
-- Tables: Soft and clean styling.
-  th: background:#ebf5fb; color:#1a5276; padding:8px; font-size:12px; border:1px solid #d5dbdb; font-weight:bold; text-align:start;
-  td: padding:8px; font-size:12px; border:1px solid #d5dbdb; color:#2c3e50; text-align:start;
-  Even rows: background:#fcfcfc;
-- Dividers: <div style="height:1px; background:linear-gradient(to right, #2980b9, transparent); opacity:0.5; margin:14px 0;"></div>
-
-INVOICE TABLE (If applicable):
-Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
-Total row in <tfoot> with background:#ebf5fb; color:#1a5276; font-weight:bold."""
+- Tables: Soft and clean styling. th: background:#ebf5fb; td: border:1px solid #d5dbdb;
+- Dividers: <div style="height:1px; background:linear-gradient(to right, #2980b9, transparent); opacity:0.5; margin:14px 0;"></div>"""
 
     # Default: formal
     return """FORMAL/OFFICIAL - Professional Mauritanian document design.
 
-TYPOGRAPHY: Title 16px bold centered. Sections 13px bold.
-Body 13px. NO bright colors. Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd.
+TYPOGRAPHY: Title 16px bold centered. Sections 13px bold. Body 13px. Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd.
 
 TABLE DESIGN:
 - th: background:#333; color:white; padding:7px; font-size:12px; border:1px solid #333; text-align:start;
 - td: padding:6px 8px; font-size:12px; border:1px solid #ddd; text-align:start;
-- Even rows: background:#f7f7f7;
-
-INVOICE TABLE (If applicable):
-Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
-Total row in <tfoot>: "Total" colspan=3, amount in last column only."""
+- Even rows: background:#f7f7f7;"""
 
 
 def detect_document_type(user_msg):
@@ -260,8 +234,8 @@ TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 2. NO BORDERS AROUND DOCUMENT (CRITICAL): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE), shadows, or fixed heights. The background must remain entirely transparent and free of bounding boxes.
 3. NO FAKE LETTERHEADS: Assume the document will be printed on a beautiful, pre-designed official letterhead paper. DO NOT simulate logos, company names, or header contact info at the very top unless explicitly written by the user.
 4. SMART VERTICAL DISTRIBUTION (ADAPTIVE LAYOUT): Evaluate the content length before generating HTML. If the document is VERY SHORT (e.g., a brief letter, certificate, or single paragraph), center it elegantly on the page to avoid an ugly empty bottom half. Use a wrapper like `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px;">`. If the document is long, just let it flow naturally.
-5. PARAGRAPHS: `<p style="margin-bottom: 10px; line-height: 1.65;">`
-6. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
+5. PARAGRAPHS & SPACING: `<p style="margin-bottom: 10px; line-height: 1.65; text-align: right;">`. NEVER use `text-align: justify;`. NEVER use multiple `&nbsp;`.
+6. BIDI PROTECTION: Use `<bdi>` for labels. Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
 7. EXACT LANGUAGE MATCH: Keep the user's language.
 8. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
 9. BILINGUAL DOCUMENT LAYOUT LOCK (CRITICAL FOR DUAL-LANGUAGE CONTENT): If the document contains TWO languages side by side (e.g., Arabic + French, Arabic + English), you MUST prevent horizontal flipping by following these strict rules:
@@ -330,6 +304,7 @@ CRITICAL RULES (DO NOT DISOBEY):
 4. NO REDESIGN: Keep all fonts, colors, layouts, and tables entirely untouched unless the user explicitly asks to change them.
 5. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders.
 6. LANGUAGE & BIDI: Keep the original language. Preserve all `dir="ltr"` and `dir="rtl"`.
+7. SPACING: NEVER insert multiple `&nbsp;` or use `text-align: justify`.
 {img_note}
 
 OUTPUT FORMAT:
@@ -395,6 +370,7 @@ YOUR MISSION:
 3. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning. ONLY improve presentation.
 4. BIDI PROTECTION & LANGUAGE: Wrap phone numbers in `<span dir="ltr"...>`. DO NOT translate the text.
 5. DIRECTIONALITY: If document is French/English, wrap ENTIRE output in `<div dir="ltr" style="text-align: left;">`. If Arabic, use `dir="rtl"`.
+6. SPACING REPAIR: Remove all unnecessary `&nbsp;`. Replace `text-align: justify` with left or right.
 
 {style_prompt}
 
@@ -408,7 +384,7 @@ Do NOT output JSON. You MUST output exactly like this:
 [/HTML]"""
 
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.1, max_output_tokens=16384)
-        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format, fix Bidi issues, and align text professionally."]
+        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format, fix Bidi issues, clean spacing, and align text professionally."]
 
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
@@ -504,7 +480,7 @@ RULES:
         ]
 
         for model_id, model_name, timeout in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
 
             try:
                 logger.info(f"🚀 Trying {model_name} ({model_id})...")
@@ -538,3 +514,5 @@ RULES:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
+
