@@ -63,13 +63,6 @@ def clean_html_output(raw_text):
 # STYLE PROMPTS - FORMAL vs MODERN
 # ══════════════════════════════════════════════════════════
 
-# ══════════════════════════════════════════════════════════
-# STYLE PROMPTS - FORMAL vs MODERN
-# ══════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════
-# STYLE PROMPTS - FORMAL vs MODERN
-# ══════════════════════════════════════════════════════════
-
 def get_style_prompt(style, mode):
     if mode == "simulation":
         return """CLONING: Reproduce EXACTLY text/tables from the reference image.
@@ -198,12 +191,12 @@ def generate():
         page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
         is_landscape = page_info["w"] > page_info["h"]
 
-        landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width (`width: 100%`). Keep padding minimal and text compact to ensure nothing overflows horizontally or vertically."
+        landscape_extra = ""
+        if is_landscape:
+            landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width. Keep padding minimal and text compact to ensure nothing overflows. NEVER use fixed pixel widths."
 
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow."
-
-
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If the text and tables are oriented horizontally (Landscape), you MUST build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%;` and be centered with `margin: 0 auto;`. Tables must use full available width."
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: break-word;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow. All tables must use `width: 100%; table-layout: fixed;`. Content must fit entirely within the page dimensions. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
+        
         ref_note = ""
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
@@ -260,7 +253,8 @@ OUTPUT: Return raw HTML only."""
             contents.append("Ensure layout fits empty space below this letterhead.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
 
-        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=16000)
+        # 🛠️ تم إخراج gen_config من داخل الـ if حتى لا ينهار السيرفر
+        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
             resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
