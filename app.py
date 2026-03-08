@@ -69,46 +69,43 @@ def get_style_prompt(style, mode):
 IGNORE logos, stamps, signatures. Do NOT invent data.
 
 ⚠️ EXCEPTIONAL SCENARIO – STANDALONE CIRCULAR STAMP (MANDATORY):
-If the attached image is a SINGLE circular stamp (rubber stamp, official seal) and NOT a full document page, the following rules override everything else:
-1. ABSOLUTELY FORBIDDEN to invent, fabricate, or hallucinate any certificate, document body, or surrounding text. You must produce ONLY the stamp reproduction.
-2. You MUST reproduce the stamp as an inline <svg> element. Match colors and text exactly.
+If the attached image is a SINGLE circular stamp (rubber stamp, official seal) and NOT a full document page, you must produce ONLY an inline <svg> element.
 
-⚠️ BILINGUAL DOCUMENT LAYOUT LOCK (Arabic + French/English – MANDATORY):
-To PREVENT Arabic from appearing on the left side, and to stop columns from mixing or flipping, you MUST obey these structural rules:
+⚠️ CRITICAL BUG FIXES & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 
-RULE A – SIDE-BY-SIDE COLUMNS (IRON-CLAD TABLE METHOD):
-NEVER use Flexbox for two-column bilingual layouts. You MUST use a standard HTML <table>:
-`<table style="width:100%; border-collapse:collapse; direction:ltr;">
-  <tr>
-    <td style="width:50%; text-align:left; vertical-align:top; padding:5px;">French/English Content here</td>
-    <td style="width:50%; text-align:right; vertical-align:top; padding:5px;" dir="rtl">المحتوى العربي هنا</td>
-  </tr>
-</table>`
-This guarantees French stays left and Arabic stays right.
+BUG 1: TABLE COLUMNS & ALIGNMENT REVERSING (e.g., Qty/Price/Total flipping order).
+FIX: You MUST completely disable the browser's automatic RTL flipping.
+- The outermost wrapper of the document MUST use `dir="ltr"`.
+- EVERY `<table`> MUST explicitly have `dir="ltr"`, even if the document is 100% Arabic!
+- Write the `<th>` and `<td>` in the EXACT visual left-to-right order seen in the image. Do NOT reverse the HTML order.
+- To make Arabic text appear on the right side of a cell or page, DO NOT use global `dir="rtl"`. Instead, use `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL or DIV ONLY.
+- Never let the browser reverse the column order automatically.
 
-RULE B – INLINE BILINGUAL PAIRS ON THE SAME LINE (THE DOTTED LINE FIX):
-When translating fields on the exact same line (e.g., "Client ............. الزبون"), NEVER create two separate dotted lines. NEVER put them on separate rows. Use this EXACT unbreakable code snippet:
-`<div style="display:flex; align-items:flex-end; width:100%; direction:ltr; margin-bottom:8px;">
-   <span style="white-space:nowrap; font-weight:bold;">Client</span>
-   <span style="flex-grow:1; border-bottom:1px dashed #333; margin:0 10px;"></span>
-   <span dir="rtl" style="white-space:nowrap; font-weight:bold;">الزبون</span>
-</div>`
-
-RULE C – BIDI PROTECTION FOR PUNCTUATION (STOP THE REFLECTION):
-To completely stop punctuation from flipping (e.g., "........:Date" or ":........التاريخ"), you must isolate the label from the dots:
-For single fields with blank lines, use this EXACT code:
-`<div dir="rtl" style="display:flex; align-items:flex-end; width:100%; margin-bottom:8px;">
-   <span style="unicode-bidi:isolate; white-space:nowrap; font-weight:bold;">التاريخ:</span>
-   <span style="flex-grow:1; border-bottom:1px dotted #333; margin-right:8px;"></span>
-</div>`
-Never attach the dots directly to the Arabic word in the same span.
+BUG 2: PUNCTUATION & LABEL REFLECTION (e.g., "......:Date" or ":....التاريخ").
+FIX: NEVER put the label, the colon, and the dots inside the same text node. You MUST structurally separate them using a Flexbox container locked in LTR.
+- For ARABIC fields (Label visually on the Right, dots on the Left):
+  `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
+     <span style="flex-grow:1; border-bottom:1px dotted #333;"></span> <!-- Left: The line -->
+     <span style="margin:0 5px;">:</span> <!-- Middle: The colon -->
+     <span dir="rtl" style="font-weight:bold;">التاريخ</span> <!-- Right: The label -->
+   </div>`
+- For FRENCH/ENGLISH fields (Label on the Left, dots on the Right):
+  `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
+     <span style="font-weight:bold;">Date</span> <!-- Left: The label -->
+     <span style="margin:0 5px;">:</span> <!-- Middle: The colon -->
+     <span style="flex-grow:1; border-bottom:1px dotted #333;"></span> <!-- Right: The line -->
+   </div>`
+- For BILINGUAL fields on the SAME LINE:
+  `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
+     <span style="font-weight:bold;">Client</span>
+     <span style="flex-grow:1; border-bottom:1px dashed #333; margin:0 10px;"></span>
+     <span dir="rtl" style="font-weight:bold;">الزبون</span>
+  </div>`
 
 RULE D – MAXIMIZE PAGE USAGE & CENTERING (CRITICAL - NO SKEWING):
-1. The outermost container MUST be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box;">`.
-2. All inner tables and major divs MUST use `width: 100%`.
-3. The content MUST NOT shrink, drift to one side, or appear skewed. It must fill the screen proportionally.
-4. Scale fonts appropriately: 13px-15px for body, 16px-20px for titles.
-5. Use uniform gaps (8px-12px) between rows to fill the page beautifully without random massive spaces.
+1. The outermost container MUST be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr;">`. (Lock the whole page to LTR to prevent global flipping).
+2. Scale fonts appropriately: 13px-15px for body, 16px-20px for titles.
+3. Use uniform gaps (8px-12px) between rows to fill the page beautifully without random massive spaces.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content."""
@@ -118,39 +115,25 @@ You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT
 
 TYPOGRAPHY: Title 17px bold, dark slate. Section headings 14px bold with a subtle colored right-border.
 
-COLOR PALETTE (Harmonious & Comfortable):
-- Text: #2c3e50 (Dark slate, softer and more elegant than pure black)
-- Primary/Headings: #1a5276 (Deep elegant blue)
-- Accents/Borders: #2980b9 (Calm professional blue)
-- Subtle Backgrounds: #f8f9fa (Off-white/light gray), #ebf5fb (Very pale blue for table headers & section backgrounds)
-- Dividers/Borders: #d5dbdb (Soft gray-blue)
+COLOR PALETTE:
+- Text: #2c3e50
+- Primary/Headings: #1a5276
+- Accents/Borders: #2980b9
+- Subtle Backgrounds: #f8f9fa, #ebf5fb
 
 DESIGN ELEMENTS:
 - Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
-- Tables: Soft and clean styling.
-  th: background:#ebf5fb; color:#1a5276; padding:8px; font-size:12px; border:1px solid #d5dbdb; font-weight:bold; text-align:start;
-  td: padding:8px; font-size:12px; border:1px solid #d5dbdb; color:#2c3e50; text-align:start;
-  Even rows: background:#fcfcfc;
-- Dividers: <div style="height:1px; background:linear-gradient(to right, #2980b9, transparent); opacity:0.5; margin:14px 0;"></div>
-
-INVOICE TABLE (If applicable):
-Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
-Total row in <tfoot> with background:#ebf5fb; color:#1a5276; font-weight:bold."""
+- Tables: Soft and clean styling. th: background:#ebf5fb; color:#1a5276; td: border:1px solid #d5dbdb; color:#2c3e50;"""
 
     # Default: formal
     return """FORMAL/OFFICIAL - Professional Mauritanian document design.
 
-TYPOGRAPHY: Title 16px bold centered. Sections 13px bold.
-Body 13px. NO bright colors. Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd.
+TYPOGRAPHY: Title 16px bold centered. Sections 13px bold. Body 13px. Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd.
 
 TABLE DESIGN:
-- th: background:#333; color:white; padding:7px; font-size:12px; border:1px solid #333; text-align:start;
-- td: padding:6px 8px; font-size:12px; border:1px solid #ddd; text-align:start;
-- Even rows: background:#f7f7f7;
-
-INVOICE TABLE (If applicable):
-Columns: Description | Price | Qty | Total (MUST translate these headers to match the user's requested language. Order LTR for French, RTL for Arabic).
-Total row in <tfoot>: "Total" colspan=3, amount in last column only."""
+- th: background:#333; color:white; padding:7px; border:1px solid #333;
+- td: padding:6px 8px; border:1px solid #ddd;
+- Even rows: background:#f7f7f7;"""
 
 
 def detect_document_type(user_msg):
@@ -202,21 +185,21 @@ def generate():
 
         landscape_extra = ""
         if is_landscape:
-            landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width, keep content compact vertically. Tables and columns should spread WIDE not TALL. Do NOT generate a tall portrait-style layout."
+            landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width, keep content compact vertically."
 
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If the text and tables are oriented horizontally (Landscape), you MUST build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: The generated HTML MUST fill the page naturally and professionally. Main containers must use `width: 100%; max-width: 100%;` and be centered with `margin: 0 auto;`. Do NOT leave excessive white space or asymmetrical margins. Content must be perfectly aligned and symmetrically distributed. Text must NOT appear tiny or shifted to one side. Tables must use full available width. BILINGUAL COLUMN LOCK REMINDER: For dual-language documents, Arabic is ALWAYS on the RIGHT side, French/English is ALWAYS on the LEFT side. This positioning must NEVER flip."
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If the text and tables are oriented horizontally (Landscape), you MUST build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%;` and be centered with `margin: 0 auto;`. Tables must use full available width."
         ref_note = ""
         if reference_b64 and mode != "simulation":
             ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
 
         doc_type_instruction = ""
         if doc_type == "single_page":
-            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Keep content compact but READABLE. Reduce margins slightly if needed. NEVER make font smaller than 11px."""
+            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Keep content compact but READABLE. Reduce margins slightly if needed."""
         elif doc_type == "multi_page":
             doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
 
         if mode == "simulation":
-            svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario described above in the style instructions. For all other simulation documents, `<svg>` remains forbidden)."
+            svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)."
         else:
             svg_rule = "NO `<svg>`, `<html>`, `<body>`."
 
@@ -232,22 +215,23 @@ CRITICAL RULES - CHOOSE SCENARIO 1 OR 2:
 ➡ SCENARIO 1: TEXT FORMATTING (USER PROVIDED THE CONTENT)
 If the user provides a draft, text, article, or letter:
 - YOUR GOAL: Make their exact text look visually STUNNING and PROFESSIONAL using HTML/CSS.
-- RULE 1 (STYLE THE EXISTING): If the user included titles, dates, or addresses in their text, you MUST format them beautifully.
-- RULE 2 (NO INVENTIONS): STRICTLY FORBIDDEN to invent or append missing elements.
+- RULE 1 (STYLE THE EXISTING): If the user included titles, dates, or addresses in their text, format them beautifully.
+- RULE 2 (NO INVENTIONS): STRICTLY FORBIDDEN to invent missing elements.
 
 ➡ SCENARIO 2: DOCUMENT GENERATION (USER ASKS YOU TO WRITE IT FROM SCRATCH)
-If the user gives a brief instruction (e.g., "Create an invoice", "Write a letter for X"):
-- Act as an Expert Content Creator. Generate the FULL professional structure.
-- ZERO HALLUCINATION: No fake names, numbers, or companies.
+If the user gives a brief instruction:
+- Generate the FULL professional structure. ZERO HALLUCINATION.
 
 TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
-2. NO BORDERS AROUND DOCUMENT (CRITICAL): DO NOT wrap the content in any outer page container, card, or div with borders (NO STROKE).
-3. NO FAKE LETTERHEADS: Assume the document will be printed on official letterhead paper. DO NOT simulate logos or company names at the very top unless requested.
-4. SMART VERTICAL DISTRIBUTION: Center short content elegantly on the page. Use a wrapper like `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px; width: 100%;">`.
-5. BIDI PROTECTION: Wrap phone numbers & Latin words in `<span dir="ltr" style="unicode-bidi: isolate; display: inline-block;">...</span>`.
-6. EXACT LANGUAGE MATCH: Keep the user's language.
-7. DIRECTION & ALIGNMENT: French/English -> `<div dir="ltr" style="text-align: left;">`. Arabic -> `<div dir="rtl" style="text-align: right;">`.
+2. NO BORDERS AROUND DOCUMENT (CRITICAL): DO NOT wrap the content in any outer page container.
+3. NO FAKE LETTERHEADS: Assume official letterhead paper. DO NOT simulate logos at the top.
+4. SMART VERTICAL DISTRIBUTION: Center short content elegantly on the page. Use `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px; width: 100%;">`.
+5. GLOBAL LTR LOCK & ALIGNMENT (CRITICAL TO PREVENT REVERSING):
+   - The OUTER wrapper MUST use `dir="ltr"`.
+   - ALL `<table>` elements MUST use `dir="ltr"`. NEVER let the browser reverse column orders.
+   - For Arabic text alignment, apply `dir="rtl" style="text-align:right;"` specifically on the `<td>` or `<p>` element containing the Arabic, NOT on the parent table or layout.
+   - Structurally separate labels from colons/dots using flexbox to prevent punctuation reversal.
 
 OUTPUT: Return raw HTML only."""
 
@@ -301,10 +285,10 @@ You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 CRITICAL RULES (DO NOT DISOBEY):
 1. ZERO HALLUCINATION: Do NOT invent a new document. Do NOT rewrite from scratch.
 2. EXACT COPY-PASTE: You MUST output the EXACT SAME HTML structure, classes, and styles provided in <CURRENT_HTML>.
-3. SURGICAL EDIT & LOGICAL CONSISTENCY (CRITICAL): Find the specific element mentioned in <USER_REQUEST> and change it. IF your change affects other parts of the document (e.g., changing a price/quantity means the "Total" MUST be recalculated and mathematically updated, or changing a name/date means updating it across connected paragraphs), you MUST apply these cascading secondary updates automatically so the document remains logically accurate.
-4. NO REDESIGN: Keep all fonts, colors, layouts, and tables entirely untouched unless the user explicitly asks to change them.
-5. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders.
-6. LANGUAGE & BIDI: Keep the original language. Preserve all `dir="ltr"` and `dir="rtl"`.
+3. SURGICAL EDIT & LOGICAL CONSISTENCY: Apply the exact surgical change (including mathematical recalculations if needed).
+4. NO REDESIGN: Keep all fonts, colors, layouts, and tables entirely untouched unless requested.
+5. GLOBAL LTR LOCK (CRITICAL): Preserve `dir="ltr"` on tables and wrappers to prevent column flipping. Keep text alignments explicit on the cells.
+6. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders.
 {img_note}
 
 OUTPUT FORMAT:
@@ -368,8 +352,8 @@ YOUR MISSION:
 1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Ensure headings are used logically. Apply logical Text Alignments.
 2. FIX TABLES: If a table is broken, fix its HTML structure.
 3. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning. ONLY improve presentation.
-4. BIDI PROTECTION & LANGUAGE: Wrap phone numbers in `<span dir="ltr"...>`. DO NOT translate the text.
-5. DIRECTIONALITY: If document is French/English, wrap ENTIRE output in `<div dir="ltr" style="text-align: left;">`. If Arabic, use `dir="rtl"`.
+4. DIRECTIONALITY FIX (CRITICAL): Ensure outermost wrappers and ALL tables use `dir="ltr"` to prevent auto-flipping. Apply `dir="rtl" style="text-align:right"` only on the specific paragraphs or table cells containing Arabic.
+5. SPACING REPAIR: Remove all unnecessary `&nbsp;`. Replace `text-align: justify` with left or right.
 
 {style_prompt}
 
@@ -383,7 +367,7 @@ Do NOT output JSON. You MUST output exactly like this:
 [/HTML]"""
 
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.1, max_output_tokens=16384)
-        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format, fix Bidi issues, and align text professionally."]
+        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format, fix Bidi issues, clean spacing, and align text professionally."]
 
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
