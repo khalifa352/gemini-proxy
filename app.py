@@ -60,86 +60,62 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# STYLE PROMPTS - FORMAL vs MODERN
+# STYLE PROMPTS - FORMAL vs MODERN & GLOBAL RULES
 # ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
-    if mode == "simulation":
-        return """CLONING: Reproduce EXACTLY text/tables from the reference image.
-IGNORE logos, stamps, signatures. Do NOT invent data.
+    # 🚀 القواعد الشاملة: تطبق على إنشاء المستندات والمحاكاة معاً!
+    global_rules = """
+⚠️ CRITICAL BUG FIXES & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS IN ALL MODES):
 
-⚠️ EXCEPTIONAL SCENARIO – STANDALONE CIRCULAR STAMP (MANDATORY):
-If the attached image is a SINGLE circular stamp (rubber stamp, official seal) and NOT a full document page, you must produce ONLY an inline <svg> element.
-
-⚠️ CRITICAL BUG FIXES & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
-
-BUG 1: TABLE COLUMNS & ALIGNMENT REVERSING (e.g., Qty/Price/Total flipping order).
+BUG 1: TABLE COLUMNS & ALIGNMENT REVERSING
 FIX: You MUST completely disable the browser's automatic RTL flipping.
-- The outermost wrapper of the document MUST use `dir="ltr"`.
-- EVERY `<table`> MUST explicitly have `dir="ltr"`, even if the document is 100% Arabic!
-- Write the `<th>` and `<td>` in the EXACT visual left-to-right order seen in the image. Do NOT reverse the HTML order.
-- To make Arabic text appear on the right side of a cell or page, DO NOT use global `dir="rtl"`. Instead, use `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL or DIV ONLY.
+- The outermost wrapper MUST use `dir="ltr"`.
+- EVERY `<table>` MUST explicitly have `dir="ltr"`.
+- For Arabic text, apply `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL or DIV ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-- Never let the browser reverse the column order or alignments automatically.
 
-BUG 2: PUNCTUATION & LABEL REFLECTION (e.g., "......:Date" or ":....التاريخ").
-FIX: NEVER put the label, the colon, and the dots inside the same text node. You MUST structurally separate them using a Flexbox container locked in LTR.
-- For ARABIC fields (Label visually on the Right, dots on the Left):
-  `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <div style="flex-grow:1; border-bottom:1px dotted #333;"></div>
-     <div style="margin:0 5px;">:</div>
-     <div dir="rtl" style="font-weight:bold; text-align:right;">التاريخ</div>
-   </div>`
-- For FRENCH/ENGLISH fields (Label on the Left, dots on the Right):
-  `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <div style="font-weight:bold; text-align:left;">Date</div>
-     <div style="margin:0 5px;">:</div>
-     <div style="flex-grow:1; border-bottom:1px dotted #333;"></div>
-   </div>`
+BUG 2: PUNCTUATION & LABEL REFLECTION
+FIX: Structurally separate labels from colons/dots using Flexbox locked in LTR.
+- Arabic Ex: `<div style="display:flex; width:100%; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
 
 BUG 3: PHONE NUMBERS & SPACES REVERSING (CRITICAL).
-FIX: Phone numbers, bank accounts, or any numbers containing spaces/dashes MUST NOT flip. Wrap them in a strictly isolated tag:
+FIX: Phone numbers, bank accounts, or ANY numbers containing spaces MUST NOT flip. Wrap them in a strictly isolated tag:
 `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">44 55 66 77</span>`
 
 RULE D – ZERO OVERFLOW & EXACT PAGE FIT (CRITICAL ⚠️):
-1. STRICTLY FORBIDDEN: `width: [X]px`, `min-width`, `width: [X]vw`, `white-space: nowrap` (except for phone numbers).
+1. STRICTLY FORBIDDEN: `width: [X]px`, `min-width`, `white-space: nowrap` (except for phone numbers).
 2. REQUIRED FOR ALL ELEMENTS: `box-sizing: border-box; max-width: 100%;`.
-3. TABLES MUST COMPLY: Every `<table`> MUST have `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; word-break: break-word;`. If a table has many columns, YOU MUST use a smaller font size (e.g., 10px-11px) and minimal padding (e.g., 2px 4px) so it completely fits horizontally without spilling out.
-4. The outermost wrapper MUST be exactly: `<div style="width:100%; max-width:100%; margin:0 auto; padding:10px; box-sizing:border-box; direction:ltr; overflow-wrap:break-word; word-break:break-word; overflow:hidden;">`.
+3. TABLES MUST COMPLY: Every `<table>` MUST have `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`. 
+   *(This ensures long English words like "DISADVANTAGES" wrap instead of breaking the layout).*
+4. The outermost wrapper MUST be exactly: `<div style="width:100%; max-width:100%; margin:0 auto; padding:10px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
+"""
 
-RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
-You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content.
+    if mode == "simulation":
+        return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
+IGNORE logos, stamps, signatures. Do NOT invent data.
+⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
 
-RULE F – CAMERA DISTORTION & LOGICAL RECONSTRUCTION (CRITICAL FOR PHOTOS ⚠️):
-If the image was taken with a phone camera and appears vertically stretched:
-1. IGNORE the physical distortion and stretch. DO NOT make tables or rows abnormally tall.
-2. USE LOGICAL DEDUCTION: Reconstruct the document in its NATURAL, compact format."""
+{global_rules}
 
+RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
+RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format."""
+
+    # وضع الإنشاء (Documents)
+    design_base = ""
     if style == "modern":
-        return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
-
-TYPOGRAPHY: Title 17px bold, dark slate. Section headings 14px bold with a subtle colored right-border.
-
-COLOR PALETTE:
-- Text: #2c3e50
-- Primary/Headings: #1a5276
-- Accents/Borders: #2980b9
-- Subtle Backgrounds: #f8f9fa, #ebf5fb
-
+        design_base = """MODERN/ELEGANT - Professional, clean, harmonious.
+TYPOGRAPHY: Title 17px bold, dark slate. Section headings 14px bold.
+COLOR PALETTE: Text: #2c3e50, Primary: #1a5276, Accents: #2980b9, Backgrounds: #f8f9fa.
 DESIGN ELEMENTS:
 - Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
-- Tables: Soft and clean styling. th: background:#ebf5fb; color:#1a5276; td: border:1px solid #d5dbdb; color:#2c3e50;"""
+- Tables: th: background:#ebf5fb; color:#1a5276; td: border:1px solid #d5dbdb; color:#2c3e50;"""
+    else:
+        design_base = """FORMAL/OFFICIAL - Professional Mauritanian document design.
+TYPOGRAPHY: Title 16px bold centered. Sections 13px bold. Body 13px.
+TABLE DESIGN: th: background:#333; color:white; padding:7px; border:1px solid #333; td: padding:6px 8px; border:1px solid #ddd; Even rows: background:#f7f7f7;"""
 
-    # Default: formal
-    return """FORMAL/OFFICIAL - Professional Mauritanian document design.
-
-TYPOGRAPHY: Title 16px bold centered. Sections 13px bold. Body 13px. Colors: #333, #555, #f7f7f7, #f0f0f0, #ddd.
-
-TABLE DESIGN:
-- th: background:#333; color:white; padding:7px; border:1px solid #333;
-- td: padding:6px 8px; border:1px solid #ddd;
-- Even rows: background:#f7f7f7;"""
-
+    return f"{design_base}\n\n{global_rules}"
 
 
 def detect_document_type(user_msg):
@@ -179,7 +155,6 @@ def generate():
         style_prompt = get_style_prompt(style, mode)
         doc_type = detect_document_type(user_msg)
 
-        # 🚀 كشف اتجاه الصفحة وأبعادها
         page_dimensions = {
             "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait"},
             "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape"},
@@ -191,9 +166,10 @@ def generate():
 
         landscape_extra = ""
         if is_landscape:
-            landscape_extra = " LANDSCAPE LAYOUT (CRITICAL): Design horizontally. Reduce all fonts to 10px-12px and padding to 2px-4px. You MUST ensure the ENTIRE document fits within the width. USE `table-layout: fixed; word-break: break-word; max-width: 100%;` on tables. NO FIXED PIXELS ALLOWED."
+            # 🚀 قوة إضافية للوضع العرضي لمنع أي خروج عن الصفحة
+            landscape_extra = " LANDSCAPE LAYOUT (CRITICAL): Design horizontally. Reduce all fonts to 10px-11px and padding to 2px-4px. You MUST ensure the ENTIRE document fits within the width. USE `table-layout: fixed !important; overflow-wrap: anywhere !important; width: 100% !important;` on tables. NO FIXED PIXELS ALLOWED."
 
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: break-word; word-break: break-word; overflow: hidden;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow. All tables must use `width: 100%; table-layout: fixed;`. Content must fit entirely within the page dimensions. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: anywhere; word-break: break-word; overflow: hidden;`. ABSOLUTELY NO FIXED PIXEL WIDTHS. All tables must use `width: 100%; table-layout: fixed;`. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
         
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -219,26 +195,19 @@ def generate():
 
 CRITICAL RULES - CHOOSE SCENARIO 1 OR 2:
 
-➡ SCENARIO 1: TEXT FORMATTING (USER PROVIDED THE CONTENT)
-If the user provides a draft, text, article, or letter:
-- YOUR GOAL: Make their exact text look visually STUNNING and PROFESSIONAL using HTML/CSS.
-- RULE 1 (STYLE THE EXISTING): If the user included titles, dates, or addresses in their text, format them beautifully.
-- RULE 2 (NO INVENTIONS): STRICTLY FORBIDDEN to invent missing elements.
+➡ SCENARIO 1: TEXT FORMATTING
+If the user provides a draft or text: Make it visually STUNNING using HTML/CSS. DO NOT invent missing elements.
 
-➡ SCENARIO 2: DOCUMENT GENERATION (USER ASKS YOU TO WRITE IT FROM SCRATCH)
-If the user gives a brief instruction:
-- Generate the FULL professional structure. ZERO HALLUCINATION.
+➡ SCENARIO 2: DOCUMENT GENERATION
+If the user gives a brief instruction: Generate the FULL professional structure. ZERO HALLUCINATION.
 
-TECHNICAL RULES & DESIGN RESTRICTIONS (STRICT):
+TECHNICAL RULES (STRICT):
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
-2. NO BORDERS AROUND DOCUMENT (CRITICAL): DO NOT wrap the content in any outer page container.
-3. NO FAKE LETTERHEADS: Assume official letterhead paper. DO NOT simulate logos at the top.
-4. SMART VERTICAL DISTRIBUTION: Center short content elegantly on the page. Use `<div style="display: flex; flex-direction: column; justify-content: center; min-height: 550px; width: 100%;">`.
-5. GLOBAL LTR LOCK & ALIGNMENT (CRITICAL TO PREVENT REVERSING):
+2. NO BORDERS AROUND DOCUMENT.
+3. GLOBAL LTR LOCK (CRITICAL TO PREVENT REVERSING):
    - The OUTER wrapper MUST use `dir="ltr"`.
-   - ALL `<table>` elements MUST use `dir="ltr"`. NEVER let the browser reverse column orders.
-   - For Arabic text alignment, apply `dir="rtl" style="text-align:right;"` specifically on the `<td>` or `<p>` element containing the Arabic, NOT on the parent table or layout.
-   - Structurally separate labels from colons/dots using flexbox to prevent punctuation reversal.
+   - ALL `<table>` elements MUST use `dir="ltr"`.
+   - For Arabic text alignment, apply `dir="rtl" style="text-align:right;"` explicitly on the cell.
 
 OUTPUT: Return raw HTML only."""
 
@@ -290,18 +259,16 @@ def modify():
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
 CRITICAL RULES (DO NOT DISOBEY):
-1. ZERO HALLUCINATION: Do NOT invent a new document. Do NOT rewrite from scratch.
-2. EXACT COPY-PASTE: You MUST output the EXACT SAME HTML structure, classes, and styles provided in <CURRENT_HTML>.
-3. SURGICAL EDIT & LOGICAL CONSISTENCY: Apply the exact surgical change (including mathematical recalculations if needed).
-4. NO REDESIGN: Keep all fonts, colors, layouts, and tables entirely untouched unless requested.
-5. GLOBAL LTR LOCK (CRITICAL): Preserve `dir="ltr"` on tables and wrappers to prevent column flipping. Keep text alignments explicit on the cells.
-6. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders.
+1. EXACT COPY-PASTE: You MUST output the EXACT SAME HTML structure, classes, and styles provided in <CURRENT_HTML>.
+2. SURGICAL EDIT: Apply the exact surgical change requested.
+3. GLOBAL LTR LOCK & BIDI PROTECTION (CRITICAL): Preserve `dir="ltr"` on wrappers and tables. Keep `dir="ltr" style="display:inline-block; unicode-bidi:bidi-override;"` around phone numbers to prevent reversing.
+4. OVERFLOW PROTECTION: Keep `overflow-wrap: anywhere;` and `table-layout: fixed;` on tables.
+5. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
 {img_note}
 
 OUTPUT FORMAT:
-Do NOT output JSON. You MUST output exactly like this:
 [MESSAGE]
-وصف قصير للتعديل باللغة العربية (مثال: تم تعديل السعر المطلوب)
+وصف قصير للتعديل باللغة العربية
 [/MESSAGE]
 [HTML]
 (ضع هنا كود الـ HTML المعدل كاملاً)
@@ -356,16 +323,14 @@ def smart_format():
 The user has manually edited this document on a mobile device. It may have messy spacing, broken tags, or unstructured loose text.
 
 YOUR MISSION:
-1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Ensure headings are used logically. Apply logical Text Alignments.
-2. FIX TABLES: If a table is broken, fix its HTML structure.
-3. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning. ONLY improve presentation.
-4. DIRECTIONALITY FIX (CRITICAL): Ensure outermost wrappers and ALL tables use `dir="ltr"` to prevent auto-flipping. Apply `dir="rtl" style="text-align:right"` only on the specific paragraphs or table cells containing Arabic.
-5. SPACING REPAIR: Remove all unnecessary `&nbsp;`. Replace `text-align: justify` with left or right.
+1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Apply logical Text Alignments.
+2. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning.
+3. DIRECTIONALITY FIX (CRITICAL): Ensure outermost wrappers and ALL tables use `dir="ltr"` to prevent auto-flipping. Apply `dir="rtl" style="text-align:right"` only on specific paragraphs containing Arabic. Protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
+4. OVERFLOW FIX: Ensure tables use `table-layout: fixed; overflow-wrap: anywhere;`.
 
 {style_prompt}
 
 OUTPUT FORMAT:
-Do NOT output JSON. You MUST output exactly like this:
 [MESSAGE]
 تم تنسيق وترتيب المستند بنجاح ✨
 [/MESSAGE]
