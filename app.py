@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V9.6 Server (Smart Formatting & Bidi Protection Ready)")
+                logger.info("✅ Monjez V9.6 Server (Canvas Adaptation Rule Active)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -42,7 +42,6 @@ def call_gemini(model, contents, config, timeout):
         return f.result(timeout=timeout)
 
 def clean_html_output(raw_text):
-    """Clean output from any Markdown wrapping, extract pure HTML, and remove editor artifacts"""
     raw = raw_text.strip()
     if raw.startswith("`" * 3):
         raw = re.sub(r"^`{3}(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
@@ -60,35 +59,37 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# STYLE PROMPTS - FORMAL vs MODERN & GLOBAL RULES
+# STYLE PROMPTS & THE 21x29.7 CANVAS RULE
 # ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
-    # 🚀 القواعد الشاملة: تطبق على إنشاء المستندات والمحاكاة معاً!
+    # 🚀 فكرتك تم تطبيقها هنا بالحرف!
     global_rules = """
-⚠️ CRITICAL BUG FIXES & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS IN ALL MODES):
+⚠️ THE CANVAS ADAPTATION RULE (CRITICAL - DO NOT FAIL THIS):
+You have a strictly limited physical canvas space (e.g., 21cm x 29.7cm for A4). 
+Regardless of how huge or wide the document looks in the original image, you MUST ADAPT, COMPRESS, and SHRINK the layout to fit perfectly INSIDE this canvas.
+- If a table has many columns (like 5, 6, or 7), you MUST aggressively shrink the font size (to 9px, 10px, or 11px) and reduce cell padding to a minimum (e.g., 2px 3px).
+- DO NOT copy the original size; copy the original DATA but ADAPT its presentation to fit the paper exactly.
+- NO OVERFLOW: Nothing is allowed to spill out of the 100% width boundary.
 
 BUG 1: TABLE COLUMNS & ALIGNMENT REVERSING
-FIX: You MUST completely disable the browser's automatic RTL flipping.
+FIX: Completely disable the browser's automatic RTL flipping.
 - The outermost wrapper MUST use `dir="ltr"`.
 - EVERY `<table>` MUST explicitly have `dir="ltr"`.
-- For Arabic text, apply `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL or DIV ONLY.
+- For Arabic text, apply `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
 
 BUG 2: PUNCTUATION & LABEL REFLECTION
 FIX: Structurally separate labels from colons/dots using Flexbox locked in LTR.
-- Arabic Ex: `<div style="display:flex; width:100%; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
 
-BUG 3: PHONE NUMBERS & SPACES REVERSING (CRITICAL).
-FIX: Phone numbers, bank accounts, or ANY numbers containing spaces MUST NOT flip. Wrap them in a strictly isolated tag:
+BUG 3: PHONE NUMBERS & SPACES REVERSING
+FIX: Phone numbers or ANY numbers containing spaces MUST NOT flip. Wrap them in:
 `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">44 55 66 77</span>`
 
-RULE D – ZERO OVERFLOW & EXACT PAGE FIT (CRITICAL ⚠️):
+RULE D – EXACT PAGE FIT (CRITICAL):
 1. STRICTLY FORBIDDEN: `width: [X]px`, `min-width`, `white-space: nowrap` (except for phone numbers).
-2. REQUIRED FOR ALL ELEMENTS: `box-sizing: border-box; max-width: 100%;`.
-3. TABLES MUST COMPLY: Every `<table>` MUST have `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`. 
-   *(This ensures long English words like "DISADVANTAGES" wrap instead of breaking the layout).*
-4. The outermost wrapper MUST be exactly: `<div style="width:100%; max-width:100%; margin:0 auto; padding:10px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
+2. TABLES MUST COMPLY: Every `<table>` MUST have `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+3. The outermost wrapper MUST be exactly: `<div style="width:100%; max-width:100%; margin:0 auto; padding:10px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
 """
 
     if mode == "simulation":
@@ -99,9 +100,8 @@ IGNORE logos, stamps, signatures. Do NOT invent data.
 {global_rules}
 
 RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
-RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format."""
+RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
 
-    # وضع الإنشاء (Documents)
     design_base = ""
     if style == "modern":
         design_base = """MODERN/ELEGANT - Professional, clean, harmonious.
@@ -130,10 +130,6 @@ def detect_document_type(user_msg):
     return "auto"
 
 
-# ══════════════════════════════════════════════════════════
-# API ROUTES
-# ══════════════════════════════════════════════════════════
-
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"status": "Monjez V9.6 Server Active"})
@@ -156,20 +152,20 @@ def generate():
         doc_type = detect_document_type(user_msg)
 
         page_dimensions = {
-            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait"},
-            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape"},
-            "a3": {"w": 842, "h": 1191, "orientation": "portrait A3"},
-            "a5": {"w": 420, "h": 595, "orientation": "portrait A5"},
+            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait", "physical": "21.0cm x 29.7cm"},
+            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape", "physical": "29.7cm x 21.0cm"},
+            "a3": {"w": 842, "h": 1191, "orientation": "portrait A3", "physical": "29.7cm x 42.0cm"},
+            "a5": {"w": 420, "h": 595, "orientation": "portrait A5", "physical": "14.8cm x 21.0cm"},
         }
         page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
         is_landscape = page_info["w"] > page_info["h"]
 
         landscape_extra = ""
         if is_landscape:
-            # 🚀 قوة إضافية للوضع العرضي لمنع أي خروج عن الصفحة
-            landscape_extra = " LANDSCAPE LAYOUT (CRITICAL): Design horizontally. Reduce all fonts to 10px-11px and padding to 2px-4px. You MUST ensure the ENTIRE document fits within the width. USE `table-layout: fixed !important; overflow-wrap: anywhere !important; width: 100% !important;` on tables. NO FIXED PIXELS ALLOWED."
+            landscape_extra = f" LANDSCAPE LAYOUT (CRITICAL): The physical canvas is {page_info['physical']}. You MUST ensure the ENTIRE document fits within this width. USE `table-layout: fixed !important; overflow-wrap: anywhere !important; width: 100% !important;` on tables."
 
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: anywhere; word-break: break-word; overflow: hidden;`. ABSOLUTELY NO FIXED PIXEL WIDTHS. All tables must use `width: 100%; table-layout: fixed;`. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
+        # إخبار النموذج بالأبعاد الفيزيائية بوضوح كما اقترحت
+        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT DETECTION: You must adapt all fonts and tables to fit inside this exact physical space. ABSOLUTELY NO FIXED PIXEL WIDTHS."
         
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -177,9 +173,9 @@ def generate():
 
         doc_type_instruction = ""
         if doc_type == "single_page":
-            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Keep content compact but READABLE. Reduce margins slightly if needed."""
+            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Keep content compact but READABLE."""
         elif doc_type == "multi_page":
-            doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure. Tables shouldn't be nested complexly."""
+            doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure."""
 
         if mode == "simulation":
             svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)."
