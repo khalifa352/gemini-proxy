@@ -79,27 +79,22 @@ FIX: You MUST completely disable the browser's automatic RTL flipping.
 - EVERY `<table`> MUST explicitly have `dir="ltr"`, even if the document is 100% Arabic!
 - Write the `<th>` and `<td>` in the EXACT visual left-to-right order seen in the image. Do NOT reverse the HTML order.
 - To make Arabic text appear on the right side of a cell or page, DO NOT use global `dir="rtl"`. Instead, use `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL or DIV ONLY.
-- Never let the browser reverse the column order automatically.
+- French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
+- Never let the browser reverse the column order or alignments automatically.
 
 BUG 2: PUNCTUATION & LABEL REFLECTION (e.g., "......:Date" or ":....التاريخ").
 FIX: NEVER put the label, the colon, and the dots inside the same text node. You MUST structurally separate them using a Flexbox container locked in LTR.
 - For ARABIC fields (Label visually on the Right, dots on the Left):
   `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <span style="flex-grow:1; border-bottom:1px dotted #333;"></span> <!-- Left: The line -->
-     <span style="margin:0 5px;">:</span> <!-- Middle: The colon -->
-     <span dir="rtl" style="font-weight:bold;">التاريخ</span> <!-- Right: The label -->
-   </div>`
+     <div style="flex-grow:1; border-bottom:1px dotted #333;"></div> <div style="margin:0 5px;">:</div> <div dir="rtl" style="font-weight:bold; text-align:right;">التاريخ</div> </div>`
 - For FRENCH/ENGLISH fields (Label on the Left, dots on the Right):
   `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <span style="font-weight:bold;">Date</span> <!-- Left: The label -->
-     <span style="margin:0 5px;">:</span> <!-- Middle: The colon -->
-     <span style="flex-grow:1; border-bottom:1px dotted #333;"></span> <!-- Right: The line -->
-   </div>`
+     <div style="font-weight:bold; text-align:left;">Date</div> <div style="margin:0 5px;">:</div> <div style="flex-grow:1; border-bottom:1px dotted #333;"></div> </div>`
 - For BILINGUAL fields on the SAME LINE:
   `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <span style="font-weight:bold;">Client</span>
-     <span style="flex-grow:1; border-bottom:1px dashed #333; margin:0 10px;"></span>
-     <span dir="rtl" style="font-weight:bold;">الزبون</span>
+     <div style="font-weight:bold; text-align:left;">Client</div>
+     <div style="flex-grow:1; border-bottom:1px dashed #333; margin:0 10px;"></div>
+     <div dir="rtl" style="font-weight:bold; text-align:right;">الزبون</div>
   </div>`
 
 RULE D – MAXIMIZE PAGE USAGE & PREVENT OVERFLOW (CRITICAL ⚠️):
@@ -107,6 +102,7 @@ RULE D – MAXIMIZE PAGE USAGE & PREVENT OVERFLOW (CRITICAL ⚠️):
 2. The outermost container MUST EXACTLY be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr; overflow-wrap:break-word; word-wrap:break-word;">`.
 3. PREVENT TEXT CUT-OFF: Do NOT use `white-space: nowrap;` on long paragraphs or wide table cells. Allow text to wrap naturally so it stays inside the page.
 4. Scale fonts dynamically: 13px-15px for body, 16px-20px for titles. If content is heavy, use slightly smaller fonts and tighter padding so it fully fits in one single page.
+5. TABLES MUST FIT: Add `table-layout: fixed; word-wrap: break-word;` to every single `<table>`. Do not allow cell content to stretch the table wider than 100%.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content.
@@ -193,7 +189,7 @@ def generate():
 
         landscape_extra = ""
         if is_landscape:
-            landscape_extra = " LANDSCAPE LAYOUT: The document is WIDER than it is TALL. Design the HTML layout horizontally. Use the full width. Keep padding minimal and text compact to ensure nothing overflows. NEVER use fixed pixel widths."
+            landscape_extra = " LANDSCAPE LAYOUT (CRITICAL): The document is WIDER than it is TALL. Design horizontally. You MUST scale down fonts (e.g., 11px-12px) and reduce padding to fit the screen. NEVER use fixed pixel widths (like width: 1200px) that cause overflow. Use `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word;` for all containers and tables. DO NOT use `white-space: nowrap` inside cells."
 
         orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: break-word;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow. All tables must use `width: 100%; table-layout: fixed;`. Content must fit entirely within the page dimensions. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
         
@@ -507,5 +503,3 @@ RULES:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
-
-
