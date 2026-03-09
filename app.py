@@ -86,32 +86,34 @@ BUG 2: PUNCTUATION & LABEL REFLECTION (e.g., "......:Date" or ":....التاري
 FIX: NEVER put the label, the colon, and the dots inside the same text node. You MUST structurally separate them using a Flexbox container locked in LTR.
 - For ARABIC fields (Label visually on the Right, dots on the Left):
   `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <div style="flex-grow:1; border-bottom:1px dotted #333;"></div> <div style="margin:0 5px;">:</div> <div dir="rtl" style="font-weight:bold; text-align:right;">التاريخ</div> </div>`
+     <div style="flex-grow:1; border-bottom:1px dotted #333;"></div>
+     <div style="margin:0 5px;">:</div>
+     <div dir="rtl" style="font-weight:bold; text-align:right;">التاريخ</div>
+   </div>`
 - For FRENCH/ENGLISH fields (Label on the Left, dots on the Right):
   `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <div style="font-weight:bold; text-align:left;">Date</div> <div style="margin:0 5px;">:</div> <div style="flex-grow:1; border-bottom:1px dotted #333;"></div> </div>`
-- For BILINGUAL fields on the SAME LINE:
-  `<div style="display:flex; align-items:baseline; width:100%; direction:ltr; margin-bottom:8px;">
-     <div style="font-weight:bold; text-align:left;">Client</div>
-     <div style="flex-grow:1; border-bottom:1px dashed #333; margin:0 10px;"></div>
-     <div dir="rtl" style="font-weight:bold; text-align:right;">الزبون</div>
-  </div>`
+     <div style="font-weight:bold; text-align:left;">Date</div>
+     <div style="margin:0 5px;">:</div>
+     <div style="flex-grow:1; border-bottom:1px dotted #333;"></div>
+   </div>`
 
-RULE D – MAXIMIZE PAGE USAGE & PREVENT OVERFLOW (CRITICAL ⚠️):
-1. STRICT PROHIBITION ON FIXED WIDTHS: NEVER use fixed pixel widths (like `width: 800px`, `min-width: 900px`) on ANY element or table. ALWAYS use percentages (e.g., `width: 100%`). Fixed pixels cause the document to get cut off horizontally!
-2. The outermost container MUST EXACTLY be: `<div style="width:100%; max-width:100%; margin:0 auto; padding:15px; box-sizing:border-box; direction:ltr; overflow-wrap:break-word; word-wrap:break-word;">`.
-3. PREVENT TEXT CUT-OFF: Do NOT use `white-space: nowrap;` on long paragraphs or wide table cells. Allow text to wrap naturally so it stays inside the page.
-4. Scale fonts dynamically: 13px-15px for body, 16px-20px for titles. If content is heavy, use slightly smaller fonts and tighter padding so it fully fits in one single page.
-5. TABLES MUST FIT: Add `table-layout: fixed; word-wrap: break-word;` to every single `<table>`. Do not allow cell content to stretch the table wider than 100%.
+BUG 3: PHONE NUMBERS & SPACES REVERSING (CRITICAL).
+FIX: Phone numbers, bank accounts, or any numbers containing spaces/dashes MUST NOT flip. Wrap them in a strictly isolated tag:
+`<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">44 55 66 77</span>`
+
+RULE D – ZERO OVERFLOW & EXACT PAGE FIT (CRITICAL ⚠️):
+1. STRICTLY FORBIDDEN: `width: [X]px`, `min-width`, `width: [X]vw`, `white-space: nowrap` (except for phone numbers).
+2. REQUIRED FOR ALL ELEMENTS: `box-sizing: border-box; max-width: 100%;`.
+3. TABLES MUST COMPLY: Every `<table`> MUST have `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; word-break: break-word;`. If a table has many columns, YOU MUST use a smaller font size (e.g., 10px-11px) and minimal padding (e.g., 2px 4px) so it completely fits horizontally without spilling out.
+4. The outermost wrapper MUST be exactly: `<div style="width:100%; max-width:100%; margin:0 auto; padding:10px; box-sizing:border-box; direction:ltr; overflow-wrap:break-word; word-break:break-word; overflow:hidden;">`.
 
 RULE E – NO BORDERS / NO OUTER FRAME (STRICTLY FORBIDDEN):
 You are cloning ONLY the CONTENT visible inside the document image. You MUST NOT add any outer border, stroke, shadow, or page-like box around the cloned content.
 
 RULE F – CAMERA DISTORTION & LOGICAL RECONSTRUCTION (CRITICAL FOR PHOTOS ⚠️):
-If the image was taken with a phone camera and appears vertically stretched, warped, or includes background context (like a desk or table):
+If the image was taken with a phone camera and appears vertically stretched:
 1. IGNORE the physical distortion and stretch. DO NOT make tables or rows abnormally tall.
-2. USE LOGICAL DEDUCTION: An invoice, receipt, or letter has standard, compact proportions. Reconstruct the document in its NATURAL format.
-3. Keep table rows compact and logically spaced. DO NOT span a standard single-page invoice across multiple pages just because the camera angle made the photo tall. Keep it tight and contained!"""
+2. USE LOGICAL DEDUCTION: Reconstruct the document in its NATURAL, compact format."""
 
     if style == "modern":
         return """MODERN/ELEGANT - Professional, clean, harmonious, and very comfortable on the eyes.
@@ -189,9 +191,9 @@ def generate():
 
         landscape_extra = ""
         if is_landscape:
-            landscape_extra = " LANDSCAPE LAYOUT (CRITICAL): The document is WIDER than it is TALL. Design horizontally. You MUST scale down fonts (e.g., 11px-12px) and reduce padding to fit the screen. NEVER use fixed pixel widths (like width: 1200px) that cause overflow. Use `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word;` for all containers and tables. DO NOT use `white-space: nowrap` inside cells."
+            landscape_extra = " LANDSCAPE LAYOUT (CRITICAL): Design horizontally. Reduce all fonts to 10px-12px and padding to 2px-4px. You MUST ensure the ENTIRE document fits within the width. USE `table-layout: fixed; word-break: break-word; max-width: 100%;` on tables. NO FIXED PIXELS ALLOWED."
 
-        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: break-word;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow. All tables must use `width: 100%; table-layout: fixed;`. Content must fit entirely within the page dimensions. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
+        orientation_instruction = "PAGE FORMAT: " + page_info["orientation"] + " — Target width: " + str(page_info["w"]) + "px, height: " + str(page_info["h"]) + "px." + landscape_extra + " SMART LAYOUT DETECTION: Analyze the actual document content inside the image. If horizontal (Landscape), build a Landscape HTML layout. CRITICAL PAGE FILLING RULES: Main containers must use `width: 100%; max-width: 100%; box-sizing: border-box; margin: 0 auto; overflow-wrap: break-word; word-break: break-word; overflow: hidden;`. ABSOLUTELY NO FIXED PIXEL WIDTHS (e.g., width: 1200px) allowing horizontal overflow. All tables must use `width: 100%; table-layout: fixed;`. Content must fit entirely within the page dimensions. BILINGUAL COLUMN LOCK: Arabic ALWAYS RIGHT, French/English ALWAYS LEFT. Outer wrapper MUST use dir=ltr."
         
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -249,7 +251,6 @@ OUTPUT: Return raw HTML only."""
             contents.append("Ensure layout fits empty space below this letterhead.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
 
-        # 🛠️ تم إخراج gen_config من داخل الـ if حتى لا ينهار السيرفر
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
