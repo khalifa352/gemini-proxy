@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V9.6 Server (Strict Preservation & Space Optimization Active)")
+                logger.info("✅ Monjez V9.6 Server (Natural Flow & Anti-Squish Active)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -59,7 +59,7 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# STYLE PROMPTS & STRICT GLOBAL RULES
+# STYLE PROMPTS & STRICT GLOBAL RULES (THE CONSTITUTION)
 # ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
@@ -70,17 +70,19 @@ def get_style_prompt(style, mode):
 3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document. The user has their own letterhead tool. Start directly with the document title and content.
 4. ONLY DRAFT IF EXPLICITLY ASKED: You may generate/write text ONLY if the user explicitly uses words like "write for me", "draft", "research", or asks you to create content from scratch based on a topic.
 
-⚠️ SMART SPACE UTILIZATION & ONE-PAGE OPTIMIZATION:
-1. MAXIMIZE READABILITY: The document MUST elegantly fill the available physical canvas. 
-2. If the text is SHORT: DO NOT squish it at the top. Use CSS `min-height` and `display: flex; flex-direction: column; justify-content: space-around;` or distribute margins elegantly so the content fills the page beautifully. Make fonts larger (e.g., 15px-18px) to utilize empty space.
-3. If the text is LONG: Shrink fonts smoothly and minimize padding just enough to fit it onto ONE PAGE without overflowing. 
+⚠️ SMART SPACE UTILIZATION & NATURAL FLOW (ANTI-SQUISH RULE):
+1. EXTEND HORIZONTALLY: Use the full width of the page naturally. DO NOT artificially compress or squish the content. Let it breathe from left to right.
+2. SHORT DOCUMENTS (Invoices, Receipts, Letters): Distribute content elegantly to fit beautifully on ONE page.
+3. LONG DOCUMENTS (Articles, Research, Reports): DO NOT force them into one page! Allow the content to flow naturally across multiple pages. Maintain the beautiful, large, readable default font sizes. DO NOT shrink fonts just to fit a long text into a single page.
+4. If a table has many columns, ensure it fits horizontally, but let the document flow vertically as needed.
 
-⚠️ BIDI & LAYOUT LOCKS:
+⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
 - Phone numbers or spaced numbers MUST be wrapped in: `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;"></span>`
 - TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+- PUNCTUATION SEPARATION (e.g., for Dates/Signatures): NEVER put the label and dots in the same text node. Use this LTR structure: `<div style="display:flex; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
 """
 
     if mode == "simulation":
@@ -153,9 +155,9 @@ def generate():
 
         landscape_extra = ""
         if is_landscape:
-            landscape_extra = f" LANDSCAPE LAYOUT: The physical canvas is {page_info['physical']}. You MUST ensure the ENTIRE document fits horizontally."
+            landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards."
 
-        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT: Adapt all fonts and tables to fit inside this exact physical space. Do NOT leave huge empty white spaces at the bottom if the document is short."
+        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT: Do not squash long texts. Let it breathe."
         
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -163,9 +165,9 @@ def generate():
 
         doc_type_instruction = ""
         if doc_type == "single_page":
-            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Optimize space beautifully."""
+            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page."""
         elif doc_type == "multi_page":
-            doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure."""
+            doc_type_instruction = """MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages. Maintain large fonts."""
 
         if mode == "simulation":
             svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)."
@@ -182,6 +184,7 @@ def generate():
 TECHNICAL RULES:
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
 2. NO BORDERS AROUND DOCUMENT.
+3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -234,8 +237,8 @@ You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
 CRITICAL RULES:
 1. EXACT COPY-PASTE: Output the EXACT SAME HTML structure provided. DO NOT delete unrelated text.
-2. SURGICAL EDIT: Apply the exact surgical change requested. DO NOT hallucinate.
-3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers/tables and protect phone numbers.
+2. SURGICAL EDIT: Apply the exact surgical change requested. DO NOT hallucinate or add fake elements.
+3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers/tables and protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
 4. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
 {img_note}
 
@@ -295,7 +298,7 @@ def smart_format():
 YOUR MISSION:
 1. CLEANUP & STRUCTURE: Wrap loose text in proper tags. Apply logical Alignments.
 2. STRICT PRESERVATION: NEVER delete, alter, or add to the actual facts, text, or meaning. NO HALLUCINATION.
-3. BIDI FIX: Ensure wrappers/tables use `dir="ltr"`. Arabic text uses `dir="rtl" style="text-align:right"`.
+3. BIDI FIX: Ensure wrappers/tables use `dir="ltr"`. Arabic text uses `dir="rtl" style="text-align:right"`. Protect phone numbers.
 
 OUTPUT FORMAT:
 [MESSAGE]
