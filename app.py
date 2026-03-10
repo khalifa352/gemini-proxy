@@ -70,6 +70,10 @@ def get_style_prompt(style, mode):
 3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document. The user has their own letterhead tool. Start directly with the document title and content.
 4. ONLY DRAFT IF EXPLICITLY ASKED: You may generate/write text ONLY if the user explicitly uses words like "write for me", "draft", "research", or asks you to create content from scratch based on a topic.
 
+⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
+1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer. Use `<table>` ONLY for true tabular data (invoices, price lists, data grids, schedules). NEVER put standard paragraphs, messages, letters, or general text inside tables.
+2. ENHANCED READABILITY (FONTS): Make the default text slightly larger and exceptionally clear. Use a baseline font size of 15px-16px for `<p>`, `<li>`, and `<span>`. Keep headings proportionately larger. Do not randomly shrink or enlarge fonts.
+
 ⚠️ SMART SPACE UTILIZATION & NATURAL FLOW (ANTI-SQUISH RULE):
 1. EXTEND HORIZONTALLY: Use the full width of the page naturally. DO NOT artificially compress or squish the content. Let it breathe from left to right.
 2. SHORT DOCUMENTS (Invoices, Receipts, Letters): Distribute content elegantly to fit beautifully on ONE page.
@@ -165,9 +169,9 @@ def generate():
 
         doc_type_instruction = ""
         if doc_type == "single_page":
-            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page."""
+            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page. Keep the structure simple and direct; DO NOT overcomplicate with unnecessary tables if it is just a letter or certificate."""
         elif doc_type == "multi_page":
-            doc_type_instruction = """MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages. Maintain large fonts."""
+            doc_type_instruction = """MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages. Maintain the beautifully large and readable default font sizes (15px-16px)."""
 
         if mode == "simulation":
             svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)."
@@ -211,7 +215,6 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 @app.route("/modify", methods=["POST"])
 def modify():
