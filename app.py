@@ -27,7 +27,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V9.6 Server (Canvas Adaptation Rule Active)")
+                logger.info("✅ Monjez V9.6 Server (Natural Flow & Anti-Squish Active)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -59,37 +59,30 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# STYLE PROMPTS & THE 21x29.7 CANVAS RULE
+# STYLE PROMPTS & STRICT GLOBAL RULES (THE CONSTITUTION)
 # ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
-    # 🚀 فكرتك تم تطبيقها هنا بالحرف!
     global_rules = """
-⚠️ THE CANVAS ADAPTATION RULE (CRITICAL - DO NOT FAIL THIS):
-You have a strictly limited physical canvas space (e.g., 21cm x 29.7cm for A4). 
-Regardless of how huge or wide the document looks in the original image, you MUST ADAPT, COMPRESS, and SHRINK the layout to fit perfectly INSIDE this canvas.
-- If a table has many columns (like 5, 6, or 7), you MUST aggressively shrink the font size (to 9px, 10px, or 11px) and reduce cell padding to a minimum (e.g., 2px 3px).
-- DO NOT copy the original size; copy the original DATA but ADAPT its presentation to fit the paper exactly.
-- NO OVERFLOW: Nothing is allowed to spill out of the 100% width boundary.
+⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
+1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
+2. DO NOT invent fake data, placeholders, or dummy text.
+3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document. The user has their own letterhead tool. Start directly with the document title and content.
+4. ONLY DRAFT IF EXPLICITLY ASKED: You may generate/write text ONLY if the user explicitly uses words like "write for me", "draft", "research", or asks you to create content from scratch based on a topic.
 
-BUG 1: TABLE COLUMNS & ALIGNMENT REVERSING
-FIX: Completely disable the browser's automatic RTL flipping.
-- The outermost wrapper MUST use `dir="ltr"`.
-- EVERY `<table>` MUST explicitly have `dir="ltr"`.
-- For Arabic text, apply `dir="rtl" style="text-align: right;"` ON THAT SPECIFIC CELL ONLY.
+⚠️ SMART SPACE UTILIZATION & NATURAL FLOW (ANTI-SQUISH RULE):
+1. EXTEND HORIZONTALLY: Use the full width of the page naturally. DO NOT artificially compress or squish the content. Let it breathe from left to right.
+2. SHORT DOCUMENTS (Invoices, Receipts, Letters): Distribute content elegantly to fit beautifully on ONE page.
+3. LONG DOCUMENTS (Articles, Research, Reports): DO NOT force them into one page! Allow the content to flow naturally across multiple pages. Maintain the beautiful, large, readable default font sizes. DO NOT shrink fonts just to fit a long text into a single page.
+4. If a table has many columns, ensure it fits horizontally, but let the document flow vertically as needed.
+
+⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
+- Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
+- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-
-BUG 2: PUNCTUATION & LABEL REFLECTION
-FIX: Structurally separate labels from colons/dots using Flexbox locked in LTR.
-
-BUG 3: PHONE NUMBERS & SPACES REVERSING
-FIX: Phone numbers or ANY numbers containing spaces MUST NOT flip. Wrap them in:
-`<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">44 55 66 77</span>`
-
-RULE D – EXACT PAGE FIT (CRITICAL):
-1. STRICTLY FORBIDDEN: `width: [X]px`, `min-width`, `white-space: nowrap` (except for phone numbers).
-2. TABLES MUST COMPLY: Every `<table>` MUST have `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
-3. The outermost wrapper MUST be exactly: `<div style="width:100%; max-width:100%; margin:0 auto; padding:10px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
+- Phone numbers or spaced numbers MUST be wrapped in: `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;"></span>`
+- TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+- PUNCTUATION SEPARATION (e.g., for Dates/Signatures): NEVER put the label and dots in the same text node. Use this LTR structure: `<div style="display:flex; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
 """
 
     if mode == "simulation":
@@ -105,14 +98,14 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
     design_base = ""
     if style == "modern":
         design_base = """MODERN/ELEGANT - Professional, clean, harmonious.
-TYPOGRAPHY: Title 17px bold, dark slate. Section headings 14px bold.
+TYPOGRAPHY: Dynamic sizes. Title bold, dark slate.
 COLOR PALETTE: Text: #2c3e50, Primary: #1a5276, Accents: #2980b9, Backgrounds: #f8f9fa.
 DESIGN ELEMENTS:
 - Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
 - Tables: th: background:#ebf5fb; color:#1a5276; td: border:1px solid #d5dbdb; color:#2c3e50;"""
     else:
         design_base = """FORMAL/OFFICIAL - Professional Mauritanian document design.
-TYPOGRAPHY: Title 16px bold centered. Sections 13px bold. Body 13px.
+TYPOGRAPHY: Dynamic sizes. Title bold centered.
 TABLE DESIGN: th: background:#333; color:white; padding:7px; border:1px solid #333; td: padding:6px 8px; border:1px solid #ddd; Even rows: background:#f7f7f7;"""
 
     return f"{design_base}\n\n{global_rules}"
@@ -162,10 +155,9 @@ def generate():
 
         landscape_extra = ""
         if is_landscape:
-            landscape_extra = f" LANDSCAPE LAYOUT (CRITICAL): The physical canvas is {page_info['physical']}. You MUST ensure the ENTIRE document fits within this width. USE `table-layout: fixed !important; overflow-wrap: anywhere !important; width: 100% !important;` on tables."
+            landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards."
 
-        # إخبار النموذج بالأبعاد الفيزيائية بوضوح كما اقترحت
-        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT DETECTION: You must adapt all fonts and tables to fit inside this exact physical space. ABSOLUTELY NO FIXED PIXEL WIDTHS."
+        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT: Do not squash long texts. Let it breathe."
         
         ref_note = ""
         if reference_b64 and mode != "simulation":
@@ -173,37 +165,26 @@ def generate():
 
         doc_type_instruction = ""
         if doc_type == "single_page":
-            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Keep content compact but READABLE."""
+            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page."""
         elif doc_type == "multi_page":
-            doc_type_instruction = """MULTI-PAGE DOCUMENT: Use proper structure."""
+            doc_type_instruction = """MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages. Maintain large fonts."""
 
         if mode == "simulation":
             svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)."
         else:
             svg_rule = "NO `<svg>`, `<html>`, `<body>`."
 
-        prompt = f"""You are a Master Document Designer and Expert Typesetter.
+        prompt = f"""You are a STRICT Document Formatter.
 
 {style_prompt}
 {orientation_instruction}
 {ref_note}
 {doc_type_instruction}
 
-CRITICAL RULES - CHOOSE SCENARIO 1 OR 2:
-
-➡ SCENARIO 1: TEXT FORMATTING
-If the user provides a draft or text: Make it visually STUNNING using HTML/CSS. DO NOT invent missing elements.
-
-➡ SCENARIO 2: DOCUMENT GENERATION
-If the user gives a brief instruction: Generate the FULL professional structure. ZERO HALLUCINATION.
-
-TECHNICAL RULES (STRICT):
+TECHNICAL RULES:
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
 2. NO BORDERS AROUND DOCUMENT.
-3. GLOBAL LTR LOCK (CRITICAL TO PREVENT REVERSING):
-   - The OUTER wrapper MUST use `dir="ltr"`.
-   - ALL `<table>` elements MUST use `dir="ltr"`.
-   - For Arabic text alignment, apply `dir="rtl" style="text-align:right;"` explicitly on the cell.
+3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
 
 OUTPUT: Return raw HTML only."""
 
@@ -254,12 +235,11 @@ def modify():
         sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
-CRITICAL RULES (DO NOT DISOBEY):
-1. EXACT COPY-PASTE: You MUST output the EXACT SAME HTML structure, classes, and styles provided in <CURRENT_HTML>.
-2. SURGICAL EDIT: Apply the exact surgical change requested.
-3. GLOBAL LTR LOCK & BIDI PROTECTION (CRITICAL): Preserve `dir="ltr"` on wrappers and tables. Keep `dir="ltr" style="display:inline-block; unicode-bidi:bidi-override;"` around phone numbers to prevent reversing.
-4. OVERFLOW PROTECTION: Keep `overflow-wrap: anywhere;` and `table-layout: fixed;` on tables.
-5. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
+CRITICAL RULES:
+1. EXACT COPY-PASTE: Output the EXACT SAME HTML structure provided. DO NOT delete unrelated text.
+2. SURGICAL EDIT: Apply the exact surgical change requested. DO NOT hallucinate or add fake elements.
+3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers/tables and protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
+4. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
 {img_note}
 
 OUTPUT FORMAT:
@@ -273,7 +253,7 @@ OUTPUT FORMAT:
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
 
         cts = [
-            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change (including mathematical recalculations if needed) and return the FULL updated HTML."
+            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."
         ]
 
         if ref_b64:
@@ -313,18 +293,12 @@ def smart_format():
         current_html = data.get("current_html", "")
         style = data.get("style", "formal")
 
-        style_prompt = get_style_prompt(style, "documents")
-
-        sys = f"""You are a Master Document Editor and Typesetter.
-The user has manually edited this document on a mobile device. It may have messy spacing, broken tags, or unstructured loose text.
+        sys = f"""You are a STRICT Document Editor. The user has manually edited this document.
 
 YOUR MISSION:
-1. CLEANUP & STRUCTURE: Wrap any loose text in proper `<p>` tags. Apply logical Text Alignments.
-2. STRICT PRESERVATION: NEVER delete or alter the actual facts, numbers, or core meaning.
-3. DIRECTIONALITY FIX (CRITICAL): Ensure outermost wrappers and ALL tables use `dir="ltr"` to prevent auto-flipping. Apply `dir="rtl" style="text-align:right"` only on specific paragraphs containing Arabic. Protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
-4. OVERFLOW FIX: Ensure tables use `table-layout: fixed; overflow-wrap: anywhere;`.
-
-{style_prompt}
+1. CLEANUP & STRUCTURE: Wrap loose text in proper tags. Apply logical Alignments.
+2. STRICT PRESERVATION: NEVER delete, alter, or add to the actual facts, text, or meaning. NO HALLUCINATION.
+3. BIDI FIX: Ensure wrappers/tables use `dir="ltr"`. Arabic text uses `dir="rtl" style="text-align:right"`. Protect phone numbers.
 
 OUTPUT FORMAT:
 [MESSAGE]
@@ -334,8 +308,8 @@ OUTPUT FORMAT:
 (ضع هنا كود الـ HTML المنسق كاملاً)
 [/HTML]"""
 
-        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.1, max_output_tokens=16384)
-        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format, fix Bidi issues, clean spacing, and align text professionally."]
+        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
+        cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
@@ -372,7 +346,6 @@ def generate_image():
     try:
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
-            logger.error("❌ API Key is missing!")
             return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
 
         data = request.json
@@ -383,84 +356,38 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        logger.info(f"🎨 Generating Image (Ratio: {aspect_ratio})...")
-
-        system_text = """You are an elite creative designer and art director.
-RULES:
-1. Generate EXACTLY what the user describes with maximum professional quality.
-2. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
-3. For logos and branding: Clean, scalable, flat professional design with clear typography. NO 3D mockups.
-4. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
-5. For social media: Visually striking, commercial studio lighting, vibrant colors.
-6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa).
-7. Render any Arabic text inside images with perfect spelling and beautiful typography.
-8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
-9. If reference images are provided, incorporate them naturally into the design or modify them according to instructions."""
+        system_text = """You are an elite creative designer.
+RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design. Cultural context: Mauritanian features if people are included. 8K quality."""
 
         user_parts = [{"text": user_prompt}]
-
         for b64_img in reference_images:
-            clean_b64 = b64_img
-            if "," in clean_b64:
-                clean_b64 = clean_b64.split(",", 1)[1]
-            user_parts.append({
-                "inlineData": {
-                    "mimeType": "image/jpeg",
-                    "data": clean_b64
-                }
-            })
-
-        if reference_images:
-            logger.info(f"📎 {len(reference_images)} Reference image(s) attached")
+            clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
+            user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
 
         payload = {
             "contents": [{"role": "user", "parts": user_parts}],
             "systemInstruction": {"parts": [{"text": system_text}]},
-            "generationConfig": {
-                "responseModalities": ["IMAGE"],
-                "temperature": 0.7
-            }
+            "generationConfig": {"responseModalities": ["IMAGE"], "temperature": 0.7}
         }
 
         headers = {"Content-Type": "application/json"}
-
-        models = [
-            ("gemini-3-pro-image-preview", "Nano Banana Pro", 120),
-            ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
-            ("gemini-2.5-flash", "Gemini 2.5 Flash", 90),
-        ]
+        models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
-
             try:
-                logger.info(f"🚀 Trying {model_name} ({model_id})...")
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
                     result = json.loads(response.read().decode('utf-8'))
-
                 parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 for part in parts:
                     if "inlineData" in part:
-                        logger.info(f"✅ Generated with {model_name}")
-                        return jsonify({
-                            "response": part["inlineData"]["data"],
-                            "message": f"تم التصميم بنجاح ✨ ({model_name})"
-                        })
-
-                logger.warning(f"⚠️ {model_name} returned no image")
-            except urllib.error.HTTPError as e:
-                error_body = e.read().decode('utf-8')
-                logger.warning(f"❌ {model_name} HTTP {e.code}: {error_body[:300]}")
-            except Exception as e:
-                logger.warning(f"❌ {model_name} failed: {e}")
+                        return jsonify({"response": part["inlineData"]["data"], "message": f"تم التصميم بنجاح ✨ ({model_name})"})
+            except: continue
 
         return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة."}), 500
-
     except Exception as e:
-        logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
