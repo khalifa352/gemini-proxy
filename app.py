@@ -71,10 +71,10 @@ def get_style_prompt(style, mode):
 4. ONLY DRAFT IF EXPLICITLY ASKED: You may generate/write text ONLY if the user explicitly uses words like "write for me", "draft", "research", or asks you to create content from scratch based on a topic.
 
 ⚠️ SMART SPACE UTILIZATION & NATURAL FLOW (ANTI-SQUISH RULE):
-1. EXTEND HORIZONTALLY: Use the full width of the page naturally. DO NOT artificially compress or squish the content. Let it breathe from left to right.
+1. EXTEND HORIZONTALLY: Use the full width of the page naturally (`width: 100%`). DO NOT artificially compress or squish the content. Let it breathe from left to right. Ensure padding inside tables is minimal to avoid pushing content outwards.
 2. SHORT DOCUMENTS (Invoices, Receipts, Letters): Distribute content elegantly to fit beautifully on ONE page.
 3. LONG DOCUMENTS (Articles, Research, Reports): DO NOT force them into one page! Allow the content to flow naturally across multiple pages. Maintain the beautiful, large, readable default font sizes. DO NOT shrink fonts just to fit a long text into a single page.
-4. If a table has many columns, ensure it fits horizontally, but let the document flow vertically as needed.
+4. If a table has many columns, ensure it fits horizontally (`table-layout: fixed; width: 100%`), but let the document flow vertically as needed.
 
 ⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
@@ -174,6 +174,7 @@ def generate():
         else:
             svg_rule = "NO `<svg>`, `<html>`, `<body>`."
 
+        # 🚀 التعديل هنا: إزالة الهوامش الزائدة (padding:5px بدلاً من قيم كبيرة) لمنع انكماش المحتوى من اليمين
         prompt = f"""You are a STRICT Document Formatter.
 
 {style_prompt}
@@ -184,7 +185,7 @@ def generate():
 TECHNICAL RULES:
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
 2. NO BORDERS AROUND DOCUMENT.
-3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
+3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; margin:0 auto; padding:0px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word;">`.
 
 OUTPUT: Return raw HTML only."""
 
