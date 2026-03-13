@@ -29,7 +29,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V10 Server (with Word Export via Adobe API)")
+                logger.info("✅ Monjez V10 Server (with Word Export via CloudConvert API)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -58,12 +58,12 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# Adobe Document Services API — PDF to Word (DOCX)
+# CloudConvert API — PDF to Word (DOCX)
 # ══════════════════════════════════════════════════════════
 
-def adobe_pdf_to_word(pdf_bytes):
+def cloudconvert_pdf_to_word(pdf_bytes):
     """
-    Full Adobe Document Services API flow via REST (OAuth Server-to-Server).
+    Full CloudConvert API v2 flow via REST.
     No external libraries needed. Uses native urllib.
     Returns: DOCX file bytes
     """
@@ -71,113 +71,104 @@ def adobe_pdf_to_word(pdf_bytes):
     import urllib.error
     import urllib.parse
 
-    client_id = os.environ.get("ADOBE_CLIENT_ID")
-    client_secret = os.environ.get("ADOBE_CLIENT_SECRET")
-    
-    if not client_id or not client_secret:
-        raise ValueError("ADOBE_CLIENT_ID أو ADOBE_CLIENT_SECRET غير مُعرّف في متغيرات البيئة")
-
-    # ── Step 1: Get Auth Token ──
-    logger.info("🔑 Adobe API: Getting access token...")
-    try:
-        token_url = "https://pdf-services-ue1.adobe.io/token"
-        data = urllib.parse.urlencode({
-            'client_id': client_id,
-            'client_secret': client_secret
-        }).encode('utf-8')
-        req = urllib.request.Request(token_url, data=data)
-        req.add_header('Content-Type', 'application/x-www-form-urlencoded')
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            token = json.loads(resp.read().decode('utf-8'))['access_token']
-        logger.info("✅ Adobe Token received")
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8', errors='replace')
-        logger.error(f"❌ Auth failed ({e.code}): {error_body}")
-        raise ValueError("فشل المصادقة مع Adobe. تأكد من صحة المفاتيح.")
+    api_key = os.environ.get("CLOUDCONVERT_API_KEY")
+    if not api_key:
+        raise ValueError("CLOUDCONVERT_API_KEY غير مُعرّف في متغيرات البيئة")
 
     headers = {
-        'Authorization': f'Bearer {token}',
-        'x-api-key': client_id,
-        'Content-Type': 'application/json'
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
 
-    # ── Step 2: Get Upload URI ──
-    logger.info("📋 Step 2: Requesting Upload URI...")
-    try:
-        asset_url = "https://pdf-services-ue1.adobe.io/assets"
-        req2 = urllib.request.Request(asset_url, data=json.dumps({"mediaType": "application/pdf"}).encode('utf-8'), headers=headers)
-        with urllib.request.urlopen(req2, timeout=15) as resp:
-            asset_data = json.loads(resp.read().decode('utf-8'))
-            upload_uri = asset_data['uploadUri']
-            asset_id = asset_data['assetID']
-    except Exception as e:
-        raise ValueError(f"فشل في جلب رابط الرفع: {str(e)}")
+    # ── Step 1: Create Job ──
+    logger.info("⚙️ CloudConvert: Creating Job...")
+    job_payload = {
+        "tasks": {
+            "import-it": {"operation": "import/upload"},
+            "convert-it": {
+                "operation": "convert",
+                "input_format": "pdf",
+                "output_format": "docx",
+                "engine": "office", # محرك Office يعطي نتائج ممتازة للعربية
+                "input": ["import-it"]
+            },
+            "export-it": {"operation": "export/url", "input": ["convert-it"]}
+        }
+    }
 
-    # ── Step 3: Upload PDF to Adobe's S3 ──
-    logger.info("📤 Step 3: Uploading PDF...")
     try:
-        req3 = urllib.request.Request(upload_uri, data=pdf_bytes, method='PUT')
-        req3.add_header('Content-Type', 'application/pdf')
-        with urllib.request.urlopen(req3, timeout=60) as resp:
-            pass # Upload success
+        req = urllib.request.Request("https://api.cloudconvert.com/v2/jobs", data=json.dumps(job_payload).encode('utf-8'), headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            job_data = json.loads(resp.read().decode('utf-8'))['data']
+        job_id = job_data['id']
+        
+        # استخراج تفاصيل الرفع
+        upload_task = next(t for t in job_data['tasks'] if t['name'] == 'import-it')
+        upload_url = upload_task['result']['form']['url']
+        upload_params = upload_task['result']['form']['parameters']
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='replace')
+        logger.error(f"❌ Job creation failed ({e.code}): {error_body}")
+        raise ValueError("فشل بدء مهمة التحويل مع CloudConvert.")
+    except Exception as e:
+        raise ValueError(f"فشل إنشاء المهمة: {str(e)}")
+
+    # ── Step 2: Upload File ──
+    logger.info("📤 CloudConvert: Uploading PDF...")
+    try:
+        boundary = f"----CloudConvertBoundary{int(time.time() * 1000)}"
+        body = b""
+        
+        for k, v in upload_params.items():
+            body += f"--{boundary}\r\n".encode()
+            body += f"Content-Disposition: form-data; name=\"{k}\"\r\n\r\n".encode()
+            body += f"{v}\r\n".encode()
+        
+        body += f"--{boundary}\r\n".encode()
+        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\n"
+        body += b"Content-Type: application/pdf\r\n\r\n"
+        body += pdf_bytes + b"\r\n"
+        body += f"--{boundary}--\r\n".encode()
+
+        upload_req = urllib.request.Request(upload_url, data=body, method='POST')
+        upload_req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
+        with urllib.request.urlopen(upload_req, timeout=60) as resp:
+            pass # تم الرفع بنجاح
         logger.info("✅ PDF Uploaded")
     except Exception as e:
-        raise ValueError(f"فشل في رفع الملف: {str(e)}")
+        raise ValueError(f"فشل رفع الملف إلى الخادم: {str(e)}")
 
-    # ── Step 4: Create Export Job ──
-    logger.info("⚙️ Step 4: Starting Export Job...")
-    try:
-        export_url = "https://pdf-services-ue1.adobe.io/operation/exportpdf"
-        job_data = {
-            "assetID": asset_id,
-            "targetFormat": "docx",
-            "ocrLang": "ar-AE"  # تمت إضافة هذا السطر لإجبار محرك أدوبي على قراءة الحروف كعربية
-        }
-        req4 = urllib.request.Request(export_url, data=json.dumps(job_data).encode('utf-8'), headers=headers)
-        with urllib.request.urlopen(req4, timeout=15) as resp:
-            poll_url = resp.headers.get('location')
-            if not poll_url:
-                raise ValueError("لم يتم العثور على رابط التتبع (location header)")
-    except Exception as e:
-        raise ValueError(f"فشل بدء مهمة التحويل: {str(e)}")
-
-    # ── Step 5: Poll Job Status ──
-    logger.info("⏳ Step 5: Polling job status...")
-    poll_headers = {
-        'Authorization': f'Bearer {token}',
-        'x-api-key': client_id
-    }
-    
-    download_uri = None
+    # ── Step 3: Poll Job Status ──
+    logger.info("⏳ CloudConvert: Polling job status...")
+    download_url = None
     attempts = 0
-    while attempts < 30: # ~1 min timeout
-        time.sleep(2)
+    while attempts < 40: # انتظار بحد أقصى دقيقتين
+        time.sleep(3)
         attempts += 1
         try:
-            req5 = urllib.request.Request(poll_url, headers=poll_headers)
-            with urllib.request.urlopen(req5, timeout=15) as resp:
-                status_data = json.loads(resp.read().decode('utf-8'))
-                status = status_data.get('status')
-                
-                if status == 'done':
-                    download_uri = status_data['asset']['downloadUri']
-                    logger.info("✅ Conversion done!")
-                    break
-                elif status == 'failed':
-                    raise ValueError("فشلت عملية التحويل داخل سيرفرات Adobe.")
+            poll_req = urllib.request.Request(f"https://api.cloudconvert.com/v2/jobs/{job_id}", headers=headers)
+            with urllib.request.urlopen(poll_req, timeout=15) as resp:
+                status_data = json.loads(resp.read().decode('utf-8'))['data']
+            
+            status = status_data['status']
+            if status == 'finished':
+                export_task = next(t for t in status_data['tasks'] if t['name'] == 'export-it')
+                download_url = export_task['result']['files'][0]['url']
+                logger.info("✅ Conversion done!")
+                break
+            elif status == 'error':
+                raise ValueError("فشلت عملية التحويل داخل CloudConvert.")
         except urllib.error.HTTPError as e:
-            if e.code == 404: # Server not ready yet
-                continue
-            raise e
-
-    if not download_uri:
+            continue
+    
+    if not download_url:
         raise ValueError("انتهى وقت الانتظار. استغرقت عملية التحويل وقتاً طويلاً.")
 
-    # ── Step 6: Download DOCX ──
-    logger.info("📥 Step 6: Downloading Word file...")
+    # ── Step 4: Download DOCX ──
+    logger.info("📥 CloudConvert: Downloading Word file...")
     try:
-        req6 = urllib.request.Request(download_uri)
-        with urllib.request.urlopen(req6, timeout=60) as resp:
+        req_dl = urllib.request.Request(download_url)
+        with urllib.request.urlopen(req_dl, timeout=60) as resp:
             docx_bytes = resp.read()
         logger.info(f"✅ Word downloaded: {len(docx_bytes)} bytes")
         return docx_bytes
@@ -468,17 +459,17 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# 📄 PDF → Word (DOCX) via Adobe API
+# 📄 PDF → Word (DOCX) via CloudConvert API
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     """
-    Receives PDF as base64 → converts to DOCX via Adobe API → returns DOCX as base64.
+    Receives PDF as base64 → converts to DOCX via CloudConvert API → returns DOCX as base64.
     """
     try:
-        if not os.environ.get("ADOBE_CLIENT_ID") or not os.environ.get("ADOBE_CLIENT_SECRET"):
-            return jsonify({"error": "Failed", "details": "مفاتيح ADOBE_CLIENT_ID أو ADOBE_CLIENT_SECRET غير مُعرّفة."}), 500
+        if not os.environ.get("CLOUDCONVERT_API_KEY"):
+            return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
 
         data = request.json
         pdf_b64 = data.get("pdf_base64", "")
@@ -487,9 +478,9 @@ def convert_to_word():
             return jsonify({"error": "Failed", "details": "لم يتم إرسال ملف PDF."}), 400
 
         pdf_bytes = base64.b64decode(pdf_b64)
-        logger.info(f"📄 Converting PDF to Word via Adobe ({len(pdf_bytes)} bytes)...")
+        logger.info(f"📄 Converting PDF to Word via CloudConvert ({len(pdf_bytes)} bytes)...")
 
-        docx_bytes = adobe_pdf_to_word(pdf_bytes)
+        docx_bytes = cloudconvert_pdf_to_word(pdf_bytes)
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
         logger.info(f"✅ Word conversion complete ({len(docx_bytes)} bytes)")
