@@ -483,20 +483,20 @@ def convert_to_word():
         pdf_b64 = data.get("pdf_base64", "")
 
         if html_content:
-            logger.info("📄 Converting HTML to Word via CloudConvert...")
+            logger.info("📄 Converting HTML to Word via CloudConvert with MS XML Wrapper...")
             
-            # تغليف الـ HTML لضمان حفظ اتجاه الكتابة وتعرف الوورد على اللغة العربية
-            full_html = f"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+            # تغليف الـ HTML بمعايير مايكروسوفت وورد الرسمية لإجبار محرك التحويل على دعم العربية
+            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
-  body {{ font-family: Arial, sans-serif; }}
-  table {{ width: 100%; border-collapse: collapse; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 8px; }}
+  body {{ font-family: 'Arial', sans-serif; direction: rtl; unicode-bidi: embed; }}
+  table {{ width: 100%; border-collapse: collapse; direction: rtl; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; }}
+  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; }}
 </style>
 </head>
-<body>
+<body dir="rtl">
 {html_content}
 </body>
 </html>"""
