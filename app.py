@@ -3,11 +3,13 @@ import re
 import json
 import logging
 import base64
+import io
+import time
 import concurrent.futures
 from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("Monjez_V9.6_Server")
+logger = logging.getLogger("Monjez_V10_Server")
 
 app = Flask(__name__)
 
@@ -27,7 +29,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V9.6 Server (Natural Flow & Anti-Squish Active)")
+                logger.info("✅ Monjez V10 Server (with Word Export via iLovePDF)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -46,20 +48,131 @@ def clean_html_output(raw_text):
     if raw.startswith("`" * 3):
         raw = re.sub(r"^`{3}(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\n?`{3}$", "", raw)
-
     div_match = re.search(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
     if div_match:
         raw = div_match.group(1)
-
     raw = re.sub(r'\s?contenteditable="[^"]*"', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable=\'[^\']*\'', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable', '', raw, flags=re.IGNORECASE)
-
     return raw.strip()
 
 
 # ══════════════════════════════════════════════════════════
-# STYLE PROMPTS & STRICT GLOBAL RULES (THE CONSTITUTION)
+# iLovePDF API — PDF to Word (DOCX)
+# ══════════════════════════════════════════════════════════
+
+def ilovepdf_pdf_to_word(pdf_bytes):
+    """
+    Full iLovePDF API flow: Auth → Start → Upload → Process → Download
+    Tool: pdfoffice (PDF to Office/Word)
+    Returns: DOCX file bytes
+    """
+    import urllib.request
+
+    public_key = os.environ.get("ILOVE_PDF_KEY")
+    if not public_key:
+        raise ValueError("ILOVE_PDF_KEY غير مُعرّف في متغيرات البيئة")
+
+    # ── Step 0: Get Auth Token ──
+    logger.info("🔑 iLovePDF: Getting auth token...")
+    auth_url = "https://api.ilovepdf.com/v1/auth"
+    auth_data = json.dumps({"public_key": public_key}).encode('utf-8')
+    auth_req = urllib.request.Request(auth_url, data=auth_data, headers={"Content-Type": "application/json"})
+
+    with urllib.request.urlopen(auth_req, timeout=15) as resp:
+        auth_result = json.loads(resp.read().decode('utf-8'))
+
+    token = auth_result.get("token")
+    if not token:
+        raise ValueError("فشل الحصول على token من iLovePDF")
+    logger.info("✅ Token received")
+
+    auth_header = f"Bearer {token}"
+
+    # ── Step 1: Start Task (pdfoffice = PDF to Word) ──
+    logger.info("📋 Step 1: Starting pdfoffice task...")
+    start_url = "https://api.ilovepdf.com/v1/start/pdfoffice"
+    start_req = urllib.request.Request(start_url, data=b"", headers={
+        "Authorization": auth_header,
+        "Content-Type": "application/json"
+    })
+
+    with urllib.request.urlopen(start_req, timeout=20) as resp:
+        start_result = json.loads(resp.read().decode('utf-8'))
+
+    server = start_result["server"]
+    task_id = start_result["task"]
+    logger.info(f"✅ Task started: server={server}")
+
+    # ── Step 2: Upload PDF ──
+    logger.info("📤 Step 2: Uploading PDF...")
+    upload_url = f"https://{server}/v1/upload"
+
+    boundary = f"----MonjezBoundary{int(time.time() * 1000)}"
+
+    body = b""
+    body += f"--{boundary}\r\n".encode()
+    body += b"Content-Disposition: form-data; name=\"task\"\r\n\r\n"
+    body += task_id.encode() + b"\r\n"
+
+    body += f"--{boundary}\r\n".encode()
+    body += b"Content-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\n"
+    body += b"Content-Type: application/pdf\r\n\r\n"
+    body += pdf_bytes + b"\r\n"
+
+    body += f"--{boundary}--\r\n".encode()
+
+    upload_req = urllib.request.Request(upload_url, data=body, headers={
+        "Authorization": auth_header,
+        "Content-Type": f"multipart/form-data; boundary={boundary}"
+    })
+
+    with urllib.request.urlopen(upload_req, timeout=60) as resp:
+        upload_result = json.loads(resp.read().decode('utf-8'))
+
+    server_filename = upload_result["server_filename"]
+    logger.info(f"✅ Uploaded: {server_filename}")
+
+    # ── Step 3: Process (PDF → Word) ──
+    logger.info("⚙️ Step 3: Processing PDF to Word...")
+    process_url = f"https://{server}/v1/process"
+
+    process_data = json.dumps({
+        "task": task_id,
+        "tool": "pdfoffice",
+        "files": [{
+            "server_filename": server_filename,
+            "filename": "document.pdf"
+        }]
+    }).encode('utf-8')
+
+    process_req = urllib.request.Request(process_url, data=process_data, headers={
+        "Authorization": auth_header,
+        "Content-Type": "application/json"
+    })
+
+    with urllib.request.urlopen(process_req, timeout=120) as resp:
+        process_result = json.loads(resp.read().decode('utf-8'))
+
+    logger.info("✅ Processing complete")
+
+    # ── Step 4: Download DOCX ──
+    logger.info("📥 Step 4: Downloading Word file...")
+    download_url = f"https://{server}/v1/download/{task_id}"
+
+    download_req = urllib.request.Request(download_url, headers={
+        "Authorization": auth_header
+    })
+
+    with urllib.request.urlopen(download_req, timeout=60) as resp:
+        docx_bytes = resp.read()
+
+    logger.info(f"✅ Word downloaded: {len(docx_bytes)} bytes")
+    return docx_bytes
+
+
+# ══════════════════════════════════════════════════════════
+# STYLE PROMPTS
 # ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
@@ -129,7 +242,7 @@ def detect_document_type(user_msg):
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V9.6 Server Active"})
+    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "word_export"]})
 
 
 @app.route("/gemini", methods=["POST"])
@@ -340,11 +453,47 @@ OUTPUT FORMAT:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
+# ══════════════════════════════════════════════════════════
+# 📄 PDF → Word (DOCX) via iLovePDF API
+# ══════════════════════════════════════════════════════════
+
+@app.route("/convert_to_word", methods=["POST"])
+def convert_to_word():
+    """
+    Receives PDF as base64 → converts to DOCX via iLovePDF → returns DOCX as base64.
+    
+    Env: ILOVE_PDF_KEY (public key from iloveapi.com)
+    
+    Request:  { "pdf_base64": "..." }
+    Response: { "docx_base64": "...", "message": "..." }
+    """
+    try:
+        if not os.environ.get("ILOVE_PDF_KEY"):
+            return jsonify({"error": "Failed", "details": "مفتاح ILOVE_PDF_KEY غير مُعرّف في Render."}), 500
+
+        data = request.json
+        pdf_b64 = data.get("pdf_base64", "")
+
+        if not pdf_b64:
+            return jsonify({"error": "Failed", "details": "لم يتم إرسال ملف PDF."}), 400
+
+        pdf_bytes = base64.b64decode(pdf_b64)
+        logger.info(f"📄 Converting PDF to Word ({len(pdf_bytes)} bytes)...")
+
+        docx_bytes = ilovepdf_pdf_to_word(pdf_bytes)
+        docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
+
+        logger.info(f"✅ Word conversion complete ({len(docx_bytes)} bytes)")
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
+
+    except Exception as e:
+        logger.error(f"Word Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
-    import urllib.error
-    import json
 
     try:
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
