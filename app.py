@@ -71,9 +71,12 @@ def cloudconvert_pdf_to_word(pdf_bytes):
     import urllib.error
     import urllib.parse
 
-    api_key = os.environ.get("CLOUDCONVERT_API_KEY")
-    if not api_key:
+    raw_api_key = os.environ.get("CLOUDCONVERT_API_KEY")
+    if not raw_api_key:
         raise ValueError("CLOUDCONVERT_API_KEY غير مُعرّف في متغيرات البيئة")
+
+    # تنظيف المفتاح من أي أسطر جديدة أو مسافات مخفية لمنع خطأ Invalid Header
+    api_key = raw_api_key.strip().replace('\n', '').replace('\r', '').replace(' ', '')
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -89,7 +92,7 @@ def cloudconvert_pdf_to_word(pdf_bytes):
                 "operation": "convert",
                 "input_format": "pdf",
                 "output_format": "docx",
-                "input": ["import-it"] # تمت إزالة السطر المسبب للخطأ للسماح لـ CloudConvert باختيار المحرك المناسب
+                "input": ["import-it"]
             },
             "export-it": {"operation": "export/url", "input": ["convert-it"]}
         }
