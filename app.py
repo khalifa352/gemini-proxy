@@ -130,7 +130,8 @@ def adobe_pdf_to_word(pdf_bytes):
         export_url = "https://pdf-services-ue1.adobe.io/operation/exportpdf"
         job_data = {
             "assetID": asset_id,
-            "targetFormat": "docx"
+            "targetFormat": "docx",
+            "ocrLang": "ar-AE"  # تمت إضافة هذا السطر لإجبار محرك أدوبي على قراءة الحروف كعربية
         }
         req4 = urllib.request.Request(export_url, data=json.dumps(job_data).encode('utf-8'), headers=headers)
         with urllib.request.urlopen(req4, timeout=15) as resp:
