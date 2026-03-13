@@ -58,13 +58,13 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# CloudConvert API — PDF to Word (DOCX)
+# CloudConvert API — PDF/HTML to Word (DOCX)
 # ══════════════════════════════════════════════════════════
 
-def cloudconvert_pdf_to_word(pdf_bytes):
+def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
     """
     Full CloudConvert API v2 flow via REST.
-    No external libraries needed. Uses native urllib.
+    Now supports both PDF and HTML inputs seamlessly.
     Returns: DOCX file bytes
     """
     import urllib.request
@@ -84,13 +84,13 @@ def cloudconvert_pdf_to_word(pdf_bytes):
     }
 
     # ── Step 1: Create Job ──
-    logger.info("⚙️ CloudConvert: Creating Job...")
+    logger.info(f"⚙️ CloudConvert: Creating Job (Input: {input_format.upper()})...")
     job_payload = {
         "tasks": {
             "import-it": {"operation": "import/upload"},
             "convert-it": {
                 "operation": "convert",
-                "input_format": "pdf",
+                "input_format": input_format,
                 "output_format": "docx",
                 "input": ["import-it"]
             },
@@ -116,7 +116,7 @@ def cloudconvert_pdf_to_word(pdf_bytes):
         raise ValueError(f"فشل إنشاء المهمة: {str(e)}")
 
     # ── Step 2: Upload File ──
-    logger.info("📤 CloudConvert: Uploading PDF...")
+    logger.info(f"📤 CloudConvert: Uploading {input_format.upper()}...")
     try:
         boundary = f"----CloudConvertBoundary{int(time.time() * 1000)}"
         body = b""
@@ -126,17 +126,20 @@ def cloudconvert_pdf_to_word(pdf_bytes):
             body += f"Content-Disposition: form-data; name=\"{k}\"\r\n\r\n".encode()
             body += f"{v}\r\n".encode()
         
+        filename = b"document.pdf" if input_format == "pdf" else b"document.html"
+        content_type = b"application/pdf" if input_format == "pdf" else b"text/html"
+
         body += f"--{boundary}\r\n".encode()
-        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\n"
-        body += b"Content-Type: application/pdf\r\n\r\n"
-        body += pdf_bytes + b"\r\n"
+        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + b"\"\r\n"
+        body += b"Content-Type: " + content_type + b"\r\n\r\n"
+        body += file_bytes + b"\r\n"
         body += f"--{boundary}--\r\n".encode()
 
         upload_req = urllib.request.Request(upload_url, data=body, method='POST')
         upload_req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
         with urllib.request.urlopen(upload_req, timeout=60) as resp:
             pass # تم الرفع بنجاح
-        logger.info("✅ PDF Uploaded")
+        logger.info(f"✅ {input_format.upper()} Uploaded")
     except Exception as e:
         raise ValueError(f"فشل رفع الملف إلى الخادم: {str(e)}")
 
@@ -461,28 +464,54 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# 📄 PDF → Word (DOCX) via CloudConvert API
+# 📄 PDF/HTML → Word (DOCX) via CloudConvert API
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     """
-    Receives PDF as base64 → converts to DOCX via CloudConvert API → returns DOCX as base64.
+    Receives HTML content (or PDF base64) → converts to DOCX via CloudConvert API → returns DOCX as base64.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
             return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
 
         data = request.json
+        
+        # دعم الاستلام كـ HTML خام أو كـ PDF (لتجنب تعطل التطبيق في حال أرسل أحدهما)
+        html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
 
-        if not pdf_b64:
-            return jsonify({"error": "Failed", "details": "لم يتم إرسال ملف PDF."}), 400
+        if html_content:
+            logger.info("📄 Converting HTML to Word via CloudConvert...")
+            
+            # تغليف الـ HTML لضمان حفظ اتجاه الكتابة وتعرف الوورد على اللغة العربية
+            full_html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<style>
+  body {{ font-family: Arial, sans-serif; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 8px; }}
+</style>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
+            file_bytes = full_html.encode('utf-8')
+            input_fmt = "html"
+            
+        elif pdf_b64:
+            logger.info("📄 Converting PDF to Word via CloudConvert...")
+            file_bytes = base64.b64decode(pdf_b64)
+            input_fmt = "pdf"
+            
+        else:
+            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        pdf_bytes = base64.b64decode(pdf_b64)
-        logger.info(f"📄 Converting PDF to Word via CloudConvert ({len(pdf_bytes)} bytes)...")
-
-        docx_bytes = cloudconvert_pdf_to_word(pdf_bytes)
+        docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
         logger.info(f"✅ Word conversion complete ({len(docx_bytes)} bytes)")
