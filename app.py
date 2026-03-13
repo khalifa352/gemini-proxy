@@ -64,10 +64,10 @@ def clean_html_output(raw_text):
 def ilovepdf_pdf_to_word(pdf_bytes):
     """
     Full iLovePDF API flow: Auth → Start → Upload → Process → Download
-    Tool: pdfoffice (PDF to Office/Word)
     Returns: DOCX file bytes
     """
     import urllib.request
+    import urllib.error
 
     public_key = os.environ.get("ILOVE_PDF_KEY")
     if not public_key:
@@ -75,100 +75,123 @@ def ilovepdf_pdf_to_word(pdf_bytes):
 
     # ── Step 0: Get Auth Token ──
     logger.info("🔑 iLovePDF: Getting auth token...")
-    auth_url = "https://api.ilovepdf.com/v1/auth"
-    auth_data = json.dumps({"public_key": public_key}).encode('utf-8')
-    auth_req = urllib.request.Request(auth_url, data=auth_data, headers={"Content-Type": "application/json"})
-
-    with urllib.request.urlopen(auth_req, timeout=15) as resp:
-        auth_result = json.loads(resp.read().decode('utf-8'))
-
-    token = auth_result.get("token")
-    if not token:
-        raise ValueError("فشل الحصول على token من iLovePDF")
-    logger.info("✅ Token received")
+    try:
+        auth_url = "https://api.ilovepdf.com/v1/auth"
+        auth_data = json.dumps({"public_key": public_key}).encode('utf-8')
+        auth_req = urllib.request.Request(auth_url, data=auth_data, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(auth_req, timeout=15) as resp:
+            auth_result = json.loads(resp.read().decode('utf-8'))
+        token = auth_result.get("token")
+        if not token:
+            raise ValueError("لا يوجد token في الرد")
+        logger.info("✅ Token received")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='replace')
+        logger.error(f"❌ Auth failed ({e.code}): {error_body}")
+        raise ValueError(f"فشل المصادقة مع iLovePDF ({e.code}): تأكد أن ILOVE_PDF_KEY صحيح")
 
     auth_header = f"Bearer {token}"
 
-    # ── Step 1: Start Task (pdfoffice = PDF to Word) ──
-    logger.info("📋 Step 1: Starting pdfoffice task...")
-    start_url = "https://api.ilovepdf.com/v1/start/pdfoffice"
-    start_req = urllib.request.Request(start_url, data=b"", headers={
-        "Authorization": auth_header,
-        "Content-Type": "application/json"
-    })
+    # ── Step 1: Start Task ──
+    # نجرب أسماء مختلفة للأداة حتى نجد الصحيح
+    tool_names = ["pdfoffice", "pdfword", "pdf2word", "officepdf"]
+    server = None
+    task_id = None
+    used_tool = None
 
-    with urllib.request.urlopen(start_req, timeout=20) as resp:
-        start_result = json.loads(resp.read().decode('utf-8'))
+    for tool_name in tool_names:
+        try:
+            logger.info(f"📋 Step 1: Trying tool '{tool_name}'...")
+            start_url = f"https://api.ilovepdf.com/v1/start/{tool_name}"
+            start_req = urllib.request.Request(start_url, data=b"", headers={
+                "Authorization": auth_header,
+                "Content-Type": "application/json"
+            })
+            with urllib.request.urlopen(start_req, timeout=20) as resp:
+                start_result = json.loads(resp.read().decode('utf-8'))
+            server = start_result["server"]
+            task_id = start_result["task"]
+            used_tool = tool_name
+            logger.info(f"✅ Task started with tool '{tool_name}': server={server}")
+            break
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8', errors='replace')
+            logger.warning(f"⚠️ Tool '{tool_name}' failed ({e.code}): {error_body[:200]}")
+            continue
+        except Exception as e:
+            logger.warning(f"⚠️ Tool '{tool_name}' error: {str(e)}")
+            continue
 
-    server = start_result["server"]
-    task_id = start_result["task"]
-    logger.info(f"✅ Task started: server={server}")
+    if not server or not task_id:
+        raise ValueError("فشل بدء المهمة: لم يتم العثور على أداة تحويل PDF إلى Word في iLovePDF API. تأكد من صلاحيات حسابك.")
 
     # ── Step 2: Upload PDF ──
     logger.info("📤 Step 2: Uploading PDF...")
-    upload_url = f"https://{server}/v1/upload"
+    try:
+        upload_url = f"https://{server}/v1/upload"
+        boundary = f"----MonjezBoundary{int(time.time() * 1000)}"
 
-    boundary = f"----MonjezBoundary{int(time.time() * 1000)}"
+        body = b""
+        body += f"--{boundary}\r\n".encode()
+        body += b"Content-Disposition: form-data; name=\"task\"\r\n\r\n"
+        body += task_id.encode() + b"\r\n"
+        body += f"--{boundary}\r\n".encode()
+        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\n"
+        body += b"Content-Type: application/pdf\r\n\r\n"
+        body += pdf_bytes + b"\r\n"
+        body += f"--{boundary}--\r\n".encode()
 
-    body = b""
-    body += f"--{boundary}\r\n".encode()
-    body += b"Content-Disposition: form-data; name=\"task\"\r\n\r\n"
-    body += task_id.encode() + b"\r\n"
+        upload_req = urllib.request.Request(upload_url, data=body, headers={
+            "Authorization": auth_header,
+            "Content-Type": f"multipart/form-data; boundary={boundary}"
+        })
+        with urllib.request.urlopen(upload_req, timeout=60) as resp:
+            upload_result = json.loads(resp.read().decode('utf-8'))
+        server_filename = upload_result["server_filename"]
+        logger.info(f"✅ Uploaded: {server_filename}")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='replace')
+        logger.error(f"❌ Upload failed ({e.code}): {error_body[:300]}")
+        raise ValueError(f"فشل رفع الملف ({e.code})")
 
-    body += f"--{boundary}\r\n".encode()
-    body += b"Content-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\n"
-    body += b"Content-Type: application/pdf\r\n\r\n"
-    body += pdf_bytes + b"\r\n"
+    # ── Step 3: Process ──
+    logger.info(f"⚙️ Step 3: Processing with tool '{used_tool}'...")
+    try:
+        process_url = f"https://{server}/v1/process"
+        process_data = json.dumps({
+            "task": task_id,
+            "tool": used_tool,
+            "files": [{
+                "server_filename": server_filename,
+                "filename": "document.pdf"
+            }]
+        }).encode('utf-8')
 
-    body += f"--{boundary}--\r\n".encode()
+        process_req = urllib.request.Request(process_url, data=process_data, headers={
+            "Authorization": auth_header,
+            "Content-Type": "application/json"
+        })
+        with urllib.request.urlopen(process_req, timeout=120) as resp:
+            process_result = json.loads(resp.read().decode('utf-8'))
+        logger.info(f"✅ Processing complete: {json.dumps(process_result)[:200]}")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='replace')
+        logger.error(f"❌ Process failed ({e.code}): {error_body[:300]}")
+        raise ValueError(f"فشل التحويل ({e.code}): {error_body[:100]}")
 
-    upload_req = urllib.request.Request(upload_url, data=body, headers={
-        "Authorization": auth_header,
-        "Content-Type": f"multipart/form-data; boundary={boundary}"
-    })
-
-    with urllib.request.urlopen(upload_req, timeout=60) as resp:
-        upload_result = json.loads(resp.read().decode('utf-8'))
-
-    server_filename = upload_result["server_filename"]
-    logger.info(f"✅ Uploaded: {server_filename}")
-
-    # ── Step 3: Process (PDF → Word) ──
-    logger.info("⚙️ Step 3: Processing PDF to Word...")
-    process_url = f"https://{server}/v1/process"
-
-    process_data = json.dumps({
-        "task": task_id,
-        "tool": "pdfoffice",
-        "files": [{
-            "server_filename": server_filename,
-            "filename": "document.pdf"
-        }]
-    }).encode('utf-8')
-
-    process_req = urllib.request.Request(process_url, data=process_data, headers={
-        "Authorization": auth_header,
-        "Content-Type": "application/json"
-    })
-
-    with urllib.request.urlopen(process_req, timeout=120) as resp:
-        process_result = json.loads(resp.read().decode('utf-8'))
-
-    logger.info("✅ Processing complete")
-
-    # ── Step 4: Download DOCX ──
+    # ── Step 4: Download ──
     logger.info("📥 Step 4: Downloading Word file...")
-    download_url = f"https://{server}/v1/download/{task_id}"
-
-    download_req = urllib.request.Request(download_url, headers={
-        "Authorization": auth_header
-    })
-
-    with urllib.request.urlopen(download_req, timeout=60) as resp:
-        docx_bytes = resp.read()
-
-    logger.info(f"✅ Word downloaded: {len(docx_bytes)} bytes")
-    return docx_bytes
+    try:
+        download_url = f"https://{server}/v1/download/{task_id}"
+        download_req = urllib.request.Request(download_url, headers={"Authorization": auth_header})
+        with urllib.request.urlopen(download_req, timeout=60) as resp:
+            docx_bytes = resp.read()
+        logger.info(f"✅ Word downloaded: {len(docx_bytes)} bytes")
+        return docx_bytes
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='replace')
+        logger.error(f"❌ Download failed ({e.code}): {error_body[:300]}")
+        raise ValueError(f"فشل تحميل الملف ({e.code})")
 
 
 # ══════════════════════════════════════════════════════════
