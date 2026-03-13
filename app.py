@@ -89,8 +89,7 @@ def cloudconvert_pdf_to_word(pdf_bytes):
                 "operation": "convert",
                 "input_format": "pdf",
                 "output_format": "docx",
-                "engine": "office", # محرك Office يعطي نتائج ممتازة للعربية
-                "input": ["import-it"]
+                "input": ["import-it"] # تمت إزالة السطر المسبب للخطأ للسماح لـ CloudConvert باختيار المحرك المناسب
             },
             "export-it": {"operation": "export/url", "input": ["convert-it"]}
         }
@@ -109,7 +108,7 @@ def cloudconvert_pdf_to_word(pdf_bytes):
     except urllib.error.HTTPError as e:
         error_body = e.read().decode('utf-8', errors='replace')
         logger.error(f"❌ Job creation failed ({e.code}): {error_body}")
-        raise ValueError("فشل بدء مهمة التحويل مع CloudConvert.")
+        raise ValueError(f"فشل بدء مهمة التحويل مع CloudConvert: {error_body[:100]}")
     except Exception as e:
         raise ValueError(f"فشل إنشاء المهمة: {str(e)}")
 
