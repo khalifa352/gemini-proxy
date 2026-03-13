@@ -481,10 +481,17 @@ def convert_to_word():
         # دعم الاستلام كـ HTML خام أو كـ PDF (لتجنب تعطل التطبيق في حال أرسل أحدهما)
         html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
+        letterhead_b64 = data.get("letterhead_base64", "") # استلام الرأسية من التطبيق
 
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert with MS XML Wrapper...")
             
+            # تجهيز الرأسية إذا أرسلها التطبيق
+            letterhead_html = ""
+            if letterhead_b64:
+                # نضعها كصورة تملأ العرض بالكامل لتظهر كرأسية حقيقية في الوورد
+                letterhead_html = f'<div style="text-align: center; margin-bottom: 20px; width: 100%;"><img src="data:image/png;base64,{letterhead_b64}" style="width: 100%; max-width: 100%; height: auto; display: block;" /></div>'
+
             # تغليف الـ HTML بمعايير مايكروسوفت وورد الرسمية لإجبار محرك التحويل على دعم العربية
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
@@ -497,6 +504,7 @@ def convert_to_word():
 </style>
 </head>
 <body dir="rtl">
+{letterhead_html}
 {html_content}
 </body>
 </html>"""
