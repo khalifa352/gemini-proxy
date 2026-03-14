@@ -160,7 +160,6 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
         return docx_bytes
     except Exception as e:
         raise ValueError(f"فشل تحميل ملف الوورد: {str(e)}")
-
 def get_style_prompt(style, mode):
     global_rules = """
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
@@ -183,7 +182,8 @@ def get_style_prompt(style, mode):
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
 - TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
-- FILL-IN-THE-BLANK / PUNCTUATION (CRITICAL FOR WORD): MS Word DOES NOT support `display: flex`. NEVER use flexbox for dotted lines or signatures. You MUST use standard text dots/underscores inside a simple paragraph. Example: `<p dir="rtl" style="text-align:right;">الاسم: ........................................</p>`. DO NOT use nested divs or borders for empty lines.
+- NUMBER ANTI-REVERSAL (CRITICAL): ALL numbers, prices, quantities, dates, and spaced digits (e.g., "250 000") MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`. This is mandatory to prevent RTL flipping inside tables.
+- FILL-IN-THE-BLANK / PUNCTUATION: MS Word DOES NOT support `display: flex`. NEVER use flexbox for dotted lines or signatures. You MUST use standard text dots/underscores inside a simple paragraph. Example: `<p dir="rtl" style="text-align:right;">الاسم: ........................................</p>`. DO NOT use nested divs or borders for empty lines.
 """
     if mode == "simulation":
         return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
@@ -205,6 +205,7 @@ TYPOGRAPHY: Dynamic sizes. Title bold centered.
 TABLE DESIGN: th: background:#333; color:white; padding:7px; border:1px solid #333; td: padding:6px 8px; border:1px solid #ddd; Even rows: background:#f7f7f7;"""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 
 def detect_document_type(user_msg):
