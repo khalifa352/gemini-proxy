@@ -4,11 +4,20 @@ import json
 import logging
 import base64
 import time
+import io
 import concurrent.futures
 from flask import Flask, request, jsonify
 
 # استدعاء محرك الوورد المحلي (الملف المستقل)
 import monjez_word_engine
+
+# ══════════════════════════════════════════════════════════
+# ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية
+# ══════════════════════════════════════════════════════════
+import docx
+from docx.shared import Inches
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("Monjez_V10_Server")
@@ -393,11 +402,15 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# مسار التحويل القديم (CloudConvert)
+# مسار التحويل المُعدّل بالكامل (CloudConvert + Post-Processing للرأسية)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
+    """
+    يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
+    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يعيد الملف.
+    """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
             return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
@@ -406,14 +419,13 @@ def convert_to_word():
         html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
         letterhead_b64 = data.get("letterhead_base64", "") 
+        letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
 
         if html_content:
-            logger.info("📄 Converting HTML to Word via CloudConvert with MS XML Wrapper...")
-            letterhead_html = ""
-            if letterhead_b64:
-                letterhead_html = f'<div style="text-align: center; margin-bottom: 20px; width: 100%;"><img src="data:image/jpeg;base64,{letterhead_b64}" style="width: 100%; max-width: 100%; height: auto; display: block;" /></div>'
+            logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # ✅ هنا أعدت لك غلاف الـ XML الذي حذفته بالخطأ!
+            # ✅ هنا قمنا بحذف الـ div الخاص بالرأسية لأننا سنعالجها بالبايثون لاحقاً
+            # ✅ وأعدنا لك غلاف الـ XML المفقود لحماية اللغة العربية والـ RTL
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -425,10 +437,10 @@ def convert_to_word():
 </style>
 </head>
 <body dir="rtl">
-{letterhead_html}
 {html_content}
 </body>
 </html>"""
+            
             file_bytes = full_html.encode('utf-8')
             input_fmt = "html"
             
@@ -440,11 +452,105 @@ def convert_to_word():
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
+        # تحويل المحتوى النصي لوورد عبر CloudConvert
+        raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
+
+        # ✅ إذا لم تكن هناك رأسية أو كان الملف المرفوع PDF، أعد الملف كما هو
+        if not letterhead_b64 or input_fmt == "pdf":
+            docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
+            return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
+
+        # ══════════════════════════════════════════════════════════
+        # ✅ السحر هنا: حقن الرأسية في خلفية الترويسة محلياً عبر بايثون
+        # ══════════════════════════════════════════════════════════
+        logger.info("💉 Injecting Letterhead into Word Header Background... (Local Processing)")
+        
+        doc_stream = io.BytesIO(raw_docx_bytes)
+        doc = docx.Document(doc_stream)
+        
+        # فك تشفير صورة الرأسية
+        header_img_data = base64.b64decode(letterhead_b64)
+        header_img_stream = io.BytesIO(header_img_data)
+        
+        # الوصول إلى أقسام الترويسة في الوورد
+        section = doc.sections[0]
+        
+        # تفعيل Different First Page إذا طلب المستخدم "الصفحة الأولى فقط"
+        if not letterhead_on_all_pages:
+            section.different_first_page_header_footer = True
+            target_header = section.first_page_header
+        else:
+            target_header = section.header
+            
+        # إضافة فقرة للترويسة لإدراج الصورة فيها
+        if not target_header.paragraphs:
+            target_header.add_paragraph()
+        paragraph = target_header.paragraphs[0]
+        
+        # إدراج الصورة كـ 'Run' بمقاس ورقة A4 كاملة
+        run = paragraph.add_run()
+        shape = run.add_picture(header_img_stream, width=Inches(8.27), height=Inches(11.69))
+        
+        # ضبط الصورة لتكون عائمة وخلف النص (Behind Text)
+        inline = shape.inline
+        extent = inline.extent
+        
+        # تحويل الصورة من 'Inline' إلى 'Anchor' (عائمة)
+        anchor = OxmlElement('wp:anchor')
+        anchor.set(qn('wp:distT'), '0')
+        anchor.set(qn('wp:distB'), '0')
+        anchor.set(qn('wp:distL'), '0')
+        anchor.set(qn('wp:distR'), '0')
+        anchor.set(qn('wp:simplePos'), '0')
+        anchor.set(qn('wp:relativeHeight'), '0')
+        anchor.set(qn('wp:behindDoc'), '1') # سحر خلف النص: Behind Text ✅
+        anchor.set(qn('wp:locked'), '1')    # قفل الرأسية: Locked ✅
+        anchor.set(qn('wp:layoutInCell'), '1')
+        anchor.set(qn('wp:allowOverlap'), '1')
+
+        # ضبط المحاذاة الأفقية (توسيط بالنسبة للصفحة)
+        positionH = OxmlElement('wp:positionH')
+        positionH.set(qn('wp:relativeFrom'), 'page')
+        alignH = OxmlElement('wp:align')
+        alignH.text = 'center'
+        positionH.append(alignH)
+        
+        # ضبط المحاذاة العمودية (أعلى الصفحة تماماً)
+        positionV = OxmlElement('wp:positionV')
+        positionV.set(qn('wp:relativeFrom'), 'page')
+        posOffsetV = OxmlElement('wp:posOffset')
+        posOffsetV.text = '0'
+        positionV.append(posOffsetV)
+        
+        anchor.append(positionH)
+        anchor.append(positionV)
+        
+        # نسخ بيانات الصورة ووضعها داخل الـ Anchor
+        anchor.append(extent)
+        
+        docPr = OxmlElement('wp:docPr')
+        docPr.set(qn('id'), '1')
+        docPr.set(qn('name'), 'Letterhead Background')
+        anchor.append(docPr)
+        
+        cNvGraphicFramePr = OxmlElement('wp:cNvGraphicFramePr')
+        anchor.append(cNvGraphicFramePr)
+        
+        graphic = inline.graphic
+        anchor.append(graphic)
+        
+        # استبدال الـ inline بالـ anchor في ملف الـ XML
+        inline.getparent().replace(inline, anchor)
+
+        # حفظ ملف الوورد النهائي بعد المعالجة
+        final_docx_stream = io.BytesIO()
+        doc.save(final_docx_stream)
+        docx_bytes = final_docx_stream.getvalue()
+        
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
-        logger.info(f"✅ Word conversion complete ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
+        logger.info(f"✅ Final Word Document with Locked Background Letterhead generated ({len(docx_bytes)} bytes)")
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word واحتواء الترويسة بنجاح ✨"})
 
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
