@@ -398,13 +398,6 @@ OUTPUT FORMAT:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 # ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (التدمير الشامل لهوامش الفقرات داخل الجدول)
-# ══════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (إغلاق ثغرات الـ RTL والنقطتين والأرقام)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
 # مسار التحويل المُعدّل نهائياً (حل مشكلة الفرنسية + الأرقام + النقاط)
 # ══════════════════════════════════════════════════════════
 
@@ -498,7 +491,7 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🛠️ دالة مساعدة للتعرف على اللغة وتطبيق المحاذاة والمسافات
+        # 🛠️ دالة مساعدة للتعرف على اللغة وتطهير الـ RTL من اللغات الأجنبية
         def enforce_paragraph_style(paragraph):
             text = paragraph.text
             # كشف اللغة لمعرفة الاتجاه الصحيح
@@ -507,27 +500,41 @@ def convert_to_word():
 
             pPr = paragraph._element.get_or_add_pPr()
             
-            # 1. التوجيه الذكي (الفرنسية لليسار، العربية والأرقام لليمين)
+            # 1. التوجيه الذكي الجذري
             if has_latin and not has_arabic:
+                # أ) محاذاة لليسار
                 jc = pPr.find(qn('w:jc'))
                 if jc is None:
                     jc = OxmlElement('w:jc')
                     pPr.append(jc)
-                jc.set(qn('w:val'), 'left') # محاذاة لليسار
+                jc.set(qn('w:val'), 'left')
                 
-                # مسح قفل الـ RTL للغات الأجنبية
+                # ب) تطهير الفقرة من الـ Bidi لتعود للانطلاق من اليسار
                 bidi = pPr.find(qn('w:bidi'))
                 if bidi is not None:
                     pPr.remove(bidi)
+                    
+                # ج) الأهم: مسح الـ RTL من كل حرف لإرجاع النقاط (Punctuation) لمكانها الطبيعي
+                for run in paragraph.runs:
+                    rPr = run._element.get_or_add_rPr()
+                    rtl = rPr.find(qn('w:rtl'))
+                    if rtl is not None:
+                        rPr.remove(rtl)
             else:
+                # عربي أو أرقام -> يمين وقفل RTL
                 jc = pPr.find(qn('w:jc'))
                 if jc is None:
                     jc = OxmlElement('w:jc')
                     pPr.append(jc)
-                jc.set(qn('w:val'), 'right') # محاذاة لليمين
+                jc.set(qn('w:val'), 'right')
                 
                 if pPr.find(qn('w:bidi')) is None:
                     pPr.append(OxmlElement('w:bidi'))
+                    
+                for run in paragraph.runs:
+                    rPr = run._element.get_or_add_rPr()
+                    if rPr.find(qn('w:rtl')) is None:
+                        rPr.append(OxmlElement('w:rtl'))
 
             # 2. تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
             spacing = pPr.find(qn('w:spacing'))
