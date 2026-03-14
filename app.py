@@ -409,6 +409,9 @@ OUTPUT FORMAT:
 # ══════════════════════════════════════════════════════════
 # مسار التحويل المُعدّل نهائياً (إصلاح ارتفاع الجداول العمودي + Arial)
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (إصلاح ارتفاع الجداول العمودي + Arial)
+# ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
@@ -431,9 +434,9 @@ def convert_to_word():
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
             # 🛠️ 1. التدخل الجراحي في الـ HTML قبل التحويل (للخط والارتفاع العمودي):
-            # مسح أي خط مفروض مسبقاً لإجبار الوورد على استخدام Arial
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
+            # ✅ تم إصلاح أقواس الـ CSS هنا (استخدام }} بدلاً من })
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -442,20 +445,20 @@ def convert_to_word():
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
   
-  /* 🌟 إصلاح الجداول (الجزء الأول): إعادة العرض كاملاً وضغط الارتفاع عمودياً */
+  /* 🌟 إصلاح الجداول: إعادة العرض كاملاً وضغط الارتفاع عمودياً */
   table {{ 
       border-collapse: collapse; 
       direction: rtl; 
-      width: 100% !important; /* إعادة الجوانب كما كانت */
+      width: 100% !important; 
       margin-top: 0; margin-bottom: 0;
-  }
+  }}
   th, td {{ 
       border: 1px solid #d5dbdb; 
       text-align: right; 
       /* ضغط الارتفاع عمودياً من خلال الحشوة وارتفاع السطر */
       padding: 2px 4px !important; 
       line-height: 1.0 !important;
-  }
+  }}
   
   p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin-top: 0; margin-bottom: 2px; }}
 </style>
@@ -523,7 +526,6 @@ def convert_to_word():
             
             for row in table.rows:
                 # إجبار ارتفاع الصف على أن يكون "تلقائياً" الأدنى (يتقلص حسب النص)
-                # هذا يزيل الفراغ العمودي الزائد (فوق وتحت النص)
                 row.height_rule = WD_ROW_HEIGHT_RULE.AUTO 
                 
                 for cell in row.cells:
@@ -646,9 +648,6 @@ def convert_to_word():
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
-# ══════════════════════════════════════════════════════════
-# مسار تجربة التحويل المحلي (الجديد والمجاني)
-# ══════════════════════════════════════════════════════════
 
 @app.route("/convert_local_word", methods=["POST"])
 def convert_local_word():
