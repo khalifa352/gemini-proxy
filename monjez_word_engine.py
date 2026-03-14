@@ -459,10 +459,8 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# 📄 PDF/HTML → Word (DOCX) via CloudConvert API
 # ══════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (حل مشكلة الأسطر المتكسرة وانعكاس الأرقام)
+# مسار التحويل المُعدّل نهائياً (الحل المرن تماماً - بدون إجبار برمجي للاتجاهات)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
@@ -480,36 +478,33 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # 🛠️ 1. التدخل الجراحي لتنظيف الـ HTML قبل التحويل:
+            # 🛠️ التنظيف الجراحي للـ HTML 
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
-            # ✅ السحر هنا: هذا الكود يبحث عن النقطتين والخطوط المقطعة في الـ HTML القديم ويدمجها بالقوة في سطر واحد
-            # النمط الأول: خط ثم نقطتين ثم الكلمة
+            # معالجة التوقيعات والنقاط لتحويلها إلى نص مفهوم للوورد
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
                 html_content,
                 flags=re.IGNORECASE | re.DOTALL
             )
-            # النمط الثاني: الكلمة ثم نقطتين ثم الخط
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
                 html_content,
                 flags=re.IGNORECASE | re.DOTALL
             )
-            # تحويل أي بقايا من الخطوط المنفردة إلى نقاط فعلية
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
+            # ✅ HTML مرن بدون قيود CSS تعاكس الاتجاهات، نعتمد على tags الطبيعية
+            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
-  body {{ direction: rtl; unicode-bidi: embed; }}
-  table {{ border-collapse: collapse; direction: rtl; width: 100% !important; margin: 0; }}
-  th, td {{ border: 1px solid #d5dbdb; text-align: right; padding: 2px 4px !important; margin: 0; direction: rtl; }}
-  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin: 0 0 2px 0; padding: 0; }}
+  table {{ border-collapse: collapse; width: 100% !important; margin: 0; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }}
+  p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}
 </style>
 </head>
 <body dir="rtl">
@@ -535,9 +530,9 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ المعالجة الجراحية داخل ملف الوورد (حماية الأرقام والخطوط)
+        # ✅ معالجة الوورد: تصفير المسافات وفرض Arial فقط (بدون التدخل في المحاذاة)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Forcing Bidi without breaking Numbers...")
+        logger.info("💉 Local Processing: Flexible Alignment, Zero Spacing, Arial Font...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
@@ -551,20 +546,10 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        def enforce_paragraph_style(paragraph):
+        def clean_and_format_paragraph(paragraph):
             pPr = paragraph._element.get_or_add_pPr()
             
-            # إجبار المحاذاة لليمين واتجاه الفقرة فقط (دون المساس بالأرقام داخل السطر)
-            jc = pPr.find(qn('w:jc'))
-            if jc is None:
-                jc = OxmlElement('w:jc')
-                pPr.append(jc)
-            jc.set(qn('w:val'), 'right')
-            
-            if pPr.find(qn('w:bidi')) is None:
-                pPr.append(OxmlElement('w:bidi'))
-
-            # تصفير المسافات لمنع التمدد العمودي
+            # تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -574,7 +559,7 @@ def convert_to_word():
             spacing.set(qn('w:line'), '240') 
             spacing.set(qn('w:lineRule'), 'auto')
 
-            # فرض Arial دون المساس باتجاه القراءة للحرف (للحفاظ على الأرقام الإنجليزية/الهواتف)
+            # فرض Arial دون التدخل في الاتجاه (Direction) أو المحاذاة (Alignment)
             for run in paragraph.runs:
                 run.font.name = 'Arial'
                 rPr = run._element.get_or_add_rPr()
@@ -583,7 +568,7 @@ def convert_to_word():
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
 
-        # تطبيق الضبط على الجداول
+        # تطبيق الجراحة على الجداول (تنظيف الارتفاعات وتطبيق Arial فقط)
         for table in doc.tables:
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
@@ -604,11 +589,11 @@ def convert_to_word():
                     tcPr.append(tcMar)
 
                     for p in cell.paragraphs:
-                        enforce_paragraph_style(p)
+                        clean_and_format_paragraph(p)
 
-        # تطبيق الضبط على باقي المستند
+        # تطبيق الجراحة على باقي المستند
         for p in doc.paragraphs:
-            enforce_paragraph_style(p)
+            clean_and_format_paragraph(p)
 
         # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
