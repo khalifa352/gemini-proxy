@@ -63,7 +63,7 @@ def clean_html_output(raw_text):
 
 def generate_local_word(html_content, letterhead_b64):
     """
-    محرك محلي يقوم بتحويل HTML إلى DOCX باستخدام python-docx و BeautifulSoup
+    محرك محلي يقوم بتحويل HTML إلى DOCX بطريقة الزحف الشجري الدقيق
     """
     import docx
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -72,80 +72,75 @@ def generate_local_word(html_content, letterhead_b64):
 
     doc = docx.Document()
     
-    # محاولة فرض الخط والاتجاه الافتراضي
     style = doc.styles['Normal']
     style.font.name = 'Arial'
     style.font.size = Pt(12)
 
-    # 1. إدراج الرأسية إذا وجدت
     if letterhead_b64:
         try:
             img_data = base64.b64decode(letterhead_b64)
             img_stream = io.BytesIO(img_data)
-            # إدراج الصورة وجعلها تتوسط الصفحة
             doc.add_picture(img_stream, width=Inches(6.0))
             last_paragraph = doc.paragraphs[-1]
             last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         except Exception as e:
             logger.error(f"خطأ في إدراج الرأسية محلياً: {e}")
 
-    # 2. تحليل الـ HTML
     soup = BeautifulSoup(html_content, 'html.parser')
     
-    # 3. بناء عناصر الوورد (نصوص، عناوين، جداول)
-    elements = soup.body.descendants if soup.body else soup.descendants
-    
-    # لتجنب تكرار العناصر المتداخلة في BeautifulSoup
-    skip_until = None 
+    # دالة داخلية للزحف الشجري لاستخراج جميع العناصر بالترتيب دون تخطي
+    def process_node(node):
+        if not hasattr(node, 'name') or node.name is None:
+            return
 
-    for element in elements:
-        if skip_until:
-            if element == skip_until:
-                skip_until = None
-            continue
-
-        if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            text = element.get_text(strip=True)
+        # معالجة العناوين
+        if node.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            text = node.get_text(strip=True)
             if text:
-                level = int(element.name[1])
-                # نحول h1-h6 إلى Heading في الوورد (1-6) ولكن بحد أقصى للـ style
-                p = doc.add_heading(text, level=min(level, 9))
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT # محاذاة لليمين للعربية
-            skip_until = element
-
-        elif element.name == 'p':
-            text = element.get_text(strip=True)
+                level = min(int(node.name[1]), 9)
+                p = doc.add_heading(text, level=level)
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                
+        # معالجة الفقرات
+        elif node.name == 'p':
+            text = node.get_text(strip=True)
             if text:
                 p = doc.add_paragraph(text)
                 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            skip_until = element
-            
-        elif element.name == 'li':
-            text = element.get_text(strip=True)
+                
+        # معالجة القوائم
+        elif node.name == 'li':
+            text = node.get_text(strip=True)
             if text:
                 p = doc.add_paragraph(text, style='List Bullet')
                 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            skip_until = element
-
-        elif element.name == 'table':
-            rows = element.find_all('tr')
+                
+        # معالجة الجداول
+        elif node.name == 'table':
+            rows = node.find_all('tr')
             if rows:
-                cols = max(len(row.find_all(['td', 'th'])) for row in rows)
+                cols = max((len(r.find_all(['td', 'th'])) for r in rows), default=0)
                 if cols > 0:
                     table = doc.add_table(rows=len(rows), cols=cols)
-                    table.style = 'Table Grid' # لإظهار حدود الجدول
-                    
+                    table.style = 'Table Grid'
                     for i, row in enumerate(rows):
                         cells = row.find_all(['td', 'th'])
                         for j, cell in enumerate(cells):
                             if j < cols:
-                                text = cell.get_text(strip=True)
+                                # دمج الأسطر داخل الخلية إن وجدت
+                                text = cell.get_text(separator='\n', strip=True)
                                 cell_obj = table.cell(i, j)
                                 cell_obj.text = text
-                                # محاذاة النص داخل الخلية لليمين
                                 for paragraph in cell_obj.paragraphs:
                                     paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            skip_until = element
+        else:
+            # إذا كان العنصر div أو span، ادخل داخله وابحث عن فقرات وجداول
+            for child in node.children:
+                process_node(child)
+
+    # بدء الزحف من جسم المستند
+    root = soup.body if soup.body else soup
+    process_node(root)
 
     output = io.BytesIO()
     doc.save(output)
