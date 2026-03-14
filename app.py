@@ -406,12 +406,16 @@ OUTPUT FORMAT:
 # ══════════════════════════════════════════════════════════
 # مسار التحويل المُعدّل بالكامل (CloudConvert + Post-Processing للرأسية)
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (إصلاح ارتفاع الجداول العمودي + Arial)
+# ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     """
     يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
-    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> يضبط الجداول وخط Arial -> يعيد الملف.
+    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> 
+    يضبط الجداول لتكون مضغوطة عمودياً وخط Arial -> يعيد الملف.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
@@ -426,23 +430,34 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # 🛠️ 1. التدخل الجراحي العميق في الـ HTML قبل التحويل:
-            # مسح أي "عرض 100%" مفروض من الذكاء الاصطناعي على الجداول لتسمح لها بالتقلص
-            html_content = re.sub(r'width\s*:\s*100\s*%[;]?', '', html_content, flags=re.IGNORECASE)
-            html_content = re.sub(r'width\s*=\s*["\']100%["\']', '', html_content, flags=re.IGNORECASE)
-            # مسح أي خط مفروض مسبقاً في الـ HTML لإجبار الوورد على استخدام الخط الافتراضي
+            # 🛠️ 1. التدخل الجراحي في الـ HTML قبل التحويل (للخط والارتفاع العمودي):
+            # مسح أي خط مفروض مسبقاً لإجبار الوورد على استخدام Arial
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
-  /* إجبار الخط والعرض من خلال CSS قوي */
+  /* إجبار الخط على المستوى العام */
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
-  table {{ border-collapse: collapse; direction: rtl; width: auto !important; margin-right: auto; margin-left: auto; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; width: auto !important; white-space: nowrap; }}
-  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; }}
+  
+  /* 🌟 إصلاح الجداول (الجزء الأول): إعادة العرض كاملاً وضغط الارتفاع عمودياً */
+  table {{ 
+      border-collapse: collapse; 
+      direction: rtl; 
+      width: 100% !important; /* إعادة الجوانب كما كانت */
+      margin-top: 0; margin-bottom: 0;
+  }
+  th, td {{ 
+      border: 1px solid #d5dbdb; 
+      text-align: right; 
+      /* ضغط الارتفاع عمودياً من خلال الحشوة وارتفاع السطر */
+      padding: 2px 4px !important; 
+      line-height: 1.0 !important;
+  }
+  
+  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin-top: 0; margin-bottom: 2px; }}
 </style>
 </head>
 <body dir="rtl">
@@ -468,58 +483,86 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: معالجة المستند (مقاس الصفحة + الهوامش + الرأسية + الجداول + Arial)
+        # ✅ السحر هنا: معالجة المستند (الهوامش + الرأسية + الجداول المضغوطة + Arial)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Header, Margins, AutoFit Tables, Arial Font...")
+        logger.info("💉 Local Processing: Header, Margins, Compacting Table Heights, Arial Font...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         
         section = doc.sections[0]
+        # إجبار مقاس A4
         section.page_width = Inches(8.27)
         section.page_height = Inches(11.69)
         
+        # ضبط الهوامش (4 سم من الأعلى)
         section.top_margin = Cm(4.0)
         section.bottom_margin = Cm(3.0)
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🛠️ 2. إصلاح الجداول من داخل الوورد
-        for table in doc.tables:
-            table.autofit = True
-            table.allow_autofit = True
-            # تصفير عرض الخلايا ليقوم الوورد بضغطها تلقائياً حسب النص
-            for row in table.rows:
-                for cell in row.cells:
-                    cell.width = Cm(0)
-
-        # 🛠️ 3. إجبار خط Arial من "جذر" المستند (للغة العربية واللاتينية)
+        # 🛠️ 2. إجبار خط Arial من "جذر" المستند وتصفير مسافات الفقرات
         normal_style = doc.styles['Normal']
         normal_style.font.name = 'Arial'
+        # تصفير المسافات بين الأسطر والفقرات بشكل عام
+        normal_style.paragraph_format.space_after = Cm(0)
+        normal_style.paragraph_format.space_before = Cm(0)
+        normal_style.paragraph_format.line_spacing = 1.0
+
         rFonts_style = normal_style.font._element.get_or_add_rPr().get_or_add_rFonts()
         rFonts_style.set(qn('w:ascii'), 'Arial')
         rFonts_style.set(qn('w:hAnsi'), 'Arial')
-        rFonts_style.set(qn('w:cs'), 'Arial') # السطر الأهم للغة العربية
+        rFonts_style.set(qn('w:cs'), 'Arial') # للغة العربية
 
-        # المرور على كل الفقرات لمسح أي خط آخر وفرض Arial
+        # 🛠️ 3. إصلاح الجداول (الجزء الثاني): ضغط الارتفاع العمودي برمجياً
+        from docx.enum.table import WD_ROW_HEIGHT_RULE
+        
+        for table in doc.tables:
+            table.autofit = False # السماح لها بأخذ العرض الكامل 100%
+            table.allow_autofit = False
+            
+            for row in table.rows:
+                # إجبار ارتفاع الصف على أن يكون "تلقائياً" الأدنى (يتقلص حسب النص)
+                # هذا يزيل الفراغ العمودي الزائد (فوق وتحت النص)
+                row.height_rule = WD_ROW_HEIGHT_RULE.AUTO 
+                
+                for cell in row.cells:
+                    # إزالة أي حشوة داخلية للخلية تسبب تباعداً عمودياً
+                    cell_pr = cell._element.get_or_add_tcPr()
+                    mar = OxmlElement('w:tcMar')
+                    
+                    top = OxmlElement('w:top')
+                    top.set(qn('w:w'), '15') # حشوة علوية دقيقة جداً
+                    top.set(qn('w:type'), 'dxa')
+                    mar.append(top)
+                    
+                    bottom = OxmlElement('w:bottom')
+                    bottom.set(qn('w:w'), '15') # حشوة سفلية دقيقة جداً
+                    bottom.set(qn('w:type'), 'dxa')
+                    mar.append(bottom)
+                    
+                    cell_pr.append(mar)
+
+                    # التأكد من أن الفقرات داخل الخلايا مضغوطة وتستخدم Arial
+                    for p in cell.paragraphs:
+                        p.style = doc.styles['Normal']
+                        p.paragraph_format.space_after = Cm(0)
+                        p.paragraph_format.space_before = Cm(0)
+                        p.paragraph_format.line_spacing = 1.0
+                        for run in p.runs:
+                            run.font.name = 'Arial'
+                            rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
+                            rFonts.set(qn('w:cs'), 'Arial')
+
+        # المرور على فقرات المستند العادية لفرض Arial
         for p in doc.paragraphs:
             p.style = doc.styles['Normal']
             for run in p.runs:
                 run.font.name = 'Arial'
                 rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
                 rFonts.set(qn('w:cs'), 'Arial')
-                
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for p in cell.paragraphs:
-                        p.style = doc.styles['Normal']
-                        for run in p.runs:
-                            run.font.name = 'Arial'
-                            rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
-                            rFonts.set(qn('w:cs'), 'Arial')
 
-        # دمج صورة الرأسية في الخلفية
+        # دمج صورة الرأسية في الخلفية (Behind Text)
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
         
