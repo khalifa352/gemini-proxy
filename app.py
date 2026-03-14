@@ -398,23 +398,8 @@ OUTPUT FORMAT:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
-
 # ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل بالكامل (CloudConvert + Post-Processing للرأسية)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل بالكامل (CloudConvert + Post-Processing للرأسية)
-# ══════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (إصلاح ارتفاع الجداول العمودي + Arial)
-# ══════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (إصلاح ارتفاع الجداول العمودي + Arial)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (تدمير الارتفاع الثابت للجداول + Arial)
+# مسار التحويل المُعدّل نهائياً (التدمير الشامل لهوامش الفقرات داخل الجدول)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
@@ -422,7 +407,7 @@ def convert_to_word():
     """
     يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
     ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> 
-    يسحق أي ارتفاع عمودي ثابت للجداول ويفعل Arial -> يعيد الملف.
+    يجبر هوامش فقرات الخلايا على الصفر لتضييق الارتفاع -> يعيد الملف.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
@@ -437,10 +422,8 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # 🛠️ 1. التدخل الجراحي في الـ HTML (مسح الارتفاعات والخطوط المفروضة)
+            # مسح خطوط HTML لتنظيفها قبل التحويل
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
-            html_content = re.sub(r'height\s*:\s*[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
-            html_content = re.sub(r'line-height\s*:\s*[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
@@ -448,20 +431,9 @@ def convert_to_word():
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
-  
-  table {{ 
-      border-collapse: collapse; 
-      direction: rtl; 
-      width: 100% !important; /* الاحتفاظ بالعرض الطبيعي يمين-يسار */
-      margin: 0; 
-  }}
-  th, td {{ 
-      border: 1px solid #d5dbdb; 
-      text-align: right; 
-      padding: 2px 4px !important; /* تضييق الحشوة العمودية */
-      height: auto !important; 
-  }}
-  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin: 0 0 2px 0; padding: 0; }}
+  table {{ border-collapse: collapse; direction: rtl; width: 100% !important; margin: 0; }}
+  th, td {{ border: 1px solid #d5dbdb; text-align: right; padding: 0px 4px !important; margin: 0; }}
+  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin: 0; padding: 0; }}
 </style>
 </head>
 <body dir="rtl">
@@ -487,13 +459,13 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: المعالجة الجذرية (الهوامش + الرأسية + الجداول + Arial)
+        # ✅ السحر هنا: الإجبار الصارم على تصفير الارتفاعات (Zero Spacing)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Nuking Table Heights, Enforcing Arial...")
+        logger.info("💉 Local Processing: Forcing ZERO margins in Tables, Enforcing Arial...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
-        from docx.shared import Pt # استدعاء Pt للتعامل مع المسافات الدقيقة
+        from docx.shared import Pt
         
         section = doc.sections[0]
         section.page_width = Inches(8.27)
@@ -503,50 +475,51 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🛠️ 2. التدمير الجراحي للارتفاعات الثابتة في الجداول
+        # 🛠️ 2. الهجوم المباشر على الجداول لكسر الانتفاخ العمودي
         for table in doc.tables:
             for row in table.rows:
-                # أ) مسح خاصية "الارتفاع الثابت" المخفية في الـ XML للصف
+                # مسح الارتفاع الثابت للصف
                 trPr = row._tr.get_or_add_trPr()
                 for trHeight in trPr.findall(qn('w:trHeight')):
                     trPr.remove(trHeight)
                 
                 for cell in row.cells:
-                    # ب) تصفير الحشوة (Padding) العلوية والسفلية للخلية
+                    # تصفير حشوة الخلية (Cell Margins) تماماً من الأعلى والأسفل
                     tcPr = cell._element.get_or_add_tcPr()
                     tcMar = tcPr.find(qn('w:tcMar'))
                     if tcMar is not None:
                         tcPr.remove(tcMar)
-                    mar = OxmlElement('w:tcMar')
-                    for side in ['top', 'bottom']:
-                        el = OxmlElement(f'w:{side}')
-                        el.set(qn('w:w'), '0')
-                        el.set(qn('w:type'), 'dxa')
-                        mar.append(el)
-                    tcPr.append(mar)
+                    tcMar = OxmlElement('w:tcMar')
+                    for attr in ['top', 'bottom']:
+                        node = OxmlElement(f'w:{attr}')
+                        node.set(qn('w:w'), '0')  # القيمة صفر
+                        node.set(qn('w:type'), 'dxa')
+                        tcMar.append(node)
+                    tcPr.append(tcMar)
 
-                    # ج) إزالة تباعد الفقرات داخل الخلية وإجبار Arial
+                    # ✅ الأهم: إجبار مسافات الفقرات داخل الخلية على الصفر عبر XML
                     for p in cell.paragraphs:
-                        # مسح أي مسافات مخفية (w:spacing) أضافها CloudConvert
                         pPr = p._element.get_or_add_pPr()
                         spacing = pPr.find(qn('w:spacing'))
-                        if spacing is not None:
-                            pPr.remove(spacing)
-                            
-                        # تصفير المسافات عبر مكتبة بايثون
-                        p.paragraph_format.space_after = Pt(0)
-                        p.paragraph_format.space_before = Pt(0)
-                        p.paragraph_format.line_spacing = 1.0
+                        if spacing is None:
+                            spacing = OxmlElement('w:spacing')
+                            pPr.append(spacing)
                         
-                        # إجبار Arial بكل اللغات
+                        # وضع صفر ثابت وقاطع لكل المسافات الممكنة
+                        spacing.set(qn('w:before'), '0')
+                        spacing.set(qn('w:after'), '0')
+                        spacing.set(qn('w:line'), '240') # 240 تعني تباعد أسطر مفرد تماماً (Single)
+                        spacing.set(qn('w:lineRule'), 'auto')
+
+                        # فرض Arial
                         for run in p.runs:
                             run.font.name = 'Arial'
                             rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
-                            rFonts.set(qn('w:cs'), 'Arial')    # للعربية
-                            rFonts.set(qn('w:ascii'), 'Arial') # للإنجليزية
-                            rFonts.set(qn('w:hAnsi'), 'Arial') # للرموز
+                            rFonts.set(qn('w:cs'), 'Arial')
+                            rFonts.set(qn('w:ascii'), 'Arial')
+                            rFonts.set(qn('w:hAnsi'), 'Arial')
 
-        # 🛠️ 3. تطبيق خط Arial على باقي فقرات المستند خارج الجداول
+        # فرض Arial لباقي المستند
         for p in doc.paragraphs:
             for run in p.runs:
                 run.font.name = 'Arial'
@@ -555,7 +528,7 @@ def convert_to_word():
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
 
-        # 🛠️ 4. دمج صورة الرأسية في الخلفية (Behind Text)
+        # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
         
@@ -637,6 +610,7 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+
 
 @app.route("/convert_local_word", methods=["POST"])
 def convert_local_word():
