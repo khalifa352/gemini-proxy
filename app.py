@@ -400,6 +400,260 @@ OUTPUT FORMAT:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (المحاذاة الرسمية للغة العربية والفرنسية)
+# ══════════════════════════════════════════════════════════
+
+@app.route("/convert_to_word", methods=["POST"])
+def convert_to_word():
+    try:
+        if not os.environ.get("CLOUDCONVERT_API_KEY"):
+            return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
+
+        data = request.json
+        html_content = data.get("html_content") or data.get("current_html")
+        pdf_b64 = data.get("pdf_base64", "")
+        letterhead_b64 = data.get("letterhead_base64", "") 
+        letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
+
+        if html_content:
+            logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
+
+            # 🛠️ 1. التنظيف الجراحي للـ HTML قبل التحويل
+            html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
+
+            html_content = re.sub(
+                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
+                html_content,
+                flags=re.IGNORECASE | re.DOTALL
+            )
+            html_content = re.sub(
+                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
+                html_content,
+                flags=re.IGNORECASE | re.DOTALL
+            )
+            html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
+
+            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style>
+  * {{ font-family: 'Arial', sans-serif !important; }}
+  body {{ direction: rtl; unicode-bidi: embed; }}
+  table {{ border-collapse: collapse; direction: ltr !important; width: 100% !important; margin: 0; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; direction: rtl; }}
+  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; margin: 0; padding: 0; }}
+</style>
+</head>
+<body dir="rtl">
+{html_content}
+</body>
+</html>"""
+            
+            file_bytes = full_html.encode('utf-8')
+            input_fmt = "html"
+            
+        elif pdf_b64:
+            logger.info("📄 Converting PDF to Word via CloudConvert...")
+            file_bytes = base64.b64decode(pdf_b64)
+            input_fmt = "pdf"
+            
+        else:
+            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
+
+        raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
+
+        if not letterhead_b64 or input_fmt == "pdf":
+            docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
+            return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
+
+        # ══════════════════════════════════════════════════════════
+        # ✅ المعالجة القاطعة للمحاذاة باستخدام WD_ALIGN_PARAGRAPH
+        # ══════════════════════════════════════════════════════════
+        logger.info("💉 Local Processing: Official Word Alignment & Bidi Fix...")
+        
+        doc_stream = io.BytesIO(raw_docx_bytes)
+        doc = docx.Document(doc_stream)
+        from docx.shared import Pt
+        from docx.enum.text import WD_ALIGN_PARAGRAPH  # الاستدعاء السري للمحاذاة القاطعة
+        
+        section = doc.sections[0]
+        section.page_width = Inches(8.27)
+        section.page_height = Inches(11.69)
+        section.top_margin = Cm(4.0)
+        section.bottom_margin = Cm(3.0)
+        section.left_margin = Cm(2.5)
+        section.right_margin = Cm(2.5)
+
+        def enforce_paragraph_style(paragraph):
+            text = paragraph.text.strip()
+            # كشف ذكي للغة
+            has_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F]', text))
+            has_latin = bool(re.search(r'[A-Za-z\u00C0-\u024F]', text))
+
+            pPr = paragraph._element.get_or_add_pPr()
+            
+            # مسح أي محاذاة قديمة أضافها CloudConvert لمنع التعارض
+            jc = pPr.find(qn('w:jc'))
+            if jc is not None:
+                pPr.remove(jc)
+
+            # القاعدة الصارمة: فرنسي صافي (لا يوجد عربي) يذهب يساراً، غير ذلك يذهب يميناً
+            if has_latin and not has_arabic:
+                # ◀️ الفرنسية: محاذاة رسمية لليسار وإزالة الـ RTL
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                
+                bidi = pPr.find(qn('w:bidi'))
+                if bidi is not None:
+                    pPr.remove(bidi)
+                    
+                for run in paragraph.runs:
+                    rPr = run._element.get_or_add_rPr()
+                    rtl = rPr.find(qn('w:rtl'))
+                    if rtl is not None:
+                        rPr.remove(rtl)
+            else:
+                # ▶️ العربية أو الأرقام/الرموز: محاذاة رسمية لليمين وتفعيل الـ RTL
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                
+                if pPr.find(qn('w:bidi')) is None:
+                    pPr.append(OxmlElement('w:bidi'))
+                    
+                for run in paragraph.runs:
+                    rPr = run._element.get_or_add_rPr()
+                    if rPr.find(qn('w:rtl')) is None:
+                        rPr.append(OxmlElement('w:rtl'))
+
+            # تصفير هوامش الفقرات للحفاظ على نحافة الجداول
+            spacing = pPr.find(qn('w:spacing'))
+            if spacing is None:
+                spacing = OxmlElement('w:spacing')
+                pPr.append(spacing)
+            spacing.set(qn('w:before'), '0')
+            spacing.set(qn('w:after'), '0')
+            spacing.set(qn('w:line'), '240') 
+            spacing.set(qn('w:lineRule'), 'auto')
+
+            # فرض Arial
+            for run in paragraph.runs:
+                run.font.name = 'Arial'
+                rPr = run._element.get_or_add_rPr()
+                rFonts = rPr.get_or_add_rFonts()
+                rFonts.set(qn('w:cs'), 'Arial')
+                rFonts.set(qn('w:ascii'), 'Arial')
+                rFonts.set(qn('w:hAnsi'), 'Arial')
+
+        # تطبيق الجراحة على الجداول
+        for table in doc.tables:
+            for row in table.rows:
+                trPr = row._tr.get_or_add_trPr()
+                for trHeight in trPr.findall(qn('w:trHeight')):
+                    trPr.remove(trHeight)
+                
+                for cell in row.cells:
+                    tcPr = cell._element.get_or_add_tcPr()
+                    tcMar = tcPr.find(qn('w:tcMar'))
+                    if tcMar is not None:
+                        tcPr.remove(tcMar)
+                    tcMar = OxmlElement('w:tcMar')
+                    for attr in ['top', 'bottom']:
+                        node = OxmlElement(f'w:{attr}')
+                        node.set(qn('w:w'), '0')
+                        node.set(qn('w:type'), 'dxa')
+                        tcMar.append(node)
+                    tcPr.append(tcMar)
+
+                    for p in cell.paragraphs:
+                        enforce_paragraph_style(p)
+
+        # تطبيق الجراحة على باقي المستند
+        for p in doc.paragraphs:
+            enforce_paragraph_style(p)
+
+        # دمج صورة الرأسية في الخلفية
+        header_img_data = base64.b64decode(letterhead_b64)
+        header_img_stream = io.BytesIO(header_img_data)
+        
+        if not letterhead_on_all_pages:
+            section.different_first_page_header_footer = True
+            target_header = section.first_page_header
+        else:
+            target_header = section.header
+            
+        if not target_header.paragraphs:
+            target_header.add_paragraph()
+        paragraph = target_header.paragraphs[0]
+        
+        run = paragraph.add_run()
+        shape = run.add_picture(header_img_stream, width=Inches(8.27), height=Inches(11.69))
+        
+        inline = shape._inline
+        anchor = OxmlElement('wp:anchor')
+        anchor.set('distT', '0')
+        anchor.set('distB', '0')
+        anchor.set('distL', '0')
+        anchor.set('distR', '0')
+        anchor.set('simplePos', '0')
+        anchor.set('relativeHeight', '0')
+        anchor.set('behindDoc', '1') 
+        anchor.set('locked', '0')
+        anchor.set('layoutInCell', '1')
+        anchor.set('allowOverlap', '1')
+
+        simplePos = OxmlElement('wp:simplePos')
+        simplePos.set('x', '0')
+        simplePos.set('y', '0')
+        anchor.append(simplePos)
+
+        positionH = OxmlElement('wp:positionH')
+        positionH.set('relativeFrom', 'page')
+        alignH = OxmlElement('wp:align')
+        alignH.text = 'center'
+        positionH.append(alignH)
+        anchor.append(positionH)
+        
+        positionV = OxmlElement('wp:positionV')
+        positionV.set('relativeFrom', 'page')
+        alignV = OxmlElement('wp:align')
+        alignV.text = 'top'
+        positionV.append(alignV)
+        anchor.append(positionV)
+        
+        anchor.append(inline.extent)
+        
+        effectExtent = OxmlElement('wp:effectExtent')
+        effectExtent.set('l', '0')
+        effectExtent.set('t', '0')
+        effectExtent.set('r', '0')
+        effectExtent.set('b', '0')
+        anchor.append(effectExtent)
+        
+        wrapNone = OxmlElement('wp:wrapNone')
+        anchor.append(wrapNone)
+        
+        anchor.append(inline.docPr)
+        
+        cNvGraphicFramePr = OxmlElement('wp:cNvGraphicFramePr')
+        anchor.append(cNvGraphicFramePr)
+        
+        anchor.append(inline.graphic)
+        
+        inline.getparent().replace(inline, anchor)
+
+        final_docx_stream = io.BytesIO()
+        doc.save(final_docx_stream)
+        docx_bytes = final_docx_stream.getvalue()
+        
+        docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
+
+        logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
+
+    except Exception as e:
+        logger.error(f"Word Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
 
 
