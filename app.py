@@ -403,6 +403,10 @@ OUTPUT FORMAT:
 # مسار التحويل المُعدّل بالكامل (CloudConvert + Post-Processing للرأسية)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل بالكامل (CloudConvert + Post-Processing للرأسية)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     """
@@ -422,15 +426,22 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # ✅ إلغاء إجبار الجداول على العرض الكامل 100% لتصغير الخانات الواسعة
+            # 🛠️ 1. التدخل الجراحي العميق في الـ HTML قبل التحويل:
+            # مسح أي "عرض 100%" مفروض من الذكاء الاصطناعي على الجداول لتسمح لها بالتقلص
+            html_content = re.sub(r'width\s*:\s*100\s*%[;]?', '', html_content, flags=re.IGNORECASE)
+            html_content = re.sub(r'width\s*=\s*["\']100%["\']', '', html_content, flags=re.IGNORECASE)
+            # مسح أي خط مفروض مسبقاً في الـ HTML لإجبار الوورد على استخدام الخط الافتراضي
+            html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
+
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
+  /* إجبار الخط والعرض من خلال CSS قوي */
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
   table {{ border-collapse: collapse; direction: rtl; width: auto !important; margin-right: auto; margin-left: auto; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; width: auto !important; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; width: auto !important; white-space: nowrap; }}
   p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; }}
 </style>
 </head>
@@ -450,7 +461,6 @@ def convert_to_word():
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        # تحويل المحتوى النصي لوورد عبر CloudConvert
         raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
 
         if not letterhead_b64 or input_fmt == "pdf":
@@ -465,42 +475,51 @@ def convert_to_word():
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         
-        # 🌟 1. إجبار الصفحة لتكون A4 تماماً 
         section = doc.sections[0]
         section.page_width = Inches(8.27)
         section.page_height = Inches(11.69)
         
-        # 🌟 2. ضبط الهوامش (المحتوى يبدأ بعد 4 سم)
         section.top_margin = Cm(4.0)
         section.bottom_margin = Cm(3.0)
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🌟 3. إصلاح الجداول الواسعة (AutoFit)
+        # 🛠️ 2. إصلاح الجداول من داخل الوورد
         for table in doc.tables:
             table.autofit = True
             table.allow_autofit = True
+            # تصفير عرض الخلايا ليقوم الوورد بضغطها تلقائياً حسب النص
+            for row in table.rows:
+                for cell in row.cells:
+                    cell.width = Cm(0)
 
-        # 🌟 4. إجبار خط Arial برمجياً لجميع النصوص بما فيها العربية (w:cs)
-        def set_arial_font(paragraph):
-            for run in paragraph.runs:
-                run.font.name = 'Arial'
-                rPr = run._element.get_or_add_rPr()
-                rFonts = rPr.get_or_add_rFonts()
-                rFonts.set(qn('w:ascii'), 'Arial')
-                rFonts.set(qn('w:hAnsi'), 'Arial')
-                rFonts.set(qn('w:cs'), 'Arial') # السطر الأهم للغة العربية
-        
+        # 🛠️ 3. إجبار خط Arial من "جذر" المستند (للغة العربية واللاتينية)
+        normal_style = doc.styles['Normal']
+        normal_style.font.name = 'Arial'
+        rFonts_style = normal_style.font._element.get_or_add_rPr().get_or_add_rFonts()
+        rFonts_style.set(qn('w:ascii'), 'Arial')
+        rFonts_style.set(qn('w:hAnsi'), 'Arial')
+        rFonts_style.set(qn('w:cs'), 'Arial') # السطر الأهم للغة العربية
+
+        # المرور على كل الفقرات لمسح أي خط آخر وفرض Arial
         for p in doc.paragraphs:
-            set_arial_font(p)
-            
+            p.style = doc.styles['Normal']
+            for run in p.runs:
+                run.font.name = 'Arial'
+                rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
+                rFonts.set(qn('w:cs'), 'Arial')
+                
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for p in cell.paragraphs:
-                        set_arial_font(p)
+                        p.style = doc.styles['Normal']
+                        for run in p.runs:
+                            run.font.name = 'Arial'
+                            rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
+                            rFonts.set(qn('w:cs'), 'Arial')
 
-        # 🌟 5. دمج صورة الرأسية في الخلفية (Behind Text)
+        # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
         
@@ -571,7 +590,6 @@ def convert_to_word():
         
         inline.getparent().replace(inline, anchor)
 
-        # حفظ ملف الوورد
         final_docx_stream = io.BytesIO()
         doc.save(final_docx_stream)
         docx_bytes = final_docx_stream.getvalue()
@@ -579,12 +597,11 @@ def convert_to_word():
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
         logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word (Arial + AutoFit Tables) بنجاح ✨"})
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
-
 
 # ══════════════════════════════════════════════════════════
 # مسار تجربة التحويل المحلي (الجديد والمجاني)
