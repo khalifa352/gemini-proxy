@@ -424,8 +424,6 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # ✅ هنا قمنا بحذف الـ div الخاص بالرأسية لأننا سنعالجها بالبايثون لاحقاً
-            # ✅ وأعدنا لك غلاف الـ XML المفقود لحماية اللغة العربية والـ RTL
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -475,74 +473,79 @@ def convert_to_word():
         # الوصول إلى أقسام الترويسة في الوورد
         section = doc.sections[0]
         
-        # تفعيل Different First Page إذا طلب المستخدم "الصفحة الأولى فقط"
         if not letterhead_on_all_pages:
             section.different_first_page_header_footer = True
             target_header = section.first_page_header
         else:
             target_header = section.header
             
-        # إضافة فقرة للترويسة لإدراج الصورة فيها
         if not target_header.paragraphs:
             target_header.add_paragraph()
         paragraph = target_header.paragraphs[0]
         
-        # إدراج الصورة كـ 'Run' بمقاس ورقة A4 كاملة
+        # إدراج الصورة بمقاس ورقة A4 كاملة
         run = paragraph.add_run()
         shape = run.add_picture(header_img_stream, width=Inches(8.27), height=Inches(11.69))
         
-        # ضبط الصورة لتكون عائمة وخلف النص (Behind Text)
-        inline = shape.inline
-        extent = inline.extent
+        # ✅ الوصول للصورة المدمجة (التصحيح: _inline وليس inline)
+        inline = shape._inline
         
-        # تحويل الصورة من 'Inline' إلى 'Anchor' (عائمة)
+        # تحويل الصورة لتصبح "عائمة وخلف النص" (Anchor)
         anchor = OxmlElement('wp:anchor')
-        anchor.set(qn('wp:distT'), '0')
-        anchor.set(qn('wp:distB'), '0')
-        anchor.set(qn('wp:distL'), '0')
-        anchor.set(qn('wp:distR'), '0')
-        anchor.set(qn('wp:simplePos'), '0')
-        anchor.set(qn('wp:relativeHeight'), '0')
-        anchor.set(qn('wp:behindDoc'), '1') # سحر خلف النص: Behind Text ✅
-        anchor.set(qn('wp:locked'), '1')    # قفل الرأسية: Locked ✅
-        anchor.set(qn('wp:layoutInCell'), '1')
-        anchor.set(qn('wp:allowOverlap'), '1')
+        anchor.set('distT', '0')
+        anchor.set('distB', '0')
+        anchor.set('distL', '0')
+        anchor.set('distR', '0')
+        anchor.set('simplePos', '0')
+        anchor.set('relativeHeight', '0')
+        anchor.set('behindDoc', '1') # جعل الصورة خلف النص
+        anchor.set('locked', '0')
+        anchor.set('layoutInCell', '1')
+        anchor.set('allowOverlap', '1')
 
-        # ضبط المحاذاة الأفقية (توسيط بالنسبة للصفحة)
+        simplePos = OxmlElement('wp:simplePos')
+        simplePos.set('x', '0')
+        simplePos.set('y', '0')
+        anchor.append(simplePos)
+
         positionH = OxmlElement('wp:positionH')
-        positionH.set(qn('wp:relativeFrom'), 'page')
+        positionH.set('relativeFrom', 'page')
         alignH = OxmlElement('wp:align')
         alignH.text = 'center'
         positionH.append(alignH)
-        
-        # ضبط المحاذاة العمودية (أعلى الصفحة تماماً)
-        positionV = OxmlElement('wp:positionV')
-        positionV.set(qn('wp:relativeFrom'), 'page')
-        posOffsetV = OxmlElement('wp:posOffset')
-        posOffsetV.text = '0'
-        positionV.append(posOffsetV)
-        
         anchor.append(positionH)
+        
+        positionV = OxmlElement('wp:positionV')
+        positionV.set('relativeFrom', 'page')
+        alignV = OxmlElement('wp:align')
+        alignV.text = 'top' # محاذاة في أعلى الصفحة
+        positionV.append(alignV)
         anchor.append(positionV)
         
-        # نسخ بيانات الصورة ووضعها داخل الـ Anchor
-        anchor.append(extent)
+        anchor.append(inline.extent)
         
-        docPr = OxmlElement('wp:docPr')
-        docPr.set(qn('id'), '1')
-        docPr.set(qn('name'), 'Letterhead Background')
-        anchor.append(docPr)
+        effectExtent = OxmlElement('wp:effectExtent')
+        effectExtent.set('l', '0')
+        effectExtent.set('t', '0')
+        effectExtent.set('r', '0')
+        effectExtent.set('b', '0')
+        anchor.append(effectExtent)
+        
+        # ✅ وسم wrapNone ضروري جداً لتجنب إزاحة النص
+        wrapNone = OxmlElement('wp:wrapNone')
+        anchor.append(wrapNone)
+        
+        anchor.append(inline.docPr)
         
         cNvGraphicFramePr = OxmlElement('wp:cNvGraphicFramePr')
         anchor.append(cNvGraphicFramePr)
         
-        graphic = inline.graphic
-        anchor.append(graphic)
+        anchor.append(inline.graphic)
         
-        # استبدال الـ inline بالـ anchor في ملف الـ XML
+        # الاستبدال النهائي في الـ XML
         inline.getparent().replace(inline, anchor)
 
-        # حفظ ملف الوورد النهائي بعد المعالجة
+        # حفظ ملف الوورد
         final_docx_stream = io.BytesIO()
         doc.save(final_docx_stream)
         docx_bytes = final_docx_stream.getvalue()
