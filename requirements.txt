@@ -3,4 +3,7 @@ gunicorn
 pillow
 google-genai
 openai
+python-docx
+beautifulsoup4
+
 
