@@ -12,10 +12,10 @@ from flask import Flask, request, jsonify
 import monjez_word_engine
 
 # ══════════════════════════════════════════════════════════
-# ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية
+# ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية وضبط الهوامش
 # ══════════════════════════════════════════════════════════
 import docx
-from docx.shared import Inches
+from docx.shared import Inches, Cm
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
@@ -161,7 +161,6 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
     except Exception as e:
         raise ValueError(f"فشل تحميل ملف الوورد: {str(e)}")
 
-
 def get_style_prompt(style, mode):
     global_rules = """
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
@@ -198,12 +197,11 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        design_base = """MODERN/ELEGANT - Professional, clean, harmonious.
-TYPOGRAPHY: Dynamic sizes. Title bold, dark slate.
-COLOR PALETTE: Text: #2c3e50, Primary: #1a5276, Accents: #2980b9, Backgrounds: #f8f9fa.
-DESIGN ELEMENTS:
-- Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
-- Tables: th: background:#ebf5fb; color:#1a5276; td: border:1px solid #d5dbdb; color:#2c3e50;"""
+        # ✅ التعديل هنا: تحرير القيود اللونية وإعطاء حرية للإبداع العصري
+        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
+CREATIVE FREEDOM: You have FULL creative freedom to choose harmonious modern color palettes, elegant typography, and beautiful UI/UX principles.
+DESIGN ELEMENTS: Use soft background colors for table headers, stylish accents for section headings, rounded corners where appropriate, and excellent contrast.
+ADAPTABILITY: Adapt the colors logically to the document's nature (e.g., medical, tech, corporate). Do NOT restrict yourself to a single color scheme, keep it highly professional and visually stunning."""
     else:
         design_base = """FORMAL/OFFICIAL - Professional Mauritanian document design.
 TYPOGRAPHY: Dynamic sizes. Title bold centered.
@@ -409,7 +407,7 @@ OUTPUT FORMAT:
 def convert_to_word():
     """
     يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
-    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يعيد الملف.
+    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> يعيد الملف.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
@@ -453,25 +451,34 @@ def convert_to_word():
         # تحويل المحتوى النصي لوورد عبر CloudConvert
         raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
 
-        # ✅ إذا لم تكن هناك رأسية أو كان الملف المرفوع PDF، أعد الملف كما هو
         if not letterhead_b64 or input_fmt == "pdf":
             docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: حقن الرأسية في خلفية الترويسة محلياً عبر بايثون
+        # ✅ السحر هنا: معالجة المستند (مقاس الصفحة + الهوامش + الرأسية)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Injecting Letterhead into Word Header Background... (Local Processing)")
+        logger.info("💉 Injecting Letterhead & Adjusting Margins... (Local Processing)")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         
-        # فك تشفير صورة الرأسية
+        # الوصول إلى أقسام الصفحة في الوورد
+        section = doc.sections[0]
+        
+        # 🌟 1. إجبار الصفحة لتكون A4 تماماً (لحل مشكلة اختفاء الفوتر)
+        section.page_width = Inches(8.27)
+        section.page_height = Inches(11.69)
+        
+        # 🌟 2. ضبط الهوامش (المحتوى يبدأ بعد 4 سم)
+        section.top_margin = Cm(4.0)
+        section.bottom_margin = Cm(3.0) # لحماية الفوتر
+        section.left_margin = Cm(2.5)
+        section.right_margin = Cm(2.5)
+
+        # 🌟 3. دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
-        
-        # الوصول إلى أقسام الترويسة في الوورد
-        section = doc.sections[0]
         
         if not letterhead_on_all_pages:
             section.different_first_page_header_footer = True
@@ -483,14 +490,11 @@ def convert_to_word():
             target_header.add_paragraph()
         paragraph = target_header.paragraphs[0]
         
-        # إدراج الصورة بمقاس ورقة A4 كاملة
         run = paragraph.add_run()
         shape = run.add_picture(header_img_stream, width=Inches(8.27), height=Inches(11.69))
         
-        # ✅ الوصول للصورة المدمجة (التصحيح: _inline وليس inline)
         inline = shape._inline
         
-        # تحويل الصورة لتصبح "عائمة وخلف النص" (Anchor)
         anchor = OxmlElement('wp:anchor')
         anchor.set('distT', '0')
         anchor.set('distB', '0')
@@ -498,7 +502,7 @@ def convert_to_word():
         anchor.set('distR', '0')
         anchor.set('simplePos', '0')
         anchor.set('relativeHeight', '0')
-        anchor.set('behindDoc', '1') # جعل الصورة خلف النص
+        anchor.set('behindDoc', '1') 
         anchor.set('locked', '0')
         anchor.set('layoutInCell', '1')
         anchor.set('allowOverlap', '1')
@@ -518,7 +522,7 @@ def convert_to_word():
         positionV = OxmlElement('wp:positionV')
         positionV.set('relativeFrom', 'page')
         alignV = OxmlElement('wp:align')
-        alignV.text = 'top' # محاذاة في أعلى الصفحة
+        alignV.text = 'top'
         positionV.append(alignV)
         anchor.append(positionV)
         
@@ -531,7 +535,6 @@ def convert_to_word():
         effectExtent.set('b', '0')
         anchor.append(effectExtent)
         
-        # ✅ وسم wrapNone ضروري جداً لتجنب إزاحة النص
         wrapNone = OxmlElement('wp:wrapNone')
         anchor.append(wrapNone)
         
@@ -542,7 +545,6 @@ def convert_to_word():
         
         anchor.append(inline.graphic)
         
-        # الاستبدال النهائي في الـ XML
         inline.getparent().replace(inline, anchor)
 
         # حفظ ملف الوورد
@@ -552,8 +554,8 @@ def convert_to_word():
         
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
-        logger.info(f"✅ Final Word Document with Locked Background Letterhead generated ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word واحتواء الترويسة بنجاح ✨"})
+        logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word وضبط الهوامش بنجاح ✨"})
 
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
