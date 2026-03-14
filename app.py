@@ -401,13 +401,16 @@ OUTPUT FORMAT:
 # ══════════════════════════════════════════════════════════
 # مسار التحويل المُعدّل نهائياً (التدمير الشامل لهوامش الفقرات داخل الجدول)
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (إغلاق ثغرات الـ RTL والنقطتين والأرقام)
+# ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     """
     يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
     ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> 
-    يجبر هوامش فقرات الخلايا على الصفر لتضييق الارتفاع -> يعيد الملف.
+    يجبر هوامش فقرات الخلايا على الصفر -> يغلق الـ Bidi لمنع انعكاس النقطتين والأرقام -> يعيد الملف.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
@@ -422,7 +425,7 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # مسح خطوط HTML لتنظيفها قبل التحويل
+            # تنظيف الـ HTML
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
@@ -432,7 +435,7 @@ def convert_to_word():
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
   table {{ border-collapse: collapse; direction: rtl; width: 100% !important; margin: 0; }}
-  th, td {{ border: 1px solid #d5dbdb; text-align: right; padding: 0px 4px !important; margin: 0; }}
+  th, td {{ border: 1px solid #d5dbdb; text-align: right; padding: 0px 4px !important; margin: 0; direction: rtl; }}
   p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin: 0; padding: 0; }}
 </style>
 </head>
@@ -459,9 +462,9 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: الإجبار الصارم على تصفير الارتفاعات (Zero Spacing)
+        # ✅ السحر هنا: قفل الـ RTL (Bidi) برمجياً لمنع الانعكاس
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Forcing ZERO margins in Tables, Enforcing Arial...")
+        logger.info("💉 Local Processing: Forcing Bidi/RTL to fix Colons & Numbers...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
@@ -475,16 +478,52 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🛠️ 2. الهجوم المباشر على الجداول لكسر الانتفاخ العمودي
+        # 🛠️ دالة مساعدة لحقن أوامر اللغة العربية والـ RTL بقوة
+        def enforce_arabic_bidi(paragraph):
+            pPr = paragraph._element.get_or_add_pPr()
+            
+            # 1. إجبار اتجاه الفقرة من اليمين لليسار (لمنع كسر الأسطر العشوائي)
+            if pPr.find(qn('w:bidi')) is None:
+                pPr.append(OxmlElement('w:bidi'))
+            
+            # 2. إجبار المحاذاة لليمين
+            jc = pPr.find(qn('w:jc'))
+            if jc is None:
+                jc = OxmlElement('w:jc')
+                pPr.append(jc)
+            jc.set(qn('w:val'), 'right')
+
+            # تصفير المسافات (للجداول وغيرها)
+            spacing = pPr.find(qn('w:spacing'))
+            if spacing is None:
+                spacing = OxmlElement('w:spacing')
+                pPr.append(spacing)
+            spacing.set(qn('w:before'), '0')
+            spacing.set(qn('w:after'), '0')
+            spacing.set(qn('w:line'), '240') 
+            spacing.set(qn('w:lineRule'), 'auto')
+
+            # 3. المرور على الحروف وتطبيق Arial وإجبار الـ RTL
+            for run in paragraph.runs:
+                run.font.name = 'Arial'
+                rPr = run._element.get_or_add_rPr()
+                rFonts = rPr.get_or_add_rFonts()
+                rFonts.set(qn('w:cs'), 'Arial')
+                rFonts.set(qn('w:ascii'), 'Arial')
+                rFonts.set(qn('w:hAnsi'), 'Arial')
+                
+                # السطر السحري: إجبار النص (حتى النقطتين والأرقام) على التصرف كعربي
+                if rPr.find(qn('w:rtl')) is None:
+                    rPr.append(OxmlElement('w:rtl'))
+
+        # تطبيق القفل على الجداول
         for table in doc.tables:
             for row in table.rows:
-                # مسح الارتفاع الثابت للصف
                 trPr = row._tr.get_or_add_trPr()
                 for trHeight in trPr.findall(qn('w:trHeight')):
                     trPr.remove(trHeight)
                 
                 for cell in row.cells:
-                    # تصفير حشوة الخلية (Cell Margins) تماماً من الأعلى والأسفل
                     tcPr = cell._element.get_or_add_tcPr()
                     tcMar = tcPr.find(qn('w:tcMar'))
                     if tcMar is not None:
@@ -492,41 +531,17 @@ def convert_to_word():
                     tcMar = OxmlElement('w:tcMar')
                     for attr in ['top', 'bottom']:
                         node = OxmlElement(f'w:{attr}')
-                        node.set(qn('w:w'), '0')  # القيمة صفر
+                        node.set(qn('w:w'), '0')
                         node.set(qn('w:type'), 'dxa')
                         tcMar.append(node)
                     tcPr.append(tcMar)
 
-                    # ✅ الأهم: إجبار مسافات الفقرات داخل الخلية على الصفر عبر XML
                     for p in cell.paragraphs:
-                        pPr = p._element.get_or_add_pPr()
-                        spacing = pPr.find(qn('w:spacing'))
-                        if spacing is None:
-                            spacing = OxmlElement('w:spacing')
-                            pPr.append(spacing)
-                        
-                        # وضع صفر ثابت وقاطع لكل المسافات الممكنة
-                        spacing.set(qn('w:before'), '0')
-                        spacing.set(qn('w:after'), '0')
-                        spacing.set(qn('w:line'), '240') # 240 تعني تباعد أسطر مفرد تماماً (Single)
-                        spacing.set(qn('w:lineRule'), 'auto')
+                        enforce_arabic_bidi(p)
 
-                        # فرض Arial
-                        for run in p.runs:
-                            run.font.name = 'Arial'
-                            rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
-                            rFonts.set(qn('w:cs'), 'Arial')
-                            rFonts.set(qn('w:ascii'), 'Arial')
-                            rFonts.set(qn('w:hAnsi'), 'Arial')
-
-        # فرض Arial لباقي المستند
+        # تطبيق القفل على باقي فقرات المستند
         for p in doc.paragraphs:
-            for run in p.runs:
-                run.font.name = 'Arial'
-                rFonts = run._element.get_or_add_rPr().get_or_add_rFonts()
-                rFonts.set(qn('w:cs'), 'Arial')
-                rFonts.set(qn('w:ascii'), 'Arial')
-                rFonts.set(qn('w:hAnsi'), 'Arial')
+            enforce_arabic_bidi(p)
 
         # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
@@ -610,6 +625,7 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+
 
 
 @app.route("/convert_local_word", methods=["POST"])
