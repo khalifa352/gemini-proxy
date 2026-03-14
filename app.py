@@ -182,6 +182,9 @@ def get_style_prompt(style, mode):
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
 - TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+- DYNAMIC TABLE COLUMN ORDER (CRITICAL): Since `<table>` is forced to `dir="ltr"`, the FIRST `<td>` in HTML renders on the FAR LEFT. 
+  * For ALL ARABIC tables (regardless of content/headers): You MUST output the HTML columns in REVERSE ORDER. The logical first column (which belongs on the far right) MUST be the LAST `<td>` in your code.
+  * For ALL FRENCH/ENGLISH tables: You MUST output the HTML columns in NORMAL ORDER. The logical first column (which belongs on the far left) MUST be the FIRST `<td>` in your code.
 - NUMBER ANTI-REVERSAL (CRITICAL): ALL numbers, prices, quantities, dates, and spaced digits (e.g., "250 000") MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`. This is mandatory to prevent RTL flipping inside tables.
 - FILL-IN-THE-BLANK / PUNCTUATION: MS Word DOES NOT support `display: flex`. NEVER use flexbox for dotted lines or signatures. You MUST use standard text dots/underscores inside a simple paragraph. Example: `<p dir="rtl" style="text-align:right;">الاسم: ........................................</p>`. DO NOT use nested divs or borders for empty lines.
 """
