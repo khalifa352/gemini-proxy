@@ -3,10 +3,11 @@ import re
 import json
 import logging
 import base64
-import io
 import time
 import concurrent.futures
 from flask import Flask, request, jsonify
+
+# استدعاء محرك الوورد المحلي (الملف المستقل)
 import monjez_word_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -30,7 +31,7 @@ def get_client():
             k = os.environ.get("GOOGLE_API_KEY")
             if k:
                 _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V10 Server (with Word Export via CloudConvert API)")
+                logger.info("✅ Monjez V10 Server (Ready)")
         except Exception as e:
             logger.error(f"Init: {e}")
     return _client
@@ -59,105 +60,10 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
-# Local HTML to Word Engine (مجاني ومحلي)
-# ══════════════════════════════════════════════════════════
-
-def generate_local_word(html_content, letterhead_b64):
-    """
-    محرك محلي يقوم بتحويل HTML إلى DOCX بطريقة الزحف الشجري الدقيق
-    """
-    import docx
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Inches, Pt
-    from bs4 import BeautifulSoup
-
-    doc = docx.Document()
-    
-    style = doc.styles['Normal']
-    style.font.name = 'Arial'
-    style.font.size = Pt(12)
-
-    if letterhead_b64:
-        try:
-            img_data = base64.b64decode(letterhead_b64)
-            img_stream = io.BytesIO(img_data)
-            doc.add_picture(img_stream, width=Inches(6.0))
-            last_paragraph = doc.paragraphs[-1]
-            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        except Exception as e:
-            logger.error(f"خطأ في إدراج الرأسية محلياً: {e}")
-
-    soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # دالة داخلية للزحف الشجري لاستخراج جميع العناصر بالترتيب دون تخطي
-    def process_node(node):
-        if not hasattr(node, 'name') or node.name is None:
-            return
-
-        # معالجة العناوين
-        if node.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            text = node.get_text(strip=True)
-            if text:
-                level = min(int(node.name[1]), 9)
-                p = doc.add_heading(text, level=level)
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                
-        # معالجة الفقرات
-        elif node.name == 'p':
-            text = node.get_text(strip=True)
-            if text:
-                p = doc.add_paragraph(text)
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                
-        # معالجة القوائم
-        elif node.name == 'li':
-            text = node.get_text(strip=True)
-            if text:
-                p = doc.add_paragraph(text, style='List Bullet')
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                
-        # معالجة الجداول
-        elif node.name == 'table':
-            rows = node.find_all('tr')
-            if rows:
-                cols = max((len(r.find_all(['td', 'th'])) for r in rows), default=0)
-                if cols > 0:
-                    table = doc.add_table(rows=len(rows), cols=cols)
-                    table.style = 'Table Grid'
-                    for i, row in enumerate(rows):
-                        cells = row.find_all(['td', 'th'])
-                        for j, cell in enumerate(cells):
-                            if j < cols:
-                                # دمج الأسطر داخل الخلية إن وجدت
-                                text = cell.get_text(separator='\n', strip=True)
-                                cell_obj = table.cell(i, j)
-                                cell_obj.text = text
-                                for paragraph in cell_obj.paragraphs:
-                                    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        else:
-            # إذا كان العنصر div أو span، ادخل داخله وابحث عن فقرات وجداول
-            for child in node.children:
-                process_node(child)
-
-    # بدء الزحف من جسم المستند
-    root = soup.body if soup.body else soup
-    process_node(root)
-
-    output = io.BytesIO()
-    doc.save(output)
-    return output.getvalue()
-
-
-# ══════════════════════════════════════════════════════════
 # CloudConvert API — PDF/HTML to Word (DOCX)
 # ══════════════════════════════════════════════════════════
 
 def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
-    """
-    Full CloudConvert API v2 flow via REST.
-    Now supports both PDF and HTML inputs seamlessly.
-    Returns: DOCX file bytes
-    """
     import urllib.request
     import urllib.error
     import urllib.parse
@@ -166,25 +72,14 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
     if not raw_api_key:
         raise ValueError("CLOUDCONVERT_API_KEY غير مُعرّف في متغيرات البيئة")
 
-    # تنظيف المفتاح من أي أسطر جديدة أو مسافات مخفية لمنع خطأ Invalid Header
     api_key = raw_api_key.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    # ── Step 1: Create Job ──
     logger.info(f"⚙️ CloudConvert: Creating Job (Input: {input_format.upper()})...")
     job_payload = {
         "tasks": {
             "import-it": {"operation": "import/upload"},
-            "convert-it": {
-                "operation": "convert",
-                "input_format": input_format,
-                "output_format": "docx",
-                "input": ["import-it"]
-            },
+            "convert-it": {"operation": "convert", "input_format": input_format, "output_format": "docx", "input": ["import-it"]},
             "export-it": {"operation": "export/url", "input": ["convert-it"]}
         }
     }
@@ -194,58 +89,45 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
         with urllib.request.urlopen(req, timeout=20) as resp:
             job_data = json.loads(resp.read().decode('utf-8'))['data']
         job_id = job_data['id']
-        
-        # استخراج تفاصيل الرفع
         upload_task = next(t for t in job_data['tasks'] if t['name'] == 'import-it')
         upload_url = upload_task['result']['form']['url']
         upload_params = upload_task['result']['form']['parameters']
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8', errors='replace')
-        logger.error(f"❌ Job creation failed ({e.code}): {error_body}")
-        raise ValueError(f"فشل بدء مهمة التحويل مع CloudConvert: {error_body[:100]}")
     except Exception as e:
-        raise ValueError(f"فشل إنشاء المهمة: {str(e)}")
+        raise ValueError(f"فشل بدء مهمة التحويل مع CloudConvert: {str(e)}")
 
-    # ── Step 2: Upload File ──
     logger.info(f"📤 CloudConvert: Uploading {input_format.upper()}...")
     try:
         boundary = f"----CloudConvertBoundary{int(time.time() * 1000)}"
         body = b""
-        
         for k, v in upload_params.items():
-            body += f"--{boundary}\r\n".encode()
-            body += f"Content-Disposition: form-data; name=\"{k}\"\r\n\r\n".encode()
-            body += f"{v}\r\n".encode()
+            body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
         
         filename = b"document.pdf" if input_format == "pdf" else b"document.html"
         content_type = b"application/pdf" if input_format == "pdf" else b"text/html"
 
         body += f"--{boundary}\r\n".encode()
         body += b"Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + b"\"\r\n"
-        body += b"Content-Type: " + content_type + b"\r\n\r\n"
-        body += file_bytes + b"\r\n"
+        body += b"Content-Type: " + content_type + b"\r\n\r\n" + file_bytes + b"\r\n"
         body += f"--{boundary}--\r\n".encode()
 
         upload_req = urllib.request.Request(upload_url, data=body, method='POST')
         upload_req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
         with urllib.request.urlopen(upload_req, timeout=60) as resp:
-            pass # تم الرفع بنجاح
+            pass
         logger.info(f"✅ {input_format.upper()} Uploaded")
     except Exception as e:
         raise ValueError(f"فشل رفع الملف إلى الخادم: {str(e)}")
 
-    # ── Step 3: Poll Job Status ──
     logger.info("⏳ CloudConvert: Polling job status...")
     download_url = None
     attempts = 0
-    while attempts < 40: # انتظار بحد أقصى دقيقتين
+    while attempts < 40:
         time.sleep(3)
         attempts += 1
         try:
             poll_req = urllib.request.Request(f"https://api.cloudconvert.com/v2/jobs/{job_id}", headers=headers)
             with urllib.request.urlopen(poll_req, timeout=15) as resp:
                 status_data = json.loads(resp.read().decode('utf-8'))['data']
-            
             status = status_data['status']
             if status == 'finished':
                 export_task = next(t for t in status_data['tasks'] if t['name'] == 'export-it')
@@ -254,13 +136,12 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
                 break
             elif status == 'error':
                 raise ValueError("فشلت عملية التحويل داخل CloudConvert.")
-        except urllib.error.HTTPError as e:
+        except urllib.error.HTTPError:
             continue
     
     if not download_url:
         raise ValueError("انتهى وقت الانتظار. استغرقت عملية التحويل وقتاً طويلاً.")
 
-    # ── Step 4: Download DOCX ──
     logger.info("📥 CloudConvert: Downloading Word file...")
     try:
         req_dl = urllib.request.Request(download_url)
@@ -271,10 +152,6 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
     except Exception as e:
         raise ValueError(f"فشل تحميل ملف الوورد: {str(e)}")
 
-
-# ══════════════════════════════════════════════════════════
-# STYLE PROMPTS
-# ══════════════════════════════════════════════════════════
 
 def get_style_prompt(style, mode):
     global_rules = """
@@ -302,14 +179,11 @@ def get_style_prompt(style, mode):
 - TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
 - PUNCTUATION SEPARATION (e.g., for Dates/Signatures): NEVER put the label and dots in the same text node. Use this LTR structure: `<div style="display:flex; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
 """
-
     if mode == "simulation":
         return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
 IGNORE logos, stamps, signatures. Do NOT invent data.
 ⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
-
 {global_rules}
-
 RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
 RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
 
@@ -328,12 +202,10 @@ TABLE DESIGN: th: background:#333; color:white; padding:7px; border:1px solid #3
 
     return f"{design_base}\n\n{global_rules}"
 
-
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
     single_page_keywords = ['فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon', 'شهادة', 'certificate', 'attestation', 'رسالة', 'letter', 'lettre', 'courrier', 'إيصال', 'receipt', 'reçu', 'تصريح', 'declaration', 'إذن', 'autorisation', 'بطاقة', 'card']
     multi_page_keywords = ['تقرير', 'report', 'rapport', 'دراسة', 'study', 'étude', 'بحث', 'research', 'خطة', 'plan', 'مشروع', 'project', 'تفصيلي', 'detailed', 'شامل', 'comprehensive']
-
     for kw in single_page_keywords:
         if kw in msg_lower: return "single_page"
     for kw in multi_page_keywords:
@@ -345,11 +217,9 @@ def detect_document_type(user_msg):
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "word_export"]})
 
-
 @app.route("/gemini", methods=["POST"])
 def generate():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
-
     try:
         data = request.json
         user_msg = data.get("message", "")
@@ -371,46 +241,33 @@ def generate():
         page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
         is_landscape = page_info["w"] > page_info["h"]
 
-        landscape_extra = ""
-        if is_landscape:
-            landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards."
-
+        landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards." if is_landscape else ""
         orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT: Do not squash long texts. Let it breathe."
         
-        ref_note = ""
-        if reference_b64 and mode != "simulation":
-            ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
+        ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if reference_b64 and mode != "simulation" else ""
 
         doc_type_instruction = ""
         if doc_type == "single_page":
-            doc_type_instruction = """SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page. Keep the structure simple and direct; DO NOT overcomplicate with unnecessary tables if it is just a letter or certificate."""
+            doc_type_instruction = "SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page. Keep the structure simple and direct; DO NOT overcomplicate with unnecessary tables if it is just a letter or certificate."
         elif doc_type == "multi_page":
-            doc_type_instruction = """MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages. Maintain the beautifully large and readable default font sizes (15px-16px)."""
+            doc_type_instruction = "MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages. Maintain the beautifully large and readable default font sizes (15px-16px)."
 
-        if mode == "simulation":
-            svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)."
-        else:
-            svg_rule = "NO `<svg>`, `<html>`, `<body>`."
+        svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)." if mode == "simulation" else "NO `<svg>`, `<html>`, `<body>`."
 
         prompt = f"""You are a STRICT Document Formatter.
-
 {style_prompt}
 {orientation_instruction}
 {ref_note}
 {doc_type_instruction}
-
 TECHNICAL RULES:
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
 2. NO BORDERS AROUND DOCUMENT.
 3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
-
 OUTPUT: Return raw HTML only."""
 
         contents = [user_msg] if user_msg else ["Create a formal document."]
-
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
-
         if letterhead_b64:
             contents.append("Ensure layout fits empty space below this letterhead.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
@@ -425,7 +282,6 @@ OUTPUT: Return raw HTML only."""
         clean_html = clean_html_output(resp.text or "")
         logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size})")
         return jsonify({"response": clean_html})
-
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
@@ -433,10 +289,8 @@ OUTPUT: Return raw HTML only."""
 @app.route("/modify", methods=["POST"])
 def modify():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
-
     try:
         data = request.json
-
         current_html = data.get("current_html") or data.get("currentSVG") or data.get("current_svg") or data.get("htmlContent") or ""
         instruction = data.get("instruction") or data.get("prompt") or ""
         ref_b64 = data.get("reference_image")
@@ -445,20 +299,16 @@ def modify():
             logger.error("❌ ERROR: current_html is empty!")
             return jsonify({"error": "Failed", "details": "لم يتم العثور على محتوى المستند الحالي لإجراء التعديل الذكي. يرجى المحاولة مرة أخرى."}), 400
 
-        img_note = ""
-        if ref_b64:
-            img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />"
+        img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if ref_b64 else ""
 
         sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
-
 CRITICAL RULES:
 1. EXACT COPY-PASTE: Output the EXACT SAME HTML structure provided. DO NOT delete unrelated text.
 2. SURGICAL EDIT: Apply the exact surgical change requested. DO NOT hallucinate or add fake elements.
 3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers/tables and protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
 4. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
 {img_note}
-
 OUTPUT FORMAT:
 [MESSAGE]
 وصف قصير للتعديل باللغة العربية
@@ -468,11 +318,7 @@ OUTPUT FORMAT:
 [/HTML]"""
 
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
-
-        cts = [
-            f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."
-        ]
-
+        cts = [f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."]
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
@@ -482,7 +328,6 @@ OUTPUT FORMAT:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         text = resp.text or ""
-
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
 
@@ -495,7 +340,6 @@ OUTPUT FORMAT:
             message = "تم التعديل بنجاح ✨"
 
         return jsonify({"response": new_inner, "message": message})
-
     except Exception as e:
         logger.error(f"Modify Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
@@ -504,19 +348,15 @@ OUTPUT FORMAT:
 @app.route("/format", methods=["POST"])
 def smart_format():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
-
     try:
         data = request.json
         current_html = data.get("current_html", "")
-        style = data.get("style", "formal")
 
         sys = f"""You are a STRICT Document Editor. The user has manually edited this document.
-
 YOUR MISSION:
 1. CLEANUP & STRUCTURE: Wrap loose text in proper tags. Apply logical Alignments.
 2. STRICT PRESERVATION: NEVER delete, alter, or add to the actual facts, text, or meaning. NO HALLUCINATION.
 3. BIDI FIX: Ensure wrappers/tables use `dir="ltr"`. Arabic text uses `dir="rtl" style="text-align:right"`. Protect phone numbers.
-
 OUTPUT FORMAT:
 [MESSAGE]
 تم تنسيق وترتيب المستند بنجاح ✨
@@ -534,7 +374,6 @@ OUTPUT FORMAT:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         text = resp.text or ""
-
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
 
@@ -548,117 +387,13 @@ OUTPUT FORMAT:
 
         logger.info("✅ Document Smartly Formatted")
         return jsonify({"response": new_inner, "message": message})
-
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
 # ══════════════════════════════════════════════════════════
-# مسار تجربة التحويل المحلي (الجديد والمجاني)
-# ══════════════════════════════════════════════════════════
-
-@def generate_local_word(html_content, letterhead_b64):
-    """
-    محرك محلي يقوم بتحويل HTML إلى DOCX باستخدام python-docx و BeautifulSoup
-    """
-    import docx
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Inches, Pt
-    from bs4 import BeautifulSoup, NavigableString
-
-    doc = docx.Document()
-    
-    # محاولة فرض الخط العربي والاتجاه الافتراضي
-    style = doc.styles['Normal']
-    style.font.name = 'Arial'
-    style.font.size = Pt(13)
-
-    # إدراج الرأسية إذا وجدت
-    if letterhead_b64:
-        try:
-            img_data = base64.b64decode(letterhead_b64)
-            img_stream = io.BytesIO(img_data)
-            doc.add_picture(img_stream, width=Inches(6.0))
-            last_paragraph = doc.paragraphs[-1]
-            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        except Exception as e:
-            logger.error(f"خطأ في إدراج الرأسية محلياً: {e}")
-
-    # تحليل الـ HTML
-    soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # دالة شجرية ذكية لضمان التقاط جميع النصوص وعدم تجاهل الـ div
-    def parse_element(element):
-        if isinstance(element, NavigableString):
-            text = str(element).strip()
-            if text:
-                p = doc.add_paragraph(text)
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            return
-
-        if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            text = element.get_text(strip=True)
-            if text:
-                level = int(element.name[1])
-                p = doc.add_heading(text, level=min(level, 9))
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            return
-
-        if element.name == 'table':
-            rows = element.find_all('tr')
-            if rows:
-                cols = max((len(row.find_all(['td', 'th'])) for row in rows), default=0)
-                if cols > 0:
-                    table = doc.add_table(rows=len(rows), cols=cols)
-                    table.style = 'Table Grid' # إظهار حدود الجدول
-                    for i, row in enumerate(rows):
-                        cells = row.find_all(['td', 'th'])
-                        for j, cell in enumerate(cells):
-                            if j < cols:
-                                cell_obj = table.cell(i, j)
-                                cell_obj.text = cell.get_text(strip=True)
-                                for paragraph in cell_obj.paragraphs:
-                                    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            return
-
-        if element.name in ['ul', 'ol']:
-            for li in element.find_all('li', recursive=False):
-                p = doc.add_paragraph(li.get_text(strip=True), style='List Bullet')
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            return
-
-        if element.name in ['p', 'div', 'span']:
-            # إذا كان العنصر يحتوي على هياكل ضخمة بداخله، ندخل إليها، وإلا نعتبره فقرة
-            block_tags = ['p', 'div', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
-            has_block = any(child.name in block_tags for child in element.children if getattr(child, 'name', None))
-            
-            if not has_block:
-                text = element.get_text(strip=True)
-                if text:
-                    p = doc.add_paragraph(text)
-                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                return
-            else:
-                for child in element.children:
-                    parse_element(child)
-            return
-
-        if hasattr(element, 'children'):
-            for child in element.children:
-                parse_element(child)
-
-    # بدء المعالجة
-    root = soup.body if soup.body else soup
-    for child in root.children:
-        parse_element(child)
-
-    output = io.BytesIO()
-    doc.save(output)
-    return output.getvalue()
-
-# ══════════════════════════════════════════════════════════
-# مسار التحويل القديم (CloudConvert) يعمل كما هو ولم يتم المساس به
+# مسار التحويل القديم (CloudConvert)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
@@ -678,6 +413,7 @@ def convert_to_word():
             if letterhead_b64:
                 letterhead_html = f'<div style="text-align: center; margin-bottom: 20px; width: 100%;"><img src="data:image/jpeg;base64,{letterhead_b64}" style="width: 100%; max-width: 100%; height: auto; display: block;" /></div>'
 
+            # ✅ هنا أعدت لك غلاف الـ XML الذي حذفته بالخطأ!
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -715,10 +451,44 @@ def convert_to_word():
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
 
+# ══════════════════════════════════════════════════════════
+# مسار تجربة التحويل المحلي (الجديد والمجاني)
+# ══════════════════════════════════════════════════════════
+
+@app.route("/convert_local_word", methods=["POST"])
+def convert_local_word():
+    """
+    مخصص لاختبار التحويل المحلي (بدون CloudConvert) لمستندات المنجز
+    يعتمد كلياً على الملف المستقل monjez_word_engine.py
+    """
+    try:
+        data = request.json
+        html_content = data.get("html_content") or data.get("current_html")
+        letterhead_b64 = data.get("letterhead_base64", "")
+
+        if not html_content:
+            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
+
+        logger.info("📄 Converting HTML to Word LOCALLY via external engine...")
+        
+        # استدعاء الدالة من الملف المنفصل
+        docx_bytes = monjez_word_engine.generate_local_word(html_content, letterhead_b64)
+        docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
+
+        logger.info(f"✅ Local Word conversion complete ({len(docx_bytes)} bytes)")
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word (محلياً) بنجاح ✨"})
+
+    except ImportError:
+        logger.error("❌ ملف monjez_word_engine.py غير موجود أو تنقصه مكتبات")
+        return jsonify({"error": "Failed", "details": "تأكد من وجود ملف المحرك بجانب السيرفر وتثبيت مكتبة python-docx."}), 500
+    except Exception as e:
+        logger.error(f"Local Word Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"فشل التحويل المحلي: {str(e)}"}), 500
+
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
-
     try:
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
@@ -727,7 +497,6 @@ def generate_image():
         data = request.json
         user_prompt = data.get("prompt", "")
         reference_images = data.get("reference_images", [])
-        aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
