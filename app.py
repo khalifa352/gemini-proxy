@@ -404,6 +404,10 @@ OUTPUT FORMAT:
 # مسار التحويل المُعدّل نهائياً (المحاذاة الرسمية للغة العربية والفرنسية)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (الحل المرن والذكي للاتجاهات)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     try:
@@ -422,6 +426,7 @@ def convert_to_word():
             # 🛠️ 1. التنظيف الجراحي للـ HTML قبل التحويل
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
+            # معالجة الفراغات المخفية للتوقيعات والنقاط (مفيدة للوورد)
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
@@ -436,18 +441,18 @@ def convert_to_word():
             )
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
+            # ✅ السحر هنا: إزالة جميع القيود الإجبارية (direction) وترك الكود مرناً!
+            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
-  body {{ direction: rtl; unicode-bidi: embed; }}
-  table {{ border-collapse: collapse; direction: ltr !important; width: 100% !important; margin: 0; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; direction: rtl; }}
-  p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; margin: 0; padding: 0; }}
+  table {{ border-collapse: collapse; width: 100% !important; margin: 0; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }}
+  p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; }}
 </style>
 </head>
-<body dir="rtl">
+<body>
 {html_content}
 </body>
 </html>"""
@@ -472,12 +477,12 @@ def convert_to_word():
         # ══════════════════════════════════════════════════════════
         # ✅ المعالجة القاطعة للمحاذاة باستخدام WD_ALIGN_PARAGRAPH
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Official Word Alignment & Bidi Fix...")
+        logger.info("💉 Local Processing: Flexible Alignment & Clean Formatting...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         from docx.shared import Pt
-        from docx.enum.text import WD_ALIGN_PARAGRAPH  # الاستدعاء السري للمحاذاة القاطعة
+        from docx.enum.text import WD_ALIGN_PARAGRAPH  
         
         section = doc.sections[0]
         section.page_width = Inches(8.27)
@@ -489,38 +494,35 @@ def convert_to_word():
 
         def enforce_paragraph_style(paragraph):
             text = paragraph.text.strip()
+            if not text:
+                return
+
             # كشف ذكي للغة
             has_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F]', text))
             has_latin = bool(re.search(r'[A-Za-z\u00C0-\u024F]', text))
 
             pPr = paragraph._element.get_or_add_pPr()
             
-            # مسح أي محاذاة قديمة أضافها CloudConvert لمنع التعارض
+            # مسح أي محاذاة قديمة لمنع التعارض
             jc = pPr.find(qn('w:jc'))
             if jc is not None:
                 pPr.remove(jc)
 
-            # القاعدة الصارمة: فرنسي صافي (لا يوجد عربي) يذهب يساراً، غير ذلك يذهب يميناً
+            # القاعدة المرنة: فرنسي صافي (يسار)، أرقام وعربي (يمين)
             if has_latin and not has_arabic:
-                # ◀️ الفرنسية: محاذاة رسمية لليسار وإزالة الـ RTL
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                
                 bidi = pPr.find(qn('w:bidi'))
                 if bidi is not None:
                     pPr.remove(bidi)
-                    
                 for run in paragraph.runs:
                     rPr = run._element.get_or_add_rPr()
                     rtl = rPr.find(qn('w:rtl'))
                     if rtl is not None:
                         rPr.remove(rtl)
             else:
-                # ▶️ العربية أو الأرقام/الرموز: محاذاة رسمية لليمين وتفعيل الـ RTL
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                
                 if pPr.find(qn('w:bidi')) is None:
                     pPr.append(OxmlElement('w:bidi'))
-                    
                 for run in paragraph.runs:
                     rPr = run._element.get_or_add_rPr()
                     if rPr.find(qn('w:rtl')) is None:
@@ -654,7 +656,6 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
-
 
 
 
