@@ -209,27 +209,22 @@ def get_style_prompt(style, mode):
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
 - Phone numbers or spaced numbers MUST be wrapped in: `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;"></span>`
 - TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
-- PUNCTUATION SEPARATION (e.g., for Dates/Signatures): NEVER put the label and dots in the same text node. Use this LTR structure: `<div style="display:flex; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
+- FILL-IN-THE-BLANK / PUNCTUATION (CRITICAL FOR WORD EXPORT): MS Word DOES NOT support `display: flex`. NEVER use flexbox for dotted lines or signatures. You MUST use standard text dots/underscores inside a simple paragraph. Example: `<p dir="rtl" style="text-align:right;">الاسم: ........................................</p>` or use a borderless `<table>` if strict column alignment is needed.
 """
-
     if mode == "simulation":
         return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
 IGNORE logos, stamps, signatures. Do NOT invent data.
 ⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
-
 {global_rules}
-
 RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
 RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
 
     design_base = ""
     if style == "modern":
-        design_base = """MODERN/ELEGANT - Professional, clean, harmonious.
-TYPOGRAPHY: Dynamic sizes. Title bold, dark slate.
-COLOR PALETTE: Text: #2c3e50, Primary: #1a5276, Accents: #2980b9, Backgrounds: #f8f9fa.
-DESIGN ELEMENTS:
-- Section headings: color:#1a5276; border-inline-start:4px solid #2980b9; padding-inline-start:10px; margin-top:15px; margin-bottom:10px; background:#ebf5fb; padding-top:6px; padding-bottom:6px; border-radius:4px;
-- Tables: th: background:#ebf5fb; color:#1a5276; td: border:1px solid #d5dbdb; color:#2c3e50;"""
+        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
+CREATIVE FREEDOM: You have FULL creative freedom to choose harmonious modern color palettes, elegant typography, and beautiful UI/UX principles.
+DESIGN ELEMENTS: Use soft background colors for table headers, stylish accents for section headings, rounded corners where appropriate, and excellent contrast.
+ADAPTABILITY: Adapt the colors logically to the document's nature (e.g., medical, tech, corporate). Do NOT restrict yourself to a single color scheme, keep it highly professional and visually stunning."""
     else:
         design_base = """FORMAL/OFFICIAL - Professional Mauritanian document design.
 TYPOGRAPHY: Dynamic sizes. Title bold centered.
