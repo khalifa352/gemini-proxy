@@ -58,6 +58,101 @@ def clean_html_output(raw_text):
 
 
 # ══════════════════════════════════════════════════════════
+# Local HTML to Word Engine (مجاني ومحلي)
+# ══════════════════════════════════════════════════════════
+
+def generate_local_word(html_content, letterhead_b64):
+    """
+    محرك محلي يقوم بتحويل HTML إلى DOCX باستخدام python-docx و BeautifulSoup
+    """
+    import docx
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt
+    from bs4 import BeautifulSoup
+
+    doc = docx.Document()
+    
+    # محاولة فرض الخط والاتجاه الافتراضي
+    style = doc.styles['Normal']
+    style.font.name = 'Arial'
+    style.font.size = Pt(12)
+
+    # 1. إدراج الرأسية إذا وجدت
+    if letterhead_b64:
+        try:
+            img_data = base64.b64decode(letterhead_b64)
+            img_stream = io.BytesIO(img_data)
+            # إدراج الصورة وجعلها تتوسط الصفحة
+            doc.add_picture(img_stream, width=Inches(6.0))
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        except Exception as e:
+            logger.error(f"خطأ في إدراج الرأسية محلياً: {e}")
+
+    # 2. تحليل الـ HTML
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # 3. بناء عناصر الوورد (نصوص، عناوين، جداول)
+    elements = soup.body.descendants if soup.body else soup.descendants
+    
+    # لتجنب تكرار العناصر المتداخلة في BeautifulSoup
+    skip_until = None 
+
+    for element in elements:
+        if skip_until:
+            if element == skip_until:
+                skip_until = None
+            continue
+
+        if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            text = element.get_text(strip=True)
+            if text:
+                level = int(element.name[1])
+                # نحول h1-h6 إلى Heading في الوورد (1-6) ولكن بحد أقصى للـ style
+                p = doc.add_heading(text, level=min(level, 9))
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT # محاذاة لليمين للعربية
+            skip_until = element
+
+        elif element.name == 'p':
+            text = element.get_text(strip=True)
+            if text:
+                p = doc.add_paragraph(text)
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            skip_until = element
+            
+        elif element.name == 'li':
+            text = element.get_text(strip=True)
+            if text:
+                p = doc.add_paragraph(text, style='List Bullet')
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            skip_until = element
+
+        elif element.name == 'table':
+            rows = element.find_all('tr')
+            if rows:
+                cols = max(len(row.find_all(['td', 'th'])) for row in rows)
+                if cols > 0:
+                    table = doc.add_table(rows=len(rows), cols=cols)
+                    table.style = 'Table Grid' # لإظهار حدود الجدول
+                    
+                    for i, row in enumerate(rows):
+                        cells = row.find_all(['td', 'th'])
+                        for j, cell in enumerate(cells):
+                            if j < cols:
+                                text = cell.get_text(strip=True)
+                                cell_obj = table.cell(i, j)
+                                cell_obj.text = text
+                                # محاذاة النص داخل الخلية لليمين
+                                for paragraph in cell_obj.paragraphs:
+                                    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            skip_until = element
+
+    output = io.BytesIO()
+    doc.save(output)
+    return output.getvalue()
+
+
+# ══════════════════════════════════════════════════════════
 # CloudConvert API — PDF/HTML to Word (DOCX)
 # ══════════════════════════════════════════════════════════
 
@@ -464,35 +559,59 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# 📄 PDF/HTML → Word (DOCX) via CloudConvert API
+# مسار تجربة التحويل المحلي (الجديد والمجاني)
+# ══════════════════════════════════════════════════════════
+
+@app.route("/convert_local_word", methods=["POST"])
+def convert_local_word():
+    """
+    مخصص لاختبار التحويل المحلي (بدون CloudConvert) لمستندات المنجز
+    """
+    try:
+        data = request.json
+        html_content = data.get("html_content") or data.get("current_html")
+        letterhead_b64 = data.get("letterhead_base64", "")
+
+        if not html_content:
+            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
+
+        logger.info("📄 Converting HTML to Word LOCALLY...")
+        
+        docx_bytes = generate_local_word(html_content, letterhead_b64)
+        docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
+
+        logger.info(f"✅ Local Word conversion complete ({len(docx_bytes)} bytes)")
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word (محلياً) بنجاح ✨"})
+
+    except ImportError:
+        logger.error("Libraries missing for local conversion")
+        return jsonify({"error": "Failed", "details": "المكتبات المطلوبة (python-docx, beautifulsoup4) غير منصبة في السيرفر."}), 500
+    except Exception as e:
+        logger.error(f"Local Word Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"فشل التحويل المحلي: {str(e)}"}), 500
+
+
+# ══════════════════════════════════════════════════════════
+# مسار التحويل القديم (CloudConvert) يعمل كما هو ولم يتم المساس به
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
-    """
-    Receives HTML content (or PDF base64) → converts to DOCX via CloudConvert API → returns DOCX as base64.
-    """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
             return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
 
         data = request.json
-        
-        # دعم الاستلام كـ HTML خام أو كـ PDF (لتجنب تعطل التطبيق في حال أرسل أحدهما)
         html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
-        letterhead_b64 = data.get("letterhead_base64", "") # استلام الرأسية من التطبيق
+        letterhead_b64 = data.get("letterhead_base64", "") 
 
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert with MS XML Wrapper...")
-            
-            # تجهيز الرأسية إذا أرسلها التطبيق
             letterhead_html = ""
             if letterhead_b64:
-                # 🛑 التعديل هنا: تم تغيير png إلى jpeg لأن التطبيق يرسلها بصيغة JPEG
                 letterhead_html = f'<div style="text-align: center; margin-bottom: 20px; width: 100%;"><img src="data:image/jpeg;base64,{letterhead_b64}" style="width: 100%; max-width: 100%; height: auto; display: block;" /></div>'
 
-            # تغليف الـ HTML بمعايير مايكروسوفت وورد الرسمية لإجبار محرك التحويل على دعم العربية
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
