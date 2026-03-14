@@ -404,12 +404,16 @@ OUTPUT FORMAT:
 # مسار التحويل المُعدّل نهائياً (إغلاق ثغرات الـ RTL والنقطتين والأرقام)
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (حل مشكلة الفرنسية + الأرقام + النقاط)
+# ══════════════════════════════════════════════════════════
+
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     """
     يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
     ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> 
-    يجبر هوامش فقرات الخلايا على الصفر -> يغلق الـ Bidi لمنع انعكاس النقطتين والأرقام -> يعيد الملف.
+    يجبر هوامش فقرات الخلايا على الصفر -> يضبط المحاذاة بذكاء (عربي يمين / فرنسي يسار) -> يعيد الملف.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
@@ -478,9 +482,9 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: قفل الـ RTL (Bidi) برمجياً لمنع الانعكاس
+        # ✅ السحر هنا: توجيه ذكي للمحاذاة (عربي/فرنسي) وقفل الـ Bidi
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Forcing Bidi/RTL to fix Colons & Numbers...")
+        logger.info("💉 Local Processing: Smart Bidi/RTL & Margin formatting...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
@@ -494,22 +498,38 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🛠️ دالة مساعدة لحقن أوامر اللغة العربية والـ RTL بقوة
-        def enforce_arabic_bidi(paragraph):
+        # 🛠️ دالة مساعدة للتعرف على اللغة وتطبيق المحاذاة والمسافات
+        def enforce_paragraph_style(paragraph):
+            text = paragraph.text
+            # كشف اللغة لمعرفة الاتجاه الصحيح
+            has_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F]', text))
+            has_latin = bool(re.search(r'[A-Za-z\u00C0-\u024F]', text))
+
             pPr = paragraph._element.get_or_add_pPr()
             
-            # 1. إجبار اتجاه الفقرة من اليمين لليسار (لمنع كسر الأسطر العشوائي)
-            if pPr.find(qn('w:bidi')) is None:
-                pPr.append(OxmlElement('w:bidi'))
-            
-            # 2. إجبار المحاذاة لليمين
-            jc = pPr.find(qn('w:jc'))
-            if jc is None:
-                jc = OxmlElement('w:jc')
-                pPr.append(jc)
-            jc.set(qn('w:val'), 'right')
+            # 1. التوجيه الذكي (الفرنسية لليسار، العربية والأرقام لليمين)
+            if has_latin and not has_arabic:
+                jc = pPr.find(qn('w:jc'))
+                if jc is None:
+                    jc = OxmlElement('w:jc')
+                    pPr.append(jc)
+                jc.set(qn('w:val'), 'left') # محاذاة لليسار
+                
+                # مسح قفل الـ RTL للغات الأجنبية
+                bidi = pPr.find(qn('w:bidi'))
+                if bidi is not None:
+                    pPr.remove(bidi)
+            else:
+                jc = pPr.find(qn('w:jc'))
+                if jc is None:
+                    jc = OxmlElement('w:jc')
+                    pPr.append(jc)
+                jc.set(qn('w:val'), 'right') # محاذاة لليمين
+                
+                if pPr.find(qn('w:bidi')) is None:
+                    pPr.append(OxmlElement('w:bidi'))
 
-            # تصفير المسافات (للجداول وغيرها)
+            # 2. تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -519,7 +539,7 @@ def convert_to_word():
             spacing.set(qn('w:line'), '240') 
             spacing.set(qn('w:lineRule'), 'auto')
 
-            # 3. المرور على الحروف وتطبيق Arial وإجبار الـ RTL
+            # 3. فرض Arial على كل النصوص
             for run in paragraph.runs:
                 run.font.name = 'Arial'
                 rPr = run._element.get_or_add_rPr()
@@ -527,10 +547,6 @@ def convert_to_word():
                 rFonts.set(qn('w:cs'), 'Arial')
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
-                
-                # السطر السحري: إجبار النص (حتى النقطتين والأرقام) على التصرف كعربي
-                if rPr.find(qn('w:rtl')) is None:
-                    rPr.append(OxmlElement('w:rtl'))
 
         # تطبيق القفل على الجداول
         for table in doc.tables:
@@ -553,11 +569,11 @@ def convert_to_word():
                     tcPr.append(tcMar)
 
                     for p in cell.paragraphs:
-                        enforce_arabic_bidi(p)
+                        enforce_paragraph_style(p)
 
         # تطبيق القفل على باقي فقرات المستند
         for p in doc.paragraphs:
-            enforce_arabic_bidi(p)
+            enforce_paragraph_style(p)
 
         # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
@@ -641,6 +657,7 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+
 
 
 @app.route("/convert_local_word", methods=["POST"])
