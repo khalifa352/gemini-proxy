@@ -197,7 +197,7 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        # ✅ التعديل هنا: تحرير القيود اللونية وإعطاء حرية للإبداع العصري
+        # ✅ تم تحرير القيود لإعطاء الذكاء الاصطناعي حرية الإبداع في التصميم العصري
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
 CREATIVE FREEDOM: You have FULL creative freedom to choose harmonious modern color palettes, elegant typography, and beautiful UI/UX principles.
 DESIGN ELEMENTS: Use soft background colors for table headers, stylish accents for section headings, rounded corners where appropriate, and excellent contrast.
@@ -422,11 +422,13 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
+            # ✅ فرض خط Arial على جميع عناصر المستند هنا قبل الإرسال لـ CloudConvert
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
-  body {{ font-family: 'Arial', sans-serif; direction: rtl; unicode-bidi: embed; }}
+  * {{ font-family: 'Arial', sans-serif !important; }}
+  body {{ direction: rtl; unicode-bidi: embed; }}
   table {{ width: 100%; border-collapse: collapse; direction: rtl; }}
   th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; }}
   p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; }}
