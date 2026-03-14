@@ -401,16 +401,11 @@ OUTPUT FORMAT:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 # ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (حل مشكلة الفرنسية + الأرقام + النقاط)
+# مسار التحويل المُعدّل نهائياً (توحيد اتجاه الجداول بين الموقع والوورد)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
-    """
-    يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
-    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> 
-    يجبر هوامش فقرات الخلايا على الصفر -> يضبط المحاذاة بذكاء (عربي يمين / فرنسي يسار) -> يعيد الملف.
-    """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
             return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
@@ -427,7 +422,7 @@ def convert_to_word():
             # 🛠️ 1. التنظيف الجراحي للـ HTML قبل التحويل
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
-            # ✅ السحر هنا: تدمير كود الـ Flexbox القديم للتوقيعات وتحويله لسطر واحد بسيط يفهمه الوورد
+            # تدمير كود الـ Flexbox القديم للتوقيعات وتحويله لسطر واحد بسيط يفهمه الوورد
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
@@ -443,14 +438,14 @@ def convert_to_word():
             # تحويل أي بقايا من الخطوط المنفردة إلى نقاط فعلية
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-
+            # ✅ السحر هنا: توحيد اتجاه الجدول (direction: ltr) ليطابق الموقع ولا يعكس الأعمدة
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
-  table {{ border-collapse: collapse; direction: rtl; width: 100% !important; margin: 0; }}
+  table {{ border-collapse: collapse; direction: ltr !important; width: 100% !important; margin: 0; }}
   th, td {{ border: 1px solid #d5dbdb; text-align: right; padding: 0px 4px !important; margin: 0; direction: rtl; }}
   p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; margin: 0; padding: 0; }}
 </style>
@@ -478,7 +473,7 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: توجيه ذكي للمحاذاة (عربي/فرنسي) وقفل الـ Bidi
+        # المعالجة الجراحية داخل ملف الوورد (حماية الأرقام والخطوط)
         # ══════════════════════════════════════════════════════════
         logger.info("💉 Local Processing: Smart Bidi/RTL & Margin formatting...")
         
@@ -494,37 +489,30 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🛠️ دالة مساعدة للتعرف على اللغة وتطهير الـ RTL من اللغات الأجنبية
         def enforce_paragraph_style(paragraph):
             text = paragraph.text
-            # كشف اللغة لمعرفة الاتجاه الصحيح
             has_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F]', text))
             has_latin = bool(re.search(r'[A-Za-z\u00C0-\u024F]', text))
 
             pPr = paragraph._element.get_or_add_pPr()
             
-            # 1. التوجيه الذكي الجذري
             if has_latin and not has_arabic:
-                # أ) محاذاة لليسار
                 jc = pPr.find(qn('w:jc'))
                 if jc is None:
                     jc = OxmlElement('w:jc')
                     pPr.append(jc)
                 jc.set(qn('w:val'), 'left')
                 
-                # ب) تطهير الفقرة من الـ Bidi لتعود للانطلاق من اليسار
                 bidi = pPr.find(qn('w:bidi'))
                 if bidi is not None:
                     pPr.remove(bidi)
                     
-                # ج) الأهم: مسح الـ RTL من كل حرف لإرجاع النقاط (Punctuation) لمكانها الطبيعي
                 for run in paragraph.runs:
                     rPr = run._element.get_or_add_rPr()
                     rtl = rPr.find(qn('w:rtl'))
                     if rtl is not None:
                         rPr.remove(rtl)
             else:
-                # عربي أو أرقام -> يمين وقفل RTL
                 jc = pPr.find(qn('w:jc'))
                 if jc is None:
                     jc = OxmlElement('w:jc')
@@ -539,7 +527,6 @@ def convert_to_word():
                     if rPr.find(qn('w:rtl')) is None:
                         rPr.append(OxmlElement('w:rtl'))
 
-            # 2. تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -549,7 +536,6 @@ def convert_to_word():
             spacing.set(qn('w:line'), '240') 
             spacing.set(qn('w:lineRule'), 'auto')
 
-            # 3. فرض Arial على كل النصوص
             for run in paragraph.runs:
                 run.font.name = 'Arial'
                 rPr = run._element.get_or_add_rPr()
@@ -558,7 +544,6 @@ def convert_to_word():
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
 
-        # تطبيق القفل على الجداول
         for table in doc.tables:
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
@@ -581,11 +566,9 @@ def convert_to_word():
                     for p in cell.paragraphs:
                         enforce_paragraph_style(p)
 
-        # تطبيق القفل على باقي فقرات المستند
         for p in doc.paragraphs:
             enforce_paragraph_style(p)
 
-        # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
         
