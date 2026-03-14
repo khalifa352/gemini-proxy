@@ -7,6 +7,7 @@ import io
 import time
 import concurrent.futures
 from flask import Flask, request, jsonify
+import monjez_word_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("Monjez_V10_Server")
