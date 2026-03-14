@@ -557,34 +557,104 @@ OUTPUT FORMAT:
 # مسار تجربة التحويل المحلي (الجديد والمجاني)
 # ══════════════════════════════════════════════════════════
 
-@app.route("/convert_local_word", methods=["POST"])
-def convert_local_word():
+@def generate_local_word(html_content, letterhead_b64):
     """
-    مخصص لاختبار التحويل المحلي (بدون CloudConvert) لمستندات المنجز
+    محرك محلي يقوم بتحويل HTML إلى DOCX باستخدام python-docx و BeautifulSoup
     """
-    try:
-        data = request.json
-        html_content = data.get("html_content") or data.get("current_html")
-        letterhead_b64 = data.get("letterhead_base64", "")
+    import docx
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt
+    from bs4 import BeautifulSoup, NavigableString
 
-        if not html_content:
-            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
+    doc = docx.Document()
+    
+    # محاولة فرض الخط العربي والاتجاه الافتراضي
+    style = doc.styles['Normal']
+    style.font.name = 'Arial'
+    style.font.size = Pt(13)
 
-        logger.info("📄 Converting HTML to Word LOCALLY...")
-        
-        docx_bytes = generate_local_word(html_content, letterhead_b64)
-        docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
+    # إدراج الرأسية إذا وجدت
+    if letterhead_b64:
+        try:
+            img_data = base64.b64decode(letterhead_b64)
+            img_stream = io.BytesIO(img_data)
+            doc.add_picture(img_stream, width=Inches(6.0))
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        except Exception as e:
+            logger.error(f"خطأ في إدراج الرأسية محلياً: {e}")
 
-        logger.info(f"✅ Local Word conversion complete ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word (محلياً) بنجاح ✨"})
+    # تحليل الـ HTML
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # دالة شجرية ذكية لضمان التقاط جميع النصوص وعدم تجاهل الـ div
+    def parse_element(element):
+        if isinstance(element, NavigableString):
+            text = str(element).strip()
+            if text:
+                p = doc.add_paragraph(text)
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            return
 
-    except ImportError:
-        logger.error("Libraries missing for local conversion")
-        return jsonify({"error": "Failed", "details": "المكتبات المطلوبة (python-docx, beautifulsoup4) غير منصبة في السيرفر."}), 500
-    except Exception as e:
-        logger.error(f"Local Word Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"فشل التحويل المحلي: {str(e)}"}), 500
+        if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            text = element.get_text(strip=True)
+            if text:
+                level = int(element.name[1])
+                p = doc.add_heading(text, level=min(level, 9))
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            return
 
+        if element.name == 'table':
+            rows = element.find_all('tr')
+            if rows:
+                cols = max((len(row.find_all(['td', 'th'])) for row in rows), default=0)
+                if cols > 0:
+                    table = doc.add_table(rows=len(rows), cols=cols)
+                    table.style = 'Table Grid' # إظهار حدود الجدول
+                    for i, row in enumerate(rows):
+                        cells = row.find_all(['td', 'th'])
+                        for j, cell in enumerate(cells):
+                            if j < cols:
+                                cell_obj = table.cell(i, j)
+                                cell_obj.text = cell.get_text(strip=True)
+                                for paragraph in cell_obj.paragraphs:
+                                    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            return
+
+        if element.name in ['ul', 'ol']:
+            for li in element.find_all('li', recursive=False):
+                p = doc.add_paragraph(li.get_text(strip=True), style='List Bullet')
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            return
+
+        if element.name in ['p', 'div', 'span']:
+            # إذا كان العنصر يحتوي على هياكل ضخمة بداخله، ندخل إليها، وإلا نعتبره فقرة
+            block_tags = ['p', 'div', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+            has_block = any(child.name in block_tags for child in element.children if getattr(child, 'name', None))
+            
+            if not has_block:
+                text = element.get_text(strip=True)
+                if text:
+                    p = doc.add_paragraph(text)
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                return
+            else:
+                for child in element.children:
+                    parse_element(child)
+            return
+
+        if hasattr(element, 'children'):
+            for child in element.children:
+                parse_element(child)
+
+    # بدء المعالجة
+    root = soup.body if soup.body else soup
+    for child in root.children:
+        parse_element(child)
+
+    output = io.BytesIO()
+    doc.save(output)
+    return output.getvalue()
 
 # ══════════════════════════════════════════════════════════
 # مسار التحويل القديم (CloudConvert) يعمل كما هو ولم يتم المساس به
