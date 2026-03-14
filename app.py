@@ -407,7 +407,7 @@ OUTPUT FORMAT:
 def convert_to_word():
     """
     يتلقى HTML وصورة رأسية -> يحول النص لوورد عبر CloudConvert -> 
-    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> يعيد الملف.
+    ثم يحقن الصورة محلياً في خلفية ترويسة الوورد -> يضبط هوامش الصفحة -> يضبط الجداول وخط Arial -> يعيد الملف.
     """
     try:
         if not os.environ.get("CLOUDCONVERT_API_KEY"):
@@ -422,15 +422,15 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # ✅ فرض خط Arial على جميع عناصر المستند هنا قبل الإرسال لـ CloudConvert
+            # ✅ إلغاء إجبار الجداول على العرض الكامل 100% لتصغير الخانات الواسعة
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
   body {{ direction: rtl; unicode-bidi: embed; }}
-  table {{ width: 100%; border-collapse: collapse; direction: rtl; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; }}
+  table {{ border-collapse: collapse; direction: rtl; width: auto !important; margin-right: auto; margin-left: auto; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 8px; text-align: right; width: auto !important; }}
   p, h1, h2, h3, h4, h5, h6, div, span {{ direction: rtl; text-align: right; }}
 </style>
 </head>
@@ -458,27 +458,49 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ السحر هنا: معالجة المستند (مقاس الصفحة + الهوامش + الرأسية)
+        # ✅ السحر هنا: معالجة المستند (مقاس الصفحة + الهوامش + الرأسية + الجداول + Arial)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Injecting Letterhead & Adjusting Margins... (Local Processing)")
+        logger.info("💉 Local Processing: Header, Margins, AutoFit Tables, Arial Font...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         
-        # الوصول إلى أقسام الصفحة في الوورد
+        # 🌟 1. إجبار الصفحة لتكون A4 تماماً 
         section = doc.sections[0]
-        
-        # 🌟 1. إجبار الصفحة لتكون A4 تماماً (لحل مشكلة اختفاء الفوتر)
         section.page_width = Inches(8.27)
         section.page_height = Inches(11.69)
         
         # 🌟 2. ضبط الهوامش (المحتوى يبدأ بعد 4 سم)
         section.top_margin = Cm(4.0)
-        section.bottom_margin = Cm(3.0) # لحماية الفوتر
+        section.bottom_margin = Cm(3.0)
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # 🌟 3. دمج صورة الرأسية في الخلفية
+        # 🌟 3. إصلاح الجداول الواسعة (AutoFit)
+        for table in doc.tables:
+            table.autofit = True
+            table.allow_autofit = True
+
+        # 🌟 4. إجبار خط Arial برمجياً لجميع النصوص بما فيها العربية (w:cs)
+        def set_arial_font(paragraph):
+            for run in paragraph.runs:
+                run.font.name = 'Arial'
+                rPr = run._element.get_or_add_rPr()
+                rFonts = rPr.get_or_add_rFonts()
+                rFonts.set(qn('w:ascii'), 'Arial')
+                rFonts.set(qn('w:hAnsi'), 'Arial')
+                rFonts.set(qn('w:cs'), 'Arial') # السطر الأهم للغة العربية
+        
+        for p in doc.paragraphs:
+            set_arial_font(p)
+            
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        set_arial_font(p)
+
+        # 🌟 5. دمج صورة الرأسية في الخلفية (Behind Text)
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
         
@@ -557,7 +579,7 @@ def convert_to_word():
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
         logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word وضبط الهوامش بنجاح ✨"})
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word (Arial + AutoFit Tables) بنجاح ✨"})
 
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
