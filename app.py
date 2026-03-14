@@ -175,17 +175,15 @@ def get_style_prompt(style, mode):
 
 ⚠️ SMART SPACE UTILIZATION & NATURAL FLOW (ANTI-SQUISH RULE):
 1. EXTEND HORIZONTALLY: Use the full width of the page naturally. DO NOT artificially compress or squish the content. Let it breathe from left to right.
-2. SHORT DOCUMENTS (Invoices, Receipts, Letters): Distribute content elegantly to fit beautifully on ONE page.
-3. LONG DOCUMENTS (Articles, Research, Reports): DO NOT force them into one page! Allow the content to flow naturally across multiple pages. Maintain the beautiful, large, readable default font sizes. DO NOT shrink fonts just to fit a long text into a single page.
-4. If a table has many columns, ensure it fits horizontally, but let the document flow vertically as needed.
+2. SHORT DOCUMENTS: Distribute content elegantly to fit beautifully on ONE page.
+3. LONG DOCUMENTS: DO NOT force them into one page! Allow the content to flow naturally across multiple pages. Maintain the beautiful, large, readable default font sizes.
 
 ⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-- Phone numbers or spaced numbers MUST be wrapped in: `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;"></span>`
 - TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
-- PUNCTUATION SEPARATION (e.g., for Dates/Signatures): NEVER put the label and dots in the same text node. Use this LTR structure: `<div style="display:flex; direction:ltr;"><div style="flex-grow:1; border-bottom:1px dotted #333;"></div><div style="margin:0 5px;">:</div><div dir="rtl" style="text-align:right;">التاريخ</div></div>`
+- FILL-IN-THE-BLANK / PUNCTUATION (CRITICAL FOR WORD): MS Word DOES NOT support `display: flex`. NEVER use flexbox for dotted lines or signatures. You MUST use standard text dots/underscores inside a simple paragraph. Example: `<p dir="rtl" style="text-align:right;">الاسم: ........................................</p>`. DO NOT use nested divs or borders for empty lines.
 """
     if mode == "simulation":
         return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
@@ -197,7 +195,6 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        # ✅ تم تحرير القيود لإعطاء الذكاء الاصطناعي حرية الإبداع في التصميم العصري
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
 CREATIVE FREEDOM: You have FULL creative freedom to choose harmonious modern color palettes, elegant typography, and beautiful UI/UX principles.
 DESIGN ELEMENTS: Use soft background colors for table headers, stylish accents for section headings, rounded corners where appropriate, and excellent contrast.
@@ -208,6 +205,7 @@ TYPOGRAPHY: Dynamic sizes. Title bold centered.
 TABLE DESIGN: th: background:#333; color:white; padding:7px; border:1px solid #333; td: padding:6px 8px; border:1px solid #ddd; Even rows: background:#f7f7f7;"""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
@@ -425,8 +423,25 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # تنظيف الـ HTML
+            # 🛠️ 1. التنظيف الجراحي للـ HTML قبل التحويل
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
+
+            # ✅ السحر هنا: تدمير كود الـ Flexbox القديم للتوقيعات وتحويله لسطر واحد بسيط يفهمه الوورد
+            html_content = re.sub(
+                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
+                html_content,
+                flags=re.IGNORECASE | re.DOTALL
+            )
+            html_content = re.sub(
+                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
+                html_content,
+                flags=re.IGNORECASE | re.DOTALL
+            )
+            # تحويل أي بقايا من الخطوط المنفردة إلى نقاط فعلية
+            html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
+
 
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="ar" dir="rtl">
 <head>
@@ -627,7 +642,6 @@ def convert_to_word():
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
 
-
 @app.route("/convert_local_word", methods=["POST"])
 def convert_local_word():
     """
@@ -657,6 +671,7 @@ def convert_local_word():
     except Exception as e:
         logger.error(f"Local Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل المحلي: {str(e)}"}), 500
+
 
 
 @app.route("/generate_image", methods=["POST"])
