@@ -487,9 +487,6 @@ OUTPUT FORMAT:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (الحل المرن + التطابق البصري المثالي)
-# ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
@@ -564,15 +561,11 @@ def convert_to_word():
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
-        from docx.shared import Pt, Inches, Cm
-        from docx.oxml import OxmlElement
-        from docx.oxml.ns import qn
         
         section = doc.sections[0]
         section.page_width = Inches(8.27)
         section.page_height = Inches(11.69)
         
-        # 1. الهوامش: مساحة علوية كافية للرأسية (4.5 سم) وهوامش جانبية ضيقة تطابق المتصفح (1.8 سم)
         section.top_margin = Cm(4.5)
         section.bottom_margin = Cm(2.0)
         section.left_margin = Cm(1.8)
@@ -581,7 +574,6 @@ def convert_to_word():
         def clean_and_format_paragraph(paragraph, is_table=False):
             pPr = paragraph._element.get_or_add_pPr()
             
-            # 2. التباعد (Spacing): ضيق داخل الجداول، ومريح كالمتصفح خارجها
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -590,18 +582,18 @@ def convert_to_word():
             if is_table:
                 spacing.set(qn('w:before'), '0')
                 spacing.set(qn('w:after'), '0')
-                spacing.set(qn('w:line'), '240') # تباعد مفرد (Single) للجداول
+                spacing.set(qn('w:line'), '240') 
             else:
                 spacing.set(qn('w:before'), '0')
-                spacing.set(qn('w:after'), '160') # مسافة خفيفة أسفل الفقرة (8pt)
-                spacing.set(qn('w:line'), '300')  # تباعد أسطر مريح (1.25) يشبه المتصفح
+                spacing.set(qn('w:after'), '160') 
+                spacing.set(qn('w:line'), '300')  
 
             spacing.set(qn('w:lineRule'), 'auto')
 
-            # 3. الحجم والخط: إجبار حجم الخط ليكون 12pt (يعادل 16px تقريباً)
             for run in paragraph.runs:
                 run.font.name = 'Arial'
-                run.font.size = Pt(12) # فرض الحجم
+                from docx.shared import Pt
+                run.font.size = Pt(12) 
                 
                 rPr = run._element.get_or_add_rPr()
                 rFonts = rPr.get_or_add_rFonts()
@@ -609,7 +601,6 @@ def convert_to_word():
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
                 
-                # إجبار الحجم للعربية في عمق الـ XML (24 تعني 12pt لأنها تُقاس بنصف النقطة)
                 sz = rPr.find(qn('w:sz'))
                 if sz is None:
                     sz = OxmlElement('w:sz')
@@ -622,7 +613,6 @@ def convert_to_word():
                     rPr.append(szCs)
                 szCs.set(qn('w:val'), '24')
 
-        # تطبيق الجراحة على الجداول (إرسال is_table=True)
         for table in doc.tables:
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
@@ -645,11 +635,9 @@ def convert_to_word():
                     for p in cell.paragraphs:
                         clean_and_format_paragraph(p, is_table=True)
 
-        # تطبيق الجراحة على باقي المستند (إرسال is_table=False)
         for p in doc.paragraphs:
             clean_and_format_paragraph(p, is_table=False)
 
-        # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
         header_img_stream = io.BytesIO(header_img_data)
         
@@ -734,7 +722,7 @@ def convert_to_word():
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ)
+# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ + جسر العربية الذكي)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -743,11 +731,12 @@ def magic_convert():
         file_b64 = data.get("fileBase64")
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
+        is_arabic = data.get("isArabic", False)
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
 
-        # 1. تحديد صيغة الإدخال بناءً على الـ MimeType القادم من التطبيق
+        # 1. تحديد صيغة الإدخال
         input_ext = "pdf"
         mime_lower = mime_type.lower()
         if "jpeg" in mime_lower or "jpg" in mime_lower: input_ext = "jpg"
@@ -755,7 +744,7 @@ def magic_convert():
         elif "msword" in mime_lower or "word" in mime_lower: input_ext = "doc" 
         elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
         
-        # 2. تحديد صيغة الإخراج بناءً على اختيار المستخدم
+        # 2. تحديد صيغة الإخراج
         output_ext = "docx"
         if target_format == "excel": output_ext = "xlsx"
         elif target_format == "powerpoint": output_ext = "pptx"
@@ -764,9 +753,52 @@ def magic_convert():
         if input_ext == output_ext:
             return jsonify({"error": "Failed", "details": "صيغة الملف الأصلية هي نفسها الصيغة المطلوبة للتحويل!"}), 400
 
-        # 3. إرسال الطلب إلى CloudConvert
         file_bytes = base64.b64decode(file_b64)
-        result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+
+        # 🌟 SMART ARABIC BRIDGE (جسر الذكاء الاصطناعي للغة العربية) 🌟
+        if is_arabic and input_ext in ["pdf", "jpg", "png"]:
+            logger.info(f"🧠 AI Bridge: Extracting Arabic {input_ext.upper()} to HTML first...")
+            
+            bridge_prompt = """You are an OCR and Document Extraction Engine.
+Your task is to precisely extract ALL content from the attached Arabic document and convert it into a fully structured, professional HTML document.
+CRITICAL RULES:
+1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
+2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir="rtl" style="text-align: right; font-family: Arial, sans-serif;">` and ensure all text flows Right-to-Left.
+3. TABLES: If there is tabular data, use proper `<table>`, `<tr>`, `<td>`, and `<th>` tags with `border="1"`. Ensure the first column logically appears on the right.
+4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>` to prevent RTL flipping.
+5. NO MARKDOWN: Output strictly pure HTML code (starting with <!DOCTYPE html>). Do not wrap in ```html."""
+            
+            gemini_mime = "application/pdf"
+            if input_ext == "jpg": gemini_mime = "image/jpeg"
+            elif input_ext == "png": gemini_mime = "image/png"
+
+            contents = [
+                bridge_prompt,
+                get_types().Part.from_bytes(data=file_bytes, mime_type=gemini_mime)
+            ]
+            
+            gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
+            
+            try:
+                resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 60)
+            except:
+                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 60)
+            
+            extracted_html = clean_html_output(resp.text or "")
+            
+            if extracted_html:
+                logger.info("✅ AI Bridge: HTML extracted successfully. Sending to CloudConvert...")
+                html_bytes = extracted_html.encode('utf-8')
+                result_bytes = cloudconvert_dynamic(html_bytes, "html", output_ext)
+            else:
+                logger.warning("⚠️ AI Bridge returned empty HTML. Falling back to direct conversion.")
+                result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+        
+        # ⚡ التحويل المباشر العادي (للغات اللاتينية أو الملفات التي لا تحتاج الذكاء الاصطناعي)
+        else:
+            logger.info(f"⚡ Direct Conversion: {input_ext.upper()} -> {output_ext.upper()}")
+            result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
 
         return jsonify({
@@ -813,7 +845,7 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
         models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -831,3 +863,4 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
