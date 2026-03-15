@@ -459,8 +459,11 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (دمج الرأسية فقط دون المساس بتنسيق النص الأصلي)
 # ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (الحل المرن تماماً - بدون إجبار برمجي للاتجاهات)
+
+# ══════════════════════════════════════════════════════════
+# مسار التحويل المُعدّل نهائياً (دمج الرأسية فقط دون المساس بتنسيق النص الأصلي)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
@@ -478,7 +481,7 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # 🛠️ التنظيف الجراحي للـ HTML 
+            # التنظيف الجراحي للـ HTML 
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
             # معالجة التوقيعات والنقاط لتحويلها إلى نص مفهوم للوورد
@@ -496,7 +499,7 @@ def convert_to_word():
             )
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # ✅ HTML مرن بدون قيود CSS تعاكس الاتجاهات، نعتمد على tags الطبيعية
+            # HTML مرن بدون قيود CSS تعاكس الاتجاهات
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -523,6 +526,7 @@ def convert_to_word():
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
+        # التحويل عبر CloudConvert
         raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
 
         if not letterhead_b64 or input_fmt == "pdf":
@@ -530,9 +534,9 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ معالجة الوورد: تصفير المسافات وفرض Arial فقط (بدون التدخل في المحاذاة)
+        # ✅ معالجة الوورد: هوامش + تنحيف الجداول + دمج الرأسية (فقط!)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Flexible Alignment, Zero Spacing, Arial Font...")
+        logger.info("💉 Local Processing: Injecting Letterhead & Slimming Tables Only...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
@@ -546,54 +550,12 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        def clean_and_format_paragraph(paragraph):
-            pPr = paragraph._element.get_or_add_pPr()
-            
-            # تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
-            spacing = pPr.find(qn('w:spacing'))
-            if spacing is None:
-                spacing = OxmlElement('w:spacing')
-                pPr.append(spacing)
-            spacing.set(qn('w:before'), '0')
-            spacing.set(qn('w:after'), '0')
-            spacing.set(qn('w:line'), '240') 
-            spacing.set(qn('w:lineRule'), 'auto')
-
-            # فرض Arial دون التدخل في الاتجاه (Direction) أو المحاذاة (Alignment)
-            for run in paragraph.runs:
-                run.font.name = 'Arial'
-                rPr = run._element.get_or_add_rPr()
-                rFonts = rPr.get_or_add_rFonts()
-                rFonts.set(qn('w:cs'), 'Arial')
-                rFonts.set(qn('w:ascii'), 'Arial')
-                rFonts.set(qn('w:hAnsi'), 'Arial')
-
-        # تطبيق الجراحة على الجداول (تنظيف الارتفاعات وتطبيق Arial فقط)
+        # إزالة الارتفاع الثابت للجداول فقط (لكي لا تبدو الخانات منفوخة)
         for table in doc.tables:
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
                 for trHeight in trPr.findall(qn('w:trHeight')):
                     trPr.remove(trHeight)
-                
-                for cell in row.cells:
-                    tcPr = cell._element.get_or_add_tcPr()
-                    tcMar = tcPr.find(qn('w:tcMar'))
-                    if tcMar is not None:
-                        tcPr.remove(tcMar)
-                    tcMar = OxmlElement('w:tcMar')
-                    for attr in ['top', 'bottom']:
-                        node = OxmlElement(f'w:{attr}')
-                        node.set(qn('w:w'), '0')
-                        node.set(qn('w:type'), 'dxa')
-                        tcMar.append(node)
-                    tcPr.append(tcMar)
-
-                    for p in cell.paragraphs:
-                        clean_and_format_paragraph(p)
-
-        # تطبيق الجراحة على باقي المستند
-        for p in doc.paragraphs:
-            clean_and_format_paragraph(p)
 
         # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
@@ -677,6 +639,7 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+
 
 
 @app.route("/generate_image", methods=["POST"])
