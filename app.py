@@ -9,7 +9,7 @@ import concurrent.futures
 from flask import Flask, request, jsonify
 
 # استدعاء محرك الوورد المحلي (الملف المستقل)
-import monjez_word_engine
+
 
 # ══════════════════════════════════════════════════════════
 # ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية وضبط الهوامش
