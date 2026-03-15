@@ -158,6 +158,97 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
     except Exception as e:
         raise ValueError(f"فشل تحميل ملف الوورد: {str(e)}")
 
+# ══════════════════════════════════════════════════════════
+# CloudConvert API — MAGIC CONVERTER (Dynamic Formats)
+# ══════════════════════════════════════════════════════════
+def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+
+    raw_api_key = os.environ.get("CLOUDCONVERT_API_KEY")
+    if not raw_api_key:
+        raise ValueError("CLOUDCONVERT_API_KEY غير مُعرّف في متغيرات البيئة")
+
+    api_key = raw_api_key.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    logger.info(f"🪄 CloudConvert Magic: {input_ext.upper()} -> {output_ext.upper()}...")
+    job_payload = {
+        "tasks": {
+            "import-it": {"operation": "import/upload"},
+            "convert-it": {"operation": "convert", "input_format": input_ext, "output_format": output_ext, "input": ["import-it"]},
+            "export-it": {"operation": "export/url", "input": ["convert-it"]}
+        }
+    }
+
+    try:
+        req = urllib.request.Request("https://api.cloudconvert.com/v2/jobs", data=json.dumps(job_payload).encode('utf-8'), headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            job_data = json.loads(resp.read().decode('utf-8'))['data']
+        job_id = job_data['id']
+        upload_task = next(t for t in job_data['tasks'] if t['name'] == 'import-it')
+        upload_url = upload_task['result']['form']['url']
+        upload_params = upload_task['result']['form']['parameters']
+    except Exception as e:
+        raise ValueError(f"فشل بدء مهمة التحويل: {str(e)}")
+
+    logger.info(f"📤 CloudConvert Magic: Uploading...")
+    try:
+        boundary = f"----CloudConvertBoundary{int(time.time() * 1000)}"
+        body = b""
+        for k, v in upload_params.items():
+            body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
+
+        filename = f"document.{input_ext}".encode()
+        content_type = b"application/octet-stream"
+
+        body += f"--{boundary}\r\n".encode()
+        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + b"\"\r\n"
+        body += b"Content-Type: " + content_type + b"\r\n\r\n" + file_bytes + b"\r\n"
+        body += f"--{boundary}--\r\n".encode()
+
+        upload_req = urllib.request.Request(upload_url, data=body, method='POST')
+        upload_req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
+        with urllib.request.urlopen(upload_req, timeout=60) as resp:
+            pass
+        logger.info("✅ Magic Uploaded")
+    except Exception as e:
+        raise ValueError(f"فشل رفع الملف: {str(e)}")
+
+    logger.info("⏳ CloudConvert Magic: Polling...")
+    download_url = None
+    attempts = 0
+    while attempts < 40:
+        time.sleep(3)
+        attempts += 1
+        try:
+            poll_req = urllib.request.Request(f"https://api.cloudconvert.com/v2/jobs/{job_id}", headers=headers)
+            with urllib.request.urlopen(poll_req, timeout=15) as resp:
+                status_data = json.loads(resp.read().decode('utf-8'))['data']
+            status = status_data['status']
+            if status == 'finished':
+                export_task = next(t for t in status_data['tasks'] if t['name'] == 'export-it')
+                download_url = export_task['result']['files'][0]['url']
+                break
+            elif status == 'error':
+                raise ValueError("فشلت عملية التحويل في السيرفر.")
+        except urllib.error.HTTPError:
+            continue
+
+    if not download_url:
+        raise ValueError("استغرق التحويل وقتاً طويلاً جداً.")
+
+    logger.info("📥 CloudConvert Magic: Downloading result...")
+    try:
+        req_dl = urllib.request.Request(download_url)
+        with urllib.request.urlopen(req_dl, timeout=60) as resp:
+            result_bytes = resp.read()
+        return result_bytes
+    except Exception as e:
+        raise ValueError(f"فشل تحميل النتيجة: {str(e)}")
+
+
 def get_style_prompt(style, mode):
     global_rules = """
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
@@ -220,7 +311,7 @@ def detect_document_type(user_msg):
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "word_export"]})
+    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "word_export", "magic_convert"]})
 
 @app.route("/gemini", methods=["POST"])
 def generate():
@@ -640,6 +731,53 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+
+
+# ══════════════════════════════════════════════════════════
+# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ)
+# ══════════════════════════════════════════════════════════
+@app.route("/magic_convert", methods=["POST"])
+def magic_convert():
+    try:
+        data = request.json
+        file_b64 = data.get("fileBase64")
+        mime_type = data.get("mimeType", "")
+        target_format = data.get("targetFormat", "word")
+
+        if not file_b64:
+            return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
+
+        # 1. تحديد صيغة الإدخال بناءً على الـ MimeType القادم من التطبيق
+        input_ext = "pdf"
+        mime_lower = mime_type.lower()
+        if "jpeg" in mime_lower or "jpg" in mime_lower: input_ext = "jpg"
+        elif "png" in mime_lower: input_ext = "png"
+        elif "msword" in mime_lower or "word" in mime_lower: input_ext = "doc" 
+        elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
+        
+        # 2. تحديد صيغة الإخراج بناءً على اختيار المستخدم
+        output_ext = "docx"
+        if target_format == "excel": output_ext = "xlsx"
+        elif target_format == "powerpoint": output_ext = "pptx"
+        elif target_format == "pdf": output_ext = "pdf"
+
+        if input_ext == output_ext:
+            return jsonify({"error": "Failed", "details": "صيغة الملف الأصلية هي نفسها الصيغة المطلوبة للتحويل!"}), 400
+
+        # 3. إرسال الطلب إلى CloudConvert
+        file_bytes = base64.b64decode(file_b64)
+        result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+        result_b64 = base64.b64encode(result_bytes).decode('utf-8')
+
+        return jsonify({
+            "file_base64": result_b64,
+            "extension": output_ext,
+            "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
+        })
+
+    except Exception as e:
+        logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
 @app.route("/generate_image", methods=["POST"])
