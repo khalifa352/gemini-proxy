@@ -8,7 +8,8 @@ import io
 import concurrent.futures
 from flask import Flask, request, jsonify
 
-
+# استدعاء محرك الوورد المحلي (الملف المستقل)
+import monjez_word_engine
 
 # ══════════════════════════════════════════════════════════
 # ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية وضبط الهوامش
@@ -159,6 +160,7 @@ def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
         return docx_bytes
     except Exception as e:
         raise ValueError(f"فشل تحميل ملف الوورد: {str(e)}")
+
 def get_style_prompt(style, mode):
     global_rules = """
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
@@ -207,8 +209,6 @@ TYPOGRAPHY: Dynamic sizes. Title bold centered.
 TABLE DESIGN: th: background:#333; color:white; padding:7px; border:1px solid #333; td: padding:6px 8px; border:1px solid #ddd; Even rows: background:#f7f7f7;"""
 
     return f"{design_base}\n\n{global_rules}"
-
-
 
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
@@ -400,11 +400,7 @@ OUTPUT FORMAT:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 # ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (المحاذاة الرسمية للغة العربية والفرنسية)
-# ══════════════════════════════════════════════════════════
-
-# ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (دمج الرأسية فقط دون المساس بتنسيق النص الأصلي)
+# مسار التحويل المُعدّل نهائياً (الحل المرن تماماً - بدون إجبار برمجي للاتجاهات)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
@@ -422,7 +418,7 @@ def convert_to_word():
         if html_content:
             logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
 
-            # التنظيف الجراحي للـ HTML 
+            # 🛠️ التنظيف الجراحي للـ HTML 
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
 
             # معالجة التوقيعات والنقاط لتحويلها إلى نص مفهوم للوورد
@@ -440,7 +436,7 @@ def convert_to_word():
             )
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # HTML مرن بدون قيود CSS تعاكس الاتجاهات
+            # ✅ HTML مرن بدون قيود CSS تعاكس الاتجاهات، نعتمد على tags الطبيعية
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -467,7 +463,6 @@ def convert_to_word():
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        # التحويل عبر CloudConvert
         raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
 
         if not letterhead_b64 or input_fmt == "pdf":
@@ -475,13 +470,12 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ معالجة الوورد: هوامش + تنحيف الجداول + دمج الرأسية (فقط!)
+        # ✅ معالجة الوورد: تصفير المسافات وفرض Arial فقط (بدون التدخل في المحاذاة)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Injecting Letterhead & Slimming Tables Only...")
+        logger.info("💉 Local Processing: Flexible Alignment, Zero Spacing, Arial Font...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
-        from docx.shared import Pt
         
         section = doc.sections[0]
         section.page_width = Inches(8.27)
@@ -491,12 +485,45 @@ def convert_to_word():
         section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.5)
 
-        # إزالة الارتفاع الثابت للجداول فقط (لكي لا تبدو الخانات منفوخة)
+        def clean_and_format_paragraph(paragraph):
+            pPr = paragraph._element.get_or_add_pPr()
+            
+            # تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
+            spacing = pPr.find(qn('w:spacing'))
+            if spacing is None:
+                spacing = OxmlElement('w:spacing')
+                pPr.append(spacing)
+            spacing.set(qn('w:before'), '0')
+            spacing.set(qn('w:after'), '0')
+            spacing.set(qn('w:line'), '240') 
+            spacing.set(qn('w:lineRule'), 'auto')
+
+        # تطبيق الجراحة على الجداول (تنظيف الارتفاعات فقط)
         for table in doc.tables:
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
                 for trHeight in trPr.findall(qn('w:trHeight')):
                     trPr.remove(trHeight)
+                
+                for cell in row.cells:
+                    tcPr = cell._element.get_or_add_tcPr()
+                    tcMar = tcPr.find(qn('w:tcMar'))
+                    if tcMar is not None:
+                        tcPr.remove(tcMar)
+                    tcMar = OxmlElement('w:tcMar')
+                    for attr in ['top', 'bottom']:
+                        node = OxmlElement(f'w:{attr}')
+                        node.set(qn('w:w'), '0')
+                        node.set(qn('w:type'), 'dxa')
+                        tcMar.append(node)
+                    tcPr.append(tcMar)
+
+                    for p in cell.paragraphs:
+                        clean_and_format_paragraph(p)
+
+        # تطبيق الجراحة على باقي المستند
+        for p in doc.paragraphs:
+            clean_and_format_paragraph(p)
 
         # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
@@ -611,7 +638,6 @@ def convert_local_word():
     except Exception as e:
         logger.error(f"Local Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل المحلي: {str(e)}"}), 500
-
 
 
 @app.route("/generate_image", methods=["POST"])
