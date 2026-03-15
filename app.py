@@ -8,9 +8,6 @@ import io
 import concurrent.futures
 from flask import Flask, request, jsonify
 
-# استدعاء محرك الوورد المحلي (الملف المستقل)
-
-
 # ══════════════════════════════════════════════════════════
 # ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية وضبط الهوامش
 # ══════════════════════════════════════════════════════════
@@ -607,37 +604,6 @@ def convert_to_word():
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
-
-
-@app.route("/convert_local_word", methods=["POST"])
-def convert_local_word():
-    """
-    مخصص لاختبار التحويل المحلي (بدون CloudConvert) لمستندات المنجز
-    يعتمد كلياً على الملف المستقل monjez_word_engine.py
-    """
-    try:
-        data = request.json
-        html_content = data.get("html_content") or data.get("current_html")
-        letterhead_b64 = data.get("letterhead_base64", "")
-
-        if not html_content:
-            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
-
-        logger.info("📄 Converting HTML to Word LOCALLY via external engine...")
-        
-        # استدعاء الدالة من الملف المنفصل
-        docx_bytes = monjez_word_engine.generate_local_word(html_content, letterhead_b64)
-        docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
-
-        logger.info(f"✅ Local Word conversion complete ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word (محلياً) بنجاح ✨"})
-
-    except ImportError:
-        logger.error("❌ ملف monjez_word_engine.py غير موجود أو تنقصه مكتبات")
-        return jsonify({"error": "Failed", "details": "تأكد من وجود ملف المحرك بجانب السيرفر وتثبيت مكتبة python-docx."}), 500
-    except Exception as e:
-        logger.error(f"Local Word Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"فشل التحويل المحلي: {str(e)}"}), 500
 
 
 @app.route("/generate_image", methods=["POST"])
