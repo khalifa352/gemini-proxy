@@ -201,7 +201,7 @@ def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
             body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
 
         filename = f"document.{input_ext}".encode()
-        content_type = b"application/octet-stream"
+        content_type = b"text/html" if input_ext == "html" else b"application/octet-stream"
 
         body += f"--{boundary}\r\n".encode()
         body += b"Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + b"\"\r\n"
@@ -722,7 +722,7 @@ def convert_to_word():
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ + جسر العربية الذكي)
+# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ + جسر الذكاء الاصطناعي)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -731,33 +731,33 @@ def magic_convert():
         file_b64 = data.get("fileBase64")
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
-        is_arabic = data.get("isArabic", False)
+        extract_only = data.get("extractOnly", False) # 👈 المعلمة الجديدة للاستخراج فقط
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
 
-        # 1. تحديد صيغة الإدخال
-        input_ext = "pdf"
+        # 1. تحديد صيغة الإدخال (إذا كان HTML مصحح من الواجهة أو ملف جديد)
         mime_lower = mime_type.lower()
-        if "jpeg" in mime_lower or "jpg" in mime_lower: input_ext = "jpg"
-        elif "png" in mime_lower: input_ext = "png"
-        elif "msword" in mime_lower or "word" in mime_lower: input_ext = "doc" 
-        elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
+        if "html" in mime_lower:
+            input_ext = "html"
+            file_bytes = base64.b64decode(file_b64)
+        else:
+            input_ext = "pdf"
+            if "jpeg" in mime_lower or "jpg" in mime_lower: input_ext = "jpg"
+            elif "png" in mime_lower: input_ext = "png"
+            elif "msword" in mime_lower or "word" in mime_lower: input_ext = "doc" 
+            elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
+            file_bytes = base64.b64decode(file_b64)
         
-        # 2. تحديد صيغة الإخراج
+        # 2. تحديد صيغة الإخراج المطلوبة
         output_ext = "docx"
         if target_format == "excel": output_ext = "xlsx"
         elif target_format == "powerpoint": output_ext = "pptx"
         elif target_format == "pdf": output_ext = "pdf"
 
-        if input_ext == output_ext:
-            return jsonify({"error": "Failed", "details": "صيغة الملف الأصلية هي نفسها الصيغة المطلوبة للتحويل!"}), 400
-
-        file_bytes = base64.b64decode(file_b64)
-
-        # 🌟 SMART ARABIC BRIDGE (جسر الذكاء الاصطناعي للغة العربية) 🌟
-        if is_arabic and input_ext in ["pdf", "jpg", "png"]:
-            logger.info(f"🧠 AI Bridge: Extracting Arabic {input_ext.upper()} to HTML first...")
+        # 🌟 3. مرحلة الاستخراج فقط (المحرر العربي) 🌟
+        if extract_only and input_ext in ["pdf", "jpg", "png"]:
+            logger.info(f"🧠 AI Bridge: Extracting Arabic {input_ext.upper()} to HTML Only...")
             
             bridge_prompt = """You are an OCR and Document Extraction Engine.
 Your task is to precisely extract ALL content from the attached Arabic document and convert it into a fully structured, professional HTML document.
@@ -787,18 +787,18 @@ CRITICAL RULES:
             extracted_html = clean_html_output(resp.text or "")
             
             if extracted_html:
-                logger.info("✅ AI Bridge: HTML extracted successfully. Sending to CloudConvert...")
-                html_bytes = extracted_html.encode('utf-8')
-                result_bytes = cloudconvert_dynamic(html_bytes, "html", output_ext)
+                logger.info("✅ AI Bridge: HTML extracted successfully. Returning to App for Editing.")
+                # إرجاع الـ HTML للتطبيق ليفتحه في المحرر
+                return jsonify({
+                    "html_content": extracted_html,
+                    "message": "تم استخراج النصوص بنجاح لتصحيحها ✨"
+                })
             else:
-                logger.warning("⚠️ AI Bridge returned empty HTML. Falling back to direct conversion.")
-                result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
-        
-        # ⚡ التحويل المباشر العادي (للغات اللاتينية أو الملفات التي لا تحتاج الذكاء الاصطناعي)
-        else:
-            logger.info(f"⚡ Direct Conversion: {input_ext.upper()} -> {output_ext.upper()}")
-            result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+                return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
 
+        # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المصحح إلى إكسل/وورد)
+        logger.info(f"⚡ Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
+        result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
 
         return jsonify({
@@ -863,4 +863,5 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
 
