@@ -397,7 +397,7 @@ OUTPUT FORMAT:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 # ══════════════════════════════════════════════════════════
-# مسار التحويل المُعدّل نهائياً (الحل المرن تماماً - بدون إجبار برمجي للاتجاهات)
+# مسار التحويل المُعدّل نهائياً (الحل المرن + التطابق البصري المثالي)
 # ══════════════════════════════════════════════════════════
 
 @app.route("/convert_to_word", methods=["POST"])
@@ -433,7 +433,7 @@ def convert_to_word():
             )
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # ✅ HTML مرن بدون قيود CSS تعاكس الاتجاهات، نعتمد على tags الطبيعية
+            # ✅ HTML مرن بدون قيود CSS تعاكس الاتجاهات
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -467,35 +467,71 @@ def convert_to_word():
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ معالجة الوورد: تصفير المسافات وفرض Arial فقط (بدون التدخل في المحاذاة)
+        # ✅ معالجة الوورد: التطابق البصري 100% (أحجام، تباعد، وهوامش ذكية)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Flexible Alignment, Zero Spacing, Arial Font...")
+        logger.info("💉 Local Processing: Visual Parity (Size, Spacing, Margins)...")
         
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
+        from docx.shared import Pt, Inches, Cm
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
         
         section = doc.sections[0]
         section.page_width = Inches(8.27)
         section.page_height = Inches(11.69)
-        section.top_margin = Cm(4.0)
-        section.bottom_margin = Cm(3.0)
-        section.left_margin = Cm(2.5)
-        section.right_margin = Cm(2.5)
+        
+        # 1. الهوامش: مساحة علوية كافية للرأسية (4.5 سم) وهوامش جانبية ضيقة تطابق المتصفح (1.8 سم)
+        section.top_margin = Cm(4.5)
+        section.bottom_margin = Cm(2.0)
+        section.left_margin = Cm(1.8)
+        section.right_margin = Cm(1.8)
 
-        def clean_and_format_paragraph(paragraph):
+        def clean_and_format_paragraph(paragraph, is_table=False):
             pPr = paragraph._element.get_or_add_pPr()
             
-            # تصفير المسافات (لمنع الانتفاخ العمودي للخلايا)
+            # 2. التباعد (Spacing): ضيق داخل الجداول، ومريح كالمتصفح خارجها
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
                 pPr.append(spacing)
-            spacing.set(qn('w:before'), '0')
-            spacing.set(qn('w:after'), '0')
-            spacing.set(qn('w:line'), '240') 
+                
+            if is_table:
+                spacing.set(qn('w:before'), '0')
+                spacing.set(qn('w:after'), '0')
+                spacing.set(qn('w:line'), '240') # تباعد مفرد (Single) للجداول
+            else:
+                spacing.set(qn('w:before'), '0')
+                spacing.set(qn('w:after'), '160') # مسافة خفيفة أسفل الفقرة (8pt)
+                spacing.set(qn('w:line'), '300')  # تباعد أسطر مريح (1.25) يشبه المتصفح
+
             spacing.set(qn('w:lineRule'), 'auto')
 
-        # تطبيق الجراحة على الجداول (تنظيف الارتفاعات فقط)
+            # 3. الحجم والخط: إجبار حجم الخط ليكون 12pt (يعادل 16px تقريباً)
+            for run in paragraph.runs:
+                run.font.name = 'Arial'
+                run.font.size = Pt(12) # فرض الحجم
+                
+                rPr = run._element.get_or_add_rPr()
+                rFonts = rPr.get_or_add_rFonts()
+                rFonts.set(qn('w:cs'), 'Arial')
+                rFonts.set(qn('w:ascii'), 'Arial')
+                rFonts.set(qn('w:hAnsi'), 'Arial')
+                
+                # إجبار الحجم للعربية في عمق الـ XML (24 تعني 12pt لأنها تُقاس بنصف النقطة)
+                sz = rPr.find(qn('w:sz'))
+                if sz is None:
+                    sz = OxmlElement('w:sz')
+                    rPr.append(sz)
+                sz.set(qn('w:val'), '24')
+                
+                szCs = rPr.find(qn('w:szCs'))
+                if szCs is None:
+                    szCs = OxmlElement('w:szCs')
+                    rPr.append(szCs)
+                szCs.set(qn('w:val'), '24')
+
+        # تطبيق الجراحة على الجداول (إرسال is_table=True)
         for table in doc.tables:
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
@@ -516,11 +552,11 @@ def convert_to_word():
                     tcPr.append(tcMar)
 
                     for p in cell.paragraphs:
-                        clean_and_format_paragraph(p)
+                        clean_and_format_paragraph(p, is_table=True)
 
-        # تطبيق الجراحة على باقي المستند
+        # تطبيق الجراحة على باقي المستند (إرسال is_table=False)
         for p in doc.paragraphs:
-            clean_and_format_paragraph(p)
+            clean_and_format_paragraph(p, is_table=False)
 
         # دمج صورة الرأسية في الخلفية
         header_img_data = base64.b64decode(letterhead_b64)
