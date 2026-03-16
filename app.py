@@ -175,13 +175,28 @@ def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
 
     logger.info(f"🪄 CloudConvert Magic: {input_ext.upper()} -> {output_ext.upper()}...")
     
-    # ✅ حيلة التحويل المزدوج لدعم تصدير HTML إلى إكسل (HTML -> PDF -> XLSX)
-    if input_ext == "html" and output_ext == "xlsx":
+    # ✅ حيلة التحويل الجسري للملفات التي لا تدعم التحويل المباشر
+    needs_pdf_bridge = False
+    
+    # HTML -> Excel / PowerPoint
+    if input_ext == "html" and output_ext in ["xlsx", "xls", "pptx", "ppt"]:
+        needs_pdf_bridge = True
+    # Word <-> Excel
+    elif input_ext in ["doc", "docx"] and output_ext in ["xls", "xlsx"]:
+        needs_pdf_bridge = True
+    elif input_ext in ["xls", "xlsx"] and output_ext in ["doc", "docx"]:
+        needs_pdf_bridge = True
+    # Word/Excel -> PowerPoint
+    elif input_ext in ["doc", "docx", "xls", "xlsx"] and output_ext in ["pptx", "ppt"]:
+        needs_pdf_bridge = True
+
+    if needs_pdf_bridge:
+        logger.info(f"🔄 Using PDF Bridge for unsupported direct conversion ({input_ext} -> {output_ext})...")
         job_payload = {
             "tasks": {
                 "import-it": {"operation": "import/upload"},
-                "convert-pdf": {"operation": "convert", "input_format": "html", "output_format": "pdf", "input": ["import-it"]},
-                "convert-it": {"operation": "convert", "input_format": "pdf", "output_format": "xlsx", "input": ["convert-pdf"]},
+                "convert-pdf": {"operation": "convert", "input_format": input_ext, "output_format": "pdf", "input": ["import-it"]},
+                "convert-it": {"operation": "convert", "input_format": "pdf", "output_format": output_ext, "input": ["convert-pdf"]},
                 "export-it": {"operation": "export/url", "input": ["convert-it"]}
             }
         }
@@ -259,7 +274,6 @@ def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
         return result_bytes
     except Exception as e:
         raise ValueError(f"فشل تحميل النتيجة: {str(e)}")
-
 
 
 def get_style_prompt(style, mode):
@@ -733,6 +747,10 @@ def convert_to_word():
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
+
+# ══════════════════════════════════════════════════════════
+# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ)
+# ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
     try:
@@ -741,7 +759,7 @@ def magic_convert():
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
         is_arabic = data.get("isArabic", False)
-        extract_only = data.get("extractOnly", False)  # 👈 1. استرجاع هذا المتغير
+        extract_only = data.get("extractOnly", False)  
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
@@ -766,7 +784,7 @@ def magic_convert():
         elif target_format == "pdf": output_ext = "pdf"
 
         # 🌟 3. مسار الذكاء الاصطناعي للملفات العربية أو الاستخراج 🌟
-        if extract_only or (is_arabic and input_ext != "html"): # 👈 2. إضافة شرط الاستخراج
+        if extract_only or (is_arabic and input_ext != "html"):
             logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML...")
             
             gemini_bytes = file_bytes
@@ -804,16 +822,16 @@ CRITICAL RULES:
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
             try:
-                resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 60)
+                resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90) # رفعنا المهلة لتفادي توقف السيرفر
             except:
-                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 60)
+                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
             extracted_html = clean_html_output(resp.text or "")
             
             if not extracted_html:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
             
-            # 👈 3. إعادة الـ HTML مباشرة للتطبيق إذا كان الطلب من المحرر
+            # إعادة الـ HTML مباشرة للتطبيق إذا كان الطلب من المحرر
             if extract_only:
                 logger.info("✅ AI Bridge: Returning HTML directly to app.")
                 return jsonify({
@@ -873,7 +891,6 @@ CRITICAL RULES:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
-
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -925,4 +942,5 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
 
