@@ -722,7 +722,7 @@ def convert_to_word():
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ + جسر الذكاء الاصطناعي)
+# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ + المحرر الشامل)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -731,12 +731,13 @@ def magic_convert():
         file_b64 = data.get("fileBase64")
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
-        extract_only = data.get("extractOnly", False) # 👈 المعلمة الجديدة للاستخراج فقط
+        extract_only = data.get("extractOnly", False)
+        is_arabic = data.get("isArabic", False)
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
 
-        # 1. تحديد صيغة الإدخال (إذا كان HTML مصحح من الواجهة أو ملف جديد)
+        # 1. تحديد صيغة الإدخال
         mime_lower = mime_type.lower()
         if "html" in mime_lower:
             input_ext = "html"
@@ -749,32 +750,51 @@ def magic_convert():
             elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
             file_bytes = base64.b64decode(file_b64)
         
-        # 2. تحديد صيغة الإخراج المطلوبة
+        # 2. تحديد صيغة الإخراج
         output_ext = "docx"
         if target_format == "excel": output_ext = "xlsx"
         elif target_format == "powerpoint": output_ext = "pptx"
         elif target_format == "pdf": output_ext = "pdf"
 
-        # 🌟 3. مرحلة الاستخراج فقط (المحرر العربي) 🌟
-        if extract_only and input_ext in ["pdf", "jpg", "png"]:
-            logger.info(f"🧠 AI Bridge: Extracting Arabic {input_ext.upper()} to HTML Only...")
+        # 🌟 3. مرحلة الاستخراج والمحرر (لجميع الملفات) 🌟
+        if extract_only:
+            logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML Only...")
             
-            bridge_prompt = """You are an OCR and Document Extraction Engine.
-Your task is to precisely extract ALL content from the attached Arabic document and convert it into a fully structured, professional HTML document.
+            # إذا كان الملف Word أو Excel، نقوم بتحويله إلى PDF أولاً عبر CloudConvert
+            # لتجنب مشاكل استخراج الـ HTML المعقدة، ثم نمرره لـ Gemini لضمان جودة المحرر!
+            gemini_bytes = file_bytes
+            gemini_mime = "application/pdf"
+            
+            if input_ext in ["doc", "xls"]:
+                logger.info("🔄 Converting DOC/XLS to PDF first for AI Extraction...")
+                gemini_bytes = cloudconvert_dynamic(file_bytes, input_ext, "pdf")
+                gemini_mime = "application/pdf"
+            elif input_ext == "jpg":
+                gemini_mime = "image/jpeg"
+            elif input_ext == "png":
+                gemini_mime = "image/png"
+
+            # تطبيق إعدادات "قسم المحاكاة" الصارمة لضمان الاستنساخ الحرفي
+            simulation_style = get_style_prompt("formal", "simulation")
+            
+            # تحديد الاتجاه بناءً على اللغة
+            lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language (French/English). You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
+
+            bridge_prompt = f"""You are an OCR and Document Extraction Engine.
+Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
+
+{simulation_style}
+
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
-2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir="rtl" style="text-align: right; font-family: Arial, sans-serif;">` and ensure all text flows Right-to-Left.
-3. TABLES: If there is tabular data, use proper `<table>`, `<tr>`, `<td>`, and `<th>` tags with `border="1"`. Ensure the first column logically appears on the right.
-4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>` to prevent RTL flipping.
+{lang_instruction}
+3. TABLES: If there is tabular data, use proper `<table>`, `<tr>`, `<td>`, and `<th>` tags with `border="1"`. Ensure the correct column logical order.
+4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>` to prevent RTL/LTR flipping.
 5. NO MARKDOWN: Output strictly pure HTML code (starting with <!DOCTYPE html>). Do not wrap in ```html."""
             
-            gemini_mime = "application/pdf"
-            if input_ext == "jpg": gemini_mime = "image/jpeg"
-            elif input_ext == "png": gemini_mime = "image/png"
-
             contents = [
                 bridge_prompt,
-                get_types().Part.from_bytes(data=file_bytes, mime_type=gemini_mime)
+                get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)
             ]
             
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -788,7 +808,6 @@ CRITICAL RULES:
             
             if extracted_html:
                 logger.info("✅ AI Bridge: HTML extracted successfully. Returning to App for Editing.")
-                # إرجاع الـ HTML للتطبيق ليفتحه في المحرر
                 return jsonify({
                     "html_content": extracted_html,
                     "message": "تم استخراج النصوص بنجاح لتصحيحها ✨"
@@ -796,7 +815,7 @@ CRITICAL RULES:
             else:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
 
-        # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المصحح إلى إكسل/وورد)
+        # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المصحح إلى الصيغة النهائية)
         logger.info(f"⚡ Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
         result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
