@@ -174,13 +174,25 @@ def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     logger.info(f"🪄 CloudConvert Magic: {input_ext.upper()} -> {output_ext.upper()}...")
-    job_payload = {
-        "tasks": {
-            "import-it": {"operation": "import/upload"},
-            "convert-it": {"operation": "convert", "input_format": input_ext, "output_format": output_ext, "input": ["import-it"]},
-            "export-it": {"operation": "export/url", "input": ["convert-it"]}
+    
+    # ✅ حيلة التحويل المزدوج لدعم تصدير HTML إلى إكسل (HTML -> PDF -> XLSX)
+    if input_ext == "html" and output_ext == "xlsx":
+        job_payload = {
+            "tasks": {
+                "import-it": {"operation": "import/upload"},
+                "convert-pdf": {"operation": "convert", "input_format": "html", "output_format": "pdf", "input": ["import-it"]},
+                "convert-it": {"operation": "convert", "input_format": "pdf", "output_format": "xlsx", "input": ["convert-pdf"]},
+                "export-it": {"operation": "export/url", "input": ["convert-it"]}
+            }
         }
-    }
+    else:
+        job_payload = {
+            "tasks": {
+                "import-it": {"operation": "import/upload"},
+                "convert-it": {"operation": "convert", "input_format": input_ext, "output_format": output_ext, "input": ["import-it"]},
+                "export-it": {"operation": "export/url", "input": ["convert-it"]}
+            }
+        }
 
     try:
         req = urllib.request.Request("https://api.cloudconvert.com/v2/jobs", data=json.dumps(job_payload).encode('utf-8'), headers=headers)
@@ -247,6 +259,7 @@ def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
         return result_bytes
     except Exception as e:
         raise ValueError(f"فشل تحميل النتيجة: {str(e)}")
+
 
 
 def get_style_prompt(style, mode):
