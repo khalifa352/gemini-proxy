@@ -338,7 +338,7 @@ def detect_document_type(user_msg):
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "word_export", "magic_convert"]})
+    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
 @app.route("/gemini", methods=["POST"])
 def generate():
@@ -891,6 +891,76 @@ CRITICAL RULES:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
+# ══════════════════════════════════════════════════════════
+# مسار TRANSLATE DOCUMENT (مسار المحاكاة والترجمة المهنية)
+# ══════════════════════════════════════════════════════════
+@app.route("/translate_document", methods=["POST"])
+def translate_document():
+    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
+    try:
+        data = request.json
+        target_language = data.get("target_language", "العربية")
+        reference_b64 = data.get("reference_image")
+        page_size = data.get("pageSize", "a4Portrait")
+
+        page_dimensions = {
+            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait", "physical": "21.0cm x 29.7cm"},
+            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape", "physical": "29.7cm x 21.0cm"},
+            "a3": {"w": 842, "h": 1191, "orientation": "portrait A3", "physical": "29.7cm x 42.0cm"},
+            "a5": {"w": 420, "h": 595, "orientation": "portrait A5", "physical": "14.8cm x 21.0cm"},
+        }
+        page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
+        is_landscape = page_info["w"] > page_info["h"]
+
+        landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards." if is_landscape else ""
+        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra} SMART LAYOUT: Do not squash long texts. Let it breathe."
+
+        bidi_rules = """
+⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
+- Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
+- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
+- French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
+- TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+- DYNAMIC TABLE COLUMN ORDER (CRITICAL): Since `<table>` is forced to `dir="ltr"`, the FIRST `<td>` in HTML renders on the FAR LEFT. 
+  * For ALL ARABIC tables (regardless of content/headers): You MUST output the HTML columns in REVERSE ORDER. The logical first column (which belongs on the far right) MUST be the LAST `<td>` in your code.
+  * For ALL FRENCH/ENGLISH tables: You MUST output the HTML columns in NORMAL ORDER. The logical first column (which belongs on the far left) MUST be the FIRST `<td>` in your code.
+- NUMBER ANTI-REVERSAL (CRITICAL): ALL numbers, prices, quantities, dates, and spaced digits (e.g., "250 000") MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
+"""
+
+        prompt = f"""You are an Expert Professional Translator and Strict Document Formatter.
+YOUR MISSION:
+1. Clone the exact layout, structure, and tables of the provided document image.
+2. TRANSLATE all text into {target_language} with high professional accuracy. Do not act like a basic machine translator; use correct legal/official terminology.
+3. DO NOT invent fake data, logos, or headers. Translate exactly what is there.
+{bidi_rules}
+{orientation_instruction}
+TECHNICAL RULES:
+1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
+2. NO BORDERS AROUND DOCUMENT.
+3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
+OUTPUT: Return raw HTML only."""
+
+        contents = [f"Translate this document to {target_language} while keeping the exact layout."]
+        if reference_b64:
+            contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
+        else:
+            return jsonify({"error": "Failed", "details": "لم يتم إرفاق المستند"}), 400
+
+        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
+
+        try:
+            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
+        except:
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
+
+        clean_html = clean_html_output(resp.text or "")
+        logger.info(f"✅ Generated Translation HTML (Target: {target_language})")
+        return jsonify({"response": clean_html})
+    except Exception as e:
+        logger.error(f"Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
+
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -942,5 +1012,3 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
-
-
