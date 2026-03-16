@@ -722,7 +722,7 @@ def convert_to_word():
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ + المحرر الشامل)
+# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -731,7 +731,6 @@ def magic_convert():
         file_b64 = data.get("fileBase64")
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
-        extract_only = data.get("extractOnly", False)
         is_arabic = data.get("isArabic", False)
 
         if not file_b64:
@@ -756,12 +755,10 @@ def magic_convert():
         elif target_format == "powerpoint": output_ext = "pptx"
         elif target_format == "pdf": output_ext = "pdf"
 
-        # 🌟 3. مرحلة الاستخراج والمحرر (لجميع الملفات) 🌟
-        if extract_only:
-            logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML Only...")
+        # 🌟 3. مسار الذكاء الاصطناعي للملفات العربية 🌟
+        if is_arabic and input_ext != "html":
+            logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML for Arabic Support...")
             
-            # إذا كان الملف Word أو Excel، نقوم بتحويله إلى PDF أولاً عبر CloudConvert
-            # لتجنب مشاكل استخراج الـ HTML المعقدة، ثم نمرره لـ Gemini لضمان جودة المحرر!
             gemini_bytes = file_bytes
             gemini_mime = "application/pdf"
             
@@ -774,11 +771,8 @@ def magic_convert():
             elif input_ext == "png":
                 gemini_mime = "image/png"
 
-            # تطبيق إعدادات "قسم المحاكاة" الصارمة لضمان الاستنساخ الحرفي
             simulation_style = get_style_prompt("formal", "simulation")
-            
-            # تحديد الاتجاه بناءً على اللغة
-            lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language (French/English). You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
+            lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left."
 
             bridge_prompt = f"""You are an OCR and Document Extraction Engine.
 Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
@@ -806,21 +800,19 @@ CRITICAL RULES:
             
             extracted_html = clean_html_output(resp.text or "")
             
-            if extracted_html:
-                logger.info("✅ AI Bridge: HTML extracted successfully. Returning to App for Editing.")
-                return jsonify({
-                    "html_content": extracted_html,
-                    "message": "تم استخراج النصوص بنجاح لتصحيحها ✨"
-                })
-            else:
+            if not extracted_html:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
+            
+            logger.info("✅ AI Bridge: HTML extracted successfully. Converting to Final Format...")
+            # الآن أصبح الملف المستخرج عبارة عن HTML، نغير المعطيات ليتم إرسالها للتحويل
+            input_ext = "html"
+            file_bytes = extracted_html.encode('utf-8')
 
-        # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المصحح إلى الصيغة النهائية)
+        # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المستخرج إلى الصيغة النهائية)
         if input_ext == "html":
             logger.info("📄 Wrapping HTML for proper conversion in Magic Convert...")
             html_text = file_bytes.decode('utf-8')
             
-            # تنظيف التنسيقات غير المدعومة (مثل Flexbox) بنفس طريقة /convert_to_word
             html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
             html_text = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
@@ -916,3 +908,4 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
