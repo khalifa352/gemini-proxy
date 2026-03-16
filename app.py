@@ -720,10 +720,6 @@ def convert_to_word():
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
-
-# ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ)
-# ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
     try:
@@ -732,6 +728,7 @@ def magic_convert():
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
         is_arabic = data.get("isArabic", False)
+        extract_only = data.get("extractOnly", False)  # 👈 1. استرجاع هذا المتغير
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
@@ -755,9 +752,9 @@ def magic_convert():
         elif target_format == "powerpoint": output_ext = "pptx"
         elif target_format == "pdf": output_ext = "pdf"
 
-        # 🌟 3. مسار الذكاء الاصطناعي للملفات العربية 🌟
-        if is_arabic and input_ext != "html":
-            logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML for Arabic Support...")
+        # 🌟 3. مسار الذكاء الاصطناعي للملفات العربية أو الاستخراج 🌟
+        if extract_only or (is_arabic and input_ext != "html"): # 👈 2. إضافة شرط الاستخراج
+            logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML...")
             
             gemini_bytes = file_bytes
             gemini_mime = "application/pdf"
@@ -772,7 +769,7 @@ def magic_convert():
                 gemini_mime = "image/png"
 
             simulation_style = get_style_prompt("formal", "simulation")
-            lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left."
+            lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language. You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
 
             bridge_prompt = f"""You are an OCR and Document Extraction Engine.
 Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
@@ -803,8 +800,15 @@ CRITICAL RULES:
             if not extracted_html:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
             
+            # 👈 3. إعادة الـ HTML مباشرة للتطبيق إذا كان الطلب من المحرر
+            if extract_only:
+                logger.info("✅ AI Bridge: Returning HTML directly to app.")
+                return jsonify({
+                    "html_content": extracted_html,
+                    "message": "تم استخراج النصوص بنجاح ✨"
+                })
+            
             logger.info("✅ AI Bridge: HTML extracted successfully. Converting to Final Format...")
-            # الآن أصبح الملف المستخرج عبارة عن HTML، نغير المعطيات ليتم إرسالها للتحويل
             input_ext = "html"
             file_bytes = extracted_html.encode('utf-8')
 
@@ -824,7 +828,6 @@ CRITICAL RULES:
                 html_text, flags=re.IGNORECASE | re.DOTALL)
             html_text = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_text, flags=re.IGNORECASE)
 
-            # تغليف الـ HTML بهيكل سليم ليفهمه CloudConvert كمستند وليس كنص عادي
             body_dir = "rtl" if is_arabic else "ltr"
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
 <head>
@@ -855,6 +858,7 @@ CRITICAL RULES:
     except Exception as e:
         logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 
 @app.route("/generate_image", methods=["POST"])
