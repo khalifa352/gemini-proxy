@@ -816,6 +816,40 @@ CRITICAL RULES:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
 
         # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المصحح إلى الصيغة النهائية)
+        if input_ext == "html":
+            logger.info("📄 Wrapping HTML for proper conversion in Magic Convert...")
+            html_text = file_bytes.decode('utf-8')
+            
+            # تنظيف التنسيقات غير المدعومة (مثل Flexbox) بنفس طريقة /convert_to_word
+            html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
+            html_text = re.sub(
+                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
+                html_text, flags=re.IGNORECASE | re.DOTALL)
+            html_text = re.sub(
+                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
+                html_text, flags=re.IGNORECASE | re.DOTALL)
+            html_text = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_text, flags=re.IGNORECASE)
+
+            # تغليف الـ HTML بهيكل سليم ليفهمه CloudConvert كمستند وليس كنص عادي
+            body_dir = "rtl" if is_arabic else "ltr"
+            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style>
+  * {{ font-family: 'Arial', sans-serif !important; }}
+  table {{ border-collapse: collapse; width: 100% !important; margin: 0; }}
+  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }}
+  p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}
+</style>
+</head>
+<body dir="{body_dir}">
+{html_text}
+</body>
+</html>"""
+            file_bytes = full_html.encode('utf-8')
+
         logger.info(f"⚡ Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
         result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
@@ -882,5 +916,3 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
-
-
