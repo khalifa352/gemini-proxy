@@ -1,25 +1,30 @@
-# استخدام بيئة بايثون خفيفة كأساس
+# استخدام نسخة بايثون خفيفة كبيئة أساسية
 FROM python:3.10-slim
+
+# منع بايثون من كتابة ملفات التخزين المؤقت وتوجيه السجلات مباشرة
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # تحديث النظام وتثبيت LibreOffice والخطوط (الخطوط ضرورية لدعم اللغة العربية)
 RUN apt-get update && apt-get install -y \
     libreoffice \
     fonts-noto \
-    fonts-mscorefonts-base \
+    fonts-noto-arabic \
+    fonts-hosny-amiri \
     && rm -rf /var/lib/apt/lists/*
 
-# تعيين مجلد العمل داخل السيرفر
+# تحديد مجلد العمل داخل السيرفر
 WORKDIR /app
 
-# نسخ ملف المتطلبات وتثبيت المكتبات (تأكد أن لديك ملف requirements.txt)
+# نسخ ملف المتطلبات وتثبيت مكتبات بايثون
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# نسخ باقي ملفات المشروع (مثل app.py)
+# نسخ باقي ملفات المشروع
 COPY . .
 
-# فتح المنفذ الذي يعمل عليه السيرفر
+# تحديد البورت
 EXPOSE 10000
 
-# تشغيل السيرفر (يمكنك استخدام gunicorn إذا كنت تفضل ذلك)
-CMD ["python", "app.py"]
+# أمر التشغيل
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000", "--timeout", "120"]
