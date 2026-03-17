@@ -6,6 +6,8 @@ import base64
 import time
 import io
 import concurrent.futures
+import subprocess
+import tempfile
 from flask import Flask, request, jsonify
 
 # ══════════════════════════════════════════════════════════
@@ -63,6 +65,38 @@ def clean_html_output(raw_text):
     raw = re.sub(r'\s?contenteditable=\'[^\']*\'', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable', '', raw, flags=re.IGNORECASE)
     return raw.strip()
+
+
+# ══════════════════════════════════════════════════════════
+# 🚀 Local LibreOffice Converter (Free & Native RTL Support)
+# ══════════════════════════════════════════════════════════
+def local_libreoffice_convert(file_bytes, input_ext, output_ext):
+    logger.info(f"🖥️ Local LibreOffice: Converting {input_ext.upper()} to {output_ext.upper()}...")
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = os.path.join(temp_dir, f"input.{input_ext}")
+            with open(input_path, 'wb') as f:
+                f.write(file_bytes)
+            
+            # Command to run LibreOffice in headless mode
+            process = subprocess.run([
+                'libreoffice', '--headless', '--convert-to', output_ext,
+                input_path, '--outdir', temp_dir
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=100)
+            
+            output_path = os.path.join(temp_dir, f"input.{output_ext}")
+            
+            if process.returncode == 0 and os.path.exists(output_path):
+                with open(output_path, 'rb') as f:
+                    result_bytes = f.read()
+                logger.info("✅ Local LibreOffice: Conversion successful!")
+                return result_bytes
+            else:
+                logger.error(f"❌ Local LibreOffice Error: {process.stderr.decode('utf-8', errors='ignore')}")
+                return None
+    except Exception as e:
+        logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
+        return None
 
 
 # ══════════════════════════════════════════════════════════
@@ -568,14 +602,20 @@ def convert_to_word():
             input_fmt = "html"
             
         elif pdf_b64:
-            logger.info("📄 Converting PDF to Word via CloudConvert...")
+            logger.info("📄 Converting PDF to Word...")
             file_bytes = base64.b64decode(pdf_b64)
             input_fmt = "pdf"
             
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
+        # محاولة التحويل عبر السيرفر الداخلي (LibreOffice) أولاً 🚀
+        raw_docx_bytes = local_libreoffice_convert(file_bytes, input_fmt, "docx")
+        
+        # إذا فشل التحويل الداخلي، نلجأ إلى CloudConvert ☁️
+        if not raw_docx_bytes:
+            logger.warning("⚠️ Local conversion failed. Falling back to CloudConvert...")
+            raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
 
         if not letterhead_b64 or input_fmt == "pdf":
             docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
@@ -877,7 +917,15 @@ CRITICAL RULES:
             file_bytes = full_html.encode('utf-8')
 
         logger.info(f"⚡ Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
-        result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+        
+        # محاولة التحويل عبر السيرفر الداخلي (LibreOffice) أولاً 🚀
+        result_bytes = local_libreoffice_convert(file_bytes, input_ext, output_ext)
+        
+        # إذا فشل التحويل الداخلي، نلجأ إلى CloudConvert ☁️
+        if not result_bytes:
+            logger.warning("⚠️ Local magic conversion failed. Falling back to CloudConvert...")
+            result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+            
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
 
         return jsonify({
