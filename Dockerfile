@@ -1,15 +1,16 @@
-# استخدام نسخة بايثون خفيفة كبيئة أساسية
-FROM python:3.10-slim
+# استخدام نسخة بايثون ونظام (Bookworm) المستقرة لتجنب اختفاء الحزم
+FROM python:3.10-slim-bookworm
 
 # منع بايثون من كتابة ملفات التخزين المؤقت وتوجيه السجلات مباشرة
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# تحديث النظام وتثبيت LibreOffice وخطوط بديلة لـ Arial مع دعم عربي أساسي ومضمون
+# تحديث النظام وتثبيت LibreOffice وخطوط Arial الأساسية وأفضل الخطوط العربية
 RUN apt-get update && apt-get install -y \
     libreoffice \
     fonts-liberation \
     fonts-kacst \
+    fonts-hosny-amiri \
     && rm -rf /var/lib/apt/lists/*
 
 # تحديد مجلد العمل داخل السيرفر
