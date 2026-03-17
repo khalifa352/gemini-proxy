@@ -5,12 +5,11 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# تحديث النظام وتثبيت LibreOffice والخطوط (الخطوط ضرورية لدعم اللغة العربية)
+# تحديث النظام وتثبيت LibreOffice وخطوط بديلة لـ Arial مع دعم عربي أساسي ومضمون
 RUN apt-get update && apt-get install -y \
     libreoffice \
-    fonts-noto \
-    fonts-noto-arabic \
-    fonts-hosny-amiri \
+    fonts-liberation \
+    fonts-kacst \
     && rm -rf /var/lib/apt/lists/*
 
 # تحديد مجلد العمل داخل السيرفر
