@@ -70,6 +70,13 @@ def clean_html_output(raw_text):
 # 🛡️ حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
+    # 0. إزالة أوسمة البنية التي يُنشئها Gemini أحياناً وتسبب صفاً وهمياً في LibreOffice
+    html_text = re.sub(r'</?thead[^>]*>', '', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'</?tbody[^>]*>', '', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'</?tfoot[^>]*>', '', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'<colgroup[^>]*>.*?</colgroup>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
+    html_text = re.sub(r'<caption[^>]*>.*?</caption>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
+    
     # 1. إجبار الجدول على التنسيق النظيف المندمج لمنع الخطوط المزدوجة
     html_text = html_text.replace("<table", "<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse; border-spacing:0; width:100%; border: 1px solid black; margin: 10px 0;' ")
     html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 4px; text-align: center; vertical-align: middle; color: black;' ")
@@ -78,7 +85,17 @@ def force_table_borders(html_text):
     # 2. درع التنظيف: مسح أي صفوف فارغة (Empty Rows) أنشأها الذكاء الاصطناعي وتسبب الخانة الفارغة
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*&nbsp;\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
+    # مسح صفوف فارغة تحتوي فقط على مسافات أو أسطر فارغة داخل الخلايا
+    html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*(?:&nbsp;|\s)*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
     
+    return html_text
+
+# ══════════════════════════════════════════════════════════
+# 🔧 تحويل اتجاه الجداول إلى LTR قبل تصدير الوورد
+#    (لأن bidiVisual في DOCX يتولى عكسها للعربية تلقائياً)
+# ══════════════════════════════════════════════════════════
+def force_tables_ltr_for_export(html_text):
+    html_text = re.sub(r'(<table[^>]*?)\bdir\s*=\s*["\']rtl["\']', r'\1dir="ltr"', html_text, flags=re.IGNORECASE)
     return html_text
 
 # ══════════════════════════════════════════════════════════
@@ -157,13 +174,15 @@ def get_style_prompt(style, mode):
 1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer.
 2. NO DIV TABLES: You MUST use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
 3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers.
+4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
 5. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
 
 ⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
-- Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
+- Outermost wrapper MUST use `dir="ltr"`.
+- Arabic `<table>` elements MUST use `dir="rtl"`.
+- Non-Arabic (Latin/French) `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`.
-- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns for Arabic. The system will handle RTL automatically.
+- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns for Arabic. The browser handles RTL table rendering automatically.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
     if mode == "simulation":
@@ -287,7 +306,7 @@ You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 CRITICAL RULES:
 1. EXACT COPY-PASTE: Output the EXACT SAME HTML structure provided. DO NOT delete unrelated text.
 2. SURGICAL EDIT: Apply the exact surgical change requested. DO NOT hallucinate or add fake elements.
-3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers/tables and protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
+3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers. Arabic `<table>` elements use `dir="rtl"`. Protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
 4. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
 {img_note}
 OUTPUT FORMAT:
@@ -337,7 +356,7 @@ def smart_format():
 YOUR MISSION:
 1. CLEANUP & STRUCTURE: Wrap loose text in proper tags. Apply logical Alignments.
 2. STRICT PRESERVATION: NEVER delete, alter, or add to the actual facts, text, or meaning. NO HALLUCINATION.
-3. BIDI FIX: Ensure wrappers/tables use `dir="ltr"`. Arabic text uses `dir="rtl" style="text-align:right"`. Protect phone numbers.
+3. BIDI FIX: Ensure wrappers use `dir="ltr"`. Arabic `<table>` elements use `dir="rtl"`. Arabic text uses `dir="rtl" style="text-align:right"`. Protect phone numbers.
 OUTPUT FORMAT:
 [MESSAGE]
 تم تنسيق وترتيب المستند بنجاح ✨
@@ -397,7 +416,7 @@ CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
 3. TABLES & COLSPAN: Use proper `<table>`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` nicely.
-4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer cells.
+4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer cells. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
 5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`.
 6. 🔄 COLUMN ORDER: Extract columns exactly as they appear in their natural logical order without reversing them.
 7. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
@@ -419,6 +438,7 @@ CRITICAL RULES:
             logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
 
             html_content = force_table_borders(html_content)
+            html_content = force_tables_ltr_for_export(html_content)
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
             
             # 💡 لحام الأرقام لمنع انعكاسها
@@ -672,6 +692,7 @@ def magic_convert():
             if input_ext == "html":
                 html_text = file_bytes.decode('utf-8')
                 html_text = force_table_borders(html_text)
+                html_text = force_tables_ltr_for_export(html_text)
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
                 
                 html_text = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', html_text)
@@ -718,7 +739,7 @@ CRITICAL RULES:
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
 3. TABLES FOR GRIDS ONLY: Use `<table>` ONLY for actual tabular data (items, prices, schedules). Regular text, headers, and dates MUST be in `<p>` or `<div>`. NEVER put the whole document in a table.
 4. COLSPAN: For "Total" (الإجمالي) rows, use `colspan` elegantly.
-5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` or `<th>` rows. Start directly with the text headers.
+5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` or `<th>` rows. Start directly with the text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
 6. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
 7. 🔄 COLUMN ORDER: Extract columns exactly as they appear in their natural logical order without reversing them.
 8. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
@@ -740,6 +761,7 @@ CRITICAL RULES:
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
         
         extracted_html = force_table_borders(extracted_html)
+        extracted_html = force_tables_ltr_for_export(extracted_html)
         extracted_html = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', extracted_html)
         
         is_arabic_doc = has_arabic(extracted_html)
@@ -793,7 +815,9 @@ def translate_document():
 
         bidi_rules = """
 ⚠️ BIDI & LAYOUT LOCKS:
-- Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
+- Outermost wrapper MUST use `dir="ltr"`.
+- Arabic `<table>` elements MUST use `dir="rtl"`.
+- Non-Arabic (Latin/French) `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`
 - TABLE COLUMN ORDER: Output HTML columns in their NATURAL logical order exactly as they appear. DO NOT manually reverse the columns.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
@@ -866,7 +890,7 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
         models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -884,5 +908,3 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
-
-
