@@ -5,9 +5,12 @@ FROM python:3.10-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# تحديث النظام وتثبيت LibreOffice والجافا (الضرورية لملفات DOCX/XLSX) والخطوط
+# تثبيت LibreOffice بكامل ملحقاته (الكاتب، الجدول) لمنع خطأ الفلاتر
 RUN apt-get update && apt-get install -y \
     libreoffice \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
     default-jre \
     fonts-liberation \
     fonts-kacst \
