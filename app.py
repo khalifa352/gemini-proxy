@@ -55,7 +55,7 @@ def call_gemini(model, contents, config, timeout):
 
 def clean_html_output(raw_text):
     raw = raw_text.strip()
-    if raw.startswith("`" * 3): 
+    if raw.startswith("`" * 3):
         raw = re.sub(r"^`{3}(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\n?`{3}$", "", raw)
     div_match = re.search(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
@@ -67,142 +67,14 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول
+# 🛡️ حقنة الجداول (الجدول الرسمي الممتد الكلاسيكي بدون ألوان)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
-    html_text = html_text.replace("<table", "<table border='1' width='100%' cellpadding='4' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black; margin: 10px 0;' ")
-    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 4px; text-align: center; vertical-align: middle; background-color: transparent !important; color: black !important;' ")
-    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 4px; vertical-align: middle; background-color: transparent !important;' ")
+    # إجبار الجدول على الامتداد الكامل 100% مع شكل كلاسيكي رسمي (حدود سوداء فقط)
+    html_text = html_text.replace("<table", "<table border='1' width='100%' cellpadding='5' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black; margin: 10px 0;' ")
+    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 5px; text-align: center; vertical-align: middle; background-color: transparent !important; color: black !important;' ")
+    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 5px; vertical-align: middle; background-color: transparent !important;' ")
     return html_text
-
-# ══════════════════════════════════════════════════════════
-# 🧹 تنظيف الحدود الشبحية من العناصر غير الجدولية
-# ══════════════════════════════════════════════════════════
-def strip_ghost_boxes(html_text):
-    """Remove border, outline, box-shadow from non-table elements (div, p, span, h1-h6)
-    to prevent LibreOffice from rendering ghost boxes in Word export."""
-    NON_TABLE_TAGS = r'(div|p|span|h[1-6]|section|article|header|footer|main|nav)'
-
-    def clean_style_attr(m):
-        full_tag = m.group(0)
-        style_match = re.search(r'style="([^"]*)"', full_tag, re.IGNORECASE)
-        if not style_match:
-            return full_tag
-        old_style = style_match.group(1)
-        new_style = old_style
-        # Remove border* / outline / box-shadow properties
-        new_style = re.sub(r'border\s*:[^;"]*;?', '', new_style, flags=re.IGNORECASE)
-        new_style = re.sub(r'border-(top|bottom|left|right|width|style|color|radius)\s*:[^;"]*;?', '', new_style, flags=re.IGNORECASE)
-        new_style = re.sub(r'outline\s*:[^;"]*;?', '', new_style, flags=re.IGNORECASE)
-        new_style = re.sub(r'box-shadow\s*:[^;"]*;?', '', new_style, flags=re.IGNORECASE)
-        new_style = re.sub(r';\s*;', ';', new_style).strip().rstrip(';')
-        return full_tag.replace(style_match.group(0), f'style="{new_style}"')
-
-    html_text = re.sub(
-        rf'<{NON_TABLE_TAGS}\b[^>]*style="[^"]*"[^>]*>',
-        clean_style_attr,
-        html_text,
-        flags=re.IGNORECASE
-    )
-
-    # Also strip standalone border HTML attributes on non-table elements
-    html_text = re.sub(
-        rf'(<{NON_TABLE_TAGS}\b[^>]*)\s+border=["\'][^"\']*["\']',
-        r'\1',
-        html_text,
-        flags=re.IGNORECASE
-    )
-
-    return html_text
-
-# ══════════════════════════════════════════════════════════
-# 🧹 تنظيف الصفوف الفارغة من الجداول (العلاج السحري للخانة العلوية)
-# ══════════════════════════════════════════════════════════
-def clean_empty_table_rows(html_text):
-    """إزالة أي صفوف أو خلايا جدول فارغة تماماً من الـ HTML لمنع ظهور خانات شبحية فوق العناوين"""
-    # يبحث عن <tr> يحتوي فقط على <td> أو <th> فارغة أو تحتوي على مسافات أو &nbsp;
-    row_pattern = re.compile(r'<tr[^>]*>\s*(?:<t[dh][^>]*>\s*(?:&nbsp;|\s|<br\s*/?>|&#160;)*\s*</t[dh]>\s*)+</tr>', re.IGNORECASE)
-    prev_html = ""
-    while html_text != prev_html:
-        prev_html = html_text
-        html_text = row_pattern.sub('', html_text)
-    
-    # إزالة <thead> أو <tbody> إذا أصبحت فارغة تماماً
-    html_text = re.sub(r'<thead[^>]*>\s*</thead>', '', html_text, flags=re.IGNORECASE)
-    html_text = re.sub(r'<tbody[^>]*>\s*</tbody>', '', html_text, flags=re.IGNORECASE)
-    return html_text
-
-def has_arabic(text):
-    return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
-
-def get_style_prompt(style, mode):
-    global_rules = """
-⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
-1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML.
-2. DO NOT invent fake data, placeholders, or dummy text.
-3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document.
-4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures.
-
-⚠️ SMART HTML STRUCTURE & TABLE USAGE (CRITICAL FIX):
-1. TABLES FOR ACTUAL GRIDS ONLY: You MUST use `<table>` ONLY for actual grid data (e.g., lists of items, prices, quantities). Regular paragraphs, document titles, dates, or recipient info MUST NEVER be inside a table. Use `<p>`, `<h1>`, or `<div>` for regular text.
-2. NO DIV TABLES: For grids, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
-3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-4. 📊 INVOICE TOTALS (COLSPAN — CRITICAL FOR PROFESSIONAL LOOK):
-   When a table has a summary/total row at the bottom (e.g. الإجمالي / Total / Sous-total / TVA / Montant TTC):
-   - Use `colspan` to merge ALL the non-amount columns into ONE cell for the label.
-   - The label cell (merged) MUST have `style="border:none; text-align:right; font-weight:bold; padding:4px;"`.
-   - ONLY the amount/value cell keeps its border: `style="border:1px solid black; padding:4px;"`.
-   - Example for a 5-column table: `<tr><td colspan="4" style="border:none; text-align:right; font-weight:bold; padding:4px;">الإجمالي</td><td style="border:1px solid black; padding:4px;">5000 MRU</td></tr>`
-   - This applies to ALL summary rows (Subtotal, Tax, Grand Total, etc.) — each gets its own row with colspan.
-5. ENHANCED READABILITY: Use a baseline font size of 15px-16px.
-
-⚠️ BIDI & LAYOUT LOCKS:
-- Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
-- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`.
-- 🔴 TABLE HEADER ORDER (CRITICAL — DO NOT REVERSE):
-  The `<table>` uses `dir="ltr"`, which means the FIRST `<th>` in code appears on the LEFT side visually.
-  For an Arabic RTL document where the reader reads right-to-left, the rightmost column should be LAST in HTML code.
-  Example: If the visual table reads right-to-left as [المرجع | الوصف | الكمية | السعر | المجموع],
-  then in HTML write: `<th>المجموع</th><th>السعر</th><th>الكمية</th><th>الوصف</th><th>المرجع</th>`.
-  This ensures the browser renders المرجع on the right (as expected in Arabic reading order).
-  ⚠️ NEVER reverse this logic. NEVER put the first Arabic column as the first <th>.
-- NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
-"""
-    if mode == "simulation":
-        return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
-IGNORE logos, stamps, signatures. Do NOT invent data.
-⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
-{global_rules}
-RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
-RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
-
-    design_base = ""
-    if style == "modern":
-        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
-CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
-    else:
-        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design with strong professional hierarchy.
-⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
-⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal and printable.
-TYPOGRAPHY & HIERARCHY:
-- Document Title: Bold, centered, font-size 22px-24px, with generous margin-bottom (15px) to create breathing space.
-- Section Headings (h2/h3): Bold, font-size 17px-18px, with a subtle thin underline (`border-bottom: 1.5px solid #333; padding-bottom: 4px; margin-top: 15px; margin-bottom: 8px;`) to create clean visual separation between sections. This underline is ONLY on headings, NOT on paragraphs.
-- Body text: 15px-16px, line-height 1.5 for readability.
-- Labels/Field names (like "الاسم:", "التاريخ:", "الموضوع:"): Use `font-weight:bold;` to distinguish them from their values.
-- Use consistent spacing: 12px between paragraphs, 18px before section headings.
-- Dates and reference numbers should be slightly smaller (13px-14px) and positioned cleanly at the top."""
-
-    return f"{design_base}\n\n{global_rules}"
-
-def detect_document_type(user_msg):
-    msg_lower = user_msg.lower()
-    single_page_keywords = ['فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon', 'شهادة', 'certificate', 'attestation', 'رسالة', 'letter', 'lettre', 'courrier', 'إيصال', 'receipt', 'reçu', 'تصريح', 'declaration', 'إذن', 'autorisation', 'بطاقة', 'card']
-    multi_page_keywords = ['تقرير', 'report', 'rapport', 'دراسة', 'study', 'étude', 'بحث', 'research', 'خطة', 'plan', 'مشروع', 'project', 'تفصيلي', 'detailed', 'شامل', 'comprehensive']
-    for kw in single_page_keywords:
-        if kw in msg_lower: return "single_page"
-    for kw in multi_page_keywords:
-        if kw in msg_lower: return "multi_page"
-    return "auto"
 
 # ══════════════════════════════════════════════════════════
 # 🚀 Local LibreOffice Converter
@@ -214,7 +86,7 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             input_path = os.path.join(temp_dir, f"input.{input_ext}")
             with open(input_path, 'wb') as f:
                 f.write(file_bytes)
-
+            
             profile_dir = os.path.join(temp_dir, "lo_profile")
             
             filters = {
@@ -264,6 +136,62 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None, f"استثناء المحرك: {str(e)}"
 
+# 💡 الرادار اللغوي الذكي (يحدد هل النص عربي أم لاتيني)
+def has_arabic(text):
+    return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
+
+def get_style_prompt(style, mode):
+    global_rules = """
+⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
+1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
+2. DO NOT invent fake data, placeholders, or dummy text.
+3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document.
+4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures.
+
+⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
+1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer.
+2. NO DIV TABLES: You MUST use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
+3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
+4. 🚫 NO EMPTY ROWS (DOUBLE LINES FIX): NEVER create empty `<tr>` rows, spacer rows, or blank `<th>`/`<td>` at the top of the table to simulate spacing or double lines. The table MUST start directly with the actual text headers.
+5. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي) at the bottom of tables, use the `colspan` attribute to merge empty cells nicely.
+
+⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
+- Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
+- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`.
+- 🔄 TABLE COLUMN ORDER (FOOLPROOF RULE): The system automatically applies RTL. This means the FIRST `<td>` or `<th>` you write in your HTML code will automatically appear on the FAR RIGHT of the screen. Therefore, you MUST write the columns starting with the rightmost column first. DO NOT overthink it or reverse it again.
+- NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
+"""
+    if mode == "simulation":
+        return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
+IGNORE logos, stamps, signatures. Do NOT invent data.
+⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
+{global_rules}
+RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
+RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
+
+    design_base = ""
+    if style == "modern":
+        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
+CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers, stylish accents for section headings."""
+    else:
+        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
+⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
+TYPOGRAPHY: Dynamic sizes. Title bold centered."""
+
+    return f"{design_base}\n\n{global_rules}"
+
+def detect_document_type(user_msg):
+    msg_lower = user_msg.lower()
+    single_page_keywords = ['فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon', 'شهادة', 'certificate', 'attestation', 'رسالة', 'letter', 'lettre', 'courrier', 'إيصال', 'receipt', 'reçu', 'تصريح', 'declaration', 'إذن', 'autorisation', 'بطاقة', 'card']
+    multi_page_keywords = ['تقرير', 'report', 'rapport', 'دراسة', 'study', 'étude', 'بحث', 'research', 'خطة', 'plan', 'مشروع', 'project', 'تفصيلي', 'detailed', 'شامل', 'comprehensive']
+    for kw in single_page_keywords:
+        if kw in msg_lower: return "single_page"
+    for kw in multi_page_keywords:
+        if kw in msg_lower: return "multi_page"
+    return "auto"
+
+
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
@@ -311,28 +239,28 @@ TECHNICAL RULES:
 2. NO BORDERS AROUND DOCUMENT.
 3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
 OUTPUT: Return raw HTML only."""
-   
+
         contents = [user_msg] if user_msg else ["Create a formal document."]
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         if letterhead_b64:
             contents.append("Ensure layout fits empty space below this letterhead.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
-   
+
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
-   
+
         try:
             resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
-   
+
         clean_html = clean_html_output(resp.text or "")
         logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size})")
         return jsonify({"response": clean_html})
-        
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 @app.route("/modify", methods=["POST"])
 def modify():
@@ -364,21 +292,21 @@ OUTPUT FORMAT:
 [HTML]
 (ضع هنا كود الـ HTML المعدل كاملاً)
 [/HTML]"""
-   
+
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         cts = [f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."]
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
-   
+
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
-   
+
         text = resp.text or ""
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-   
+
         if html_match:
             new_inner = html_match.group(1).strip()
             message = msg_match.group(1).strip() if msg_match else "تم التعديل بنجاح ✨"
@@ -386,12 +314,12 @@ OUTPUT FORMAT:
             new_inner = clean_html_output(text)
             new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
             message = "تم التعديل بنجاح ✨"
-   
+
         return jsonify({"response": new_inner, "message": message})
-        
     except Exception as e:
         logger.error(f"Modify Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 @app.route("/format", methods=["POST"])
 def smart_format():
@@ -412,19 +340,19 @@ OUTPUT FORMAT:
 [HTML]
 (ضع هنا كود الـ HTML المنسق كاملاً)
 [/HTML]"""
-   
+
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
-   
+
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
-   
+
         text = resp.text or ""
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-   
+
         if html_match:
             new_inner = html_match.group(1).strip()
             message = msg_match.group(1).strip() if msg_match else "تم التنسيق ✨"
@@ -432,16 +360,16 @@ OUTPUT FORMAT:
             new_inner = clean_html_output(text)
             new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
             message = "تم التنسيق ✨"
-   
+
         logger.info("✅ Document Smartly Formatted")
         return jsonify({"response": new_inner, "message": message})
-        
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
+
 # ══════════════════════════════════════════════════════════
-# مسار تحويل HTML/PDF إلى Word
+# مسار تحويل HTML/PDF إلى Word 
 # ══════════════════════════════════════════════════════════
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
@@ -449,9 +377,9 @@ def convert_to_word():
         data = request.json
         html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
-        letterhead_b64 = data.get("letterhead_base64", "")
+        letterhead_b64 = data.get("letterhead_base64", "") 
         letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
-
+        
         input_fmt = "html"
 
         if pdf_b64 and not html_content:
@@ -463,13 +391,13 @@ Your task is to precisely extract ALL content from the attached document and con
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
-3. TABLES FOR GRIDS ONLY: Use `<table>` ONLY for actual tabular data (items, prices, schedules). Regular text, headers, and dates MUST be in `<p>` or `<div>`. NEVER put the whole document in a table.
-4. 📊 INVOICE TOTALS (COLSPAN): For summary/total rows (like الإجمالي / Total / Montant Total): use `colspan` to merge ALL preceding columns, so the total label + value appear ONLY under the amount column. The merged label cells should have `border:none`.
-5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for `<table>`, `<th>`, `<td>` ONLY.
-6. 🔴 TABLE HEADER ORDER: Output `<th>` cells in the SAME left-to-right order as they visually appear. The table uses `dir="ltr"`. DO NOT reverse or flip table columns yourself.
+3. TABLES & COLSPAN: Use proper `<table>`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` to merge empty cells nicely.
+4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or narrow blank cells above the table headers. Start the table directly with the actual headers.
+5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
+6. 🔄 COLUMN ORDER: Output HTML `<td>` tags in the exact visual order from Right-to-Left (First td = Far Right column).
 7. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
 8. NO MARKDOWN: Output strictly pure HTML code."""
-   
+            
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
@@ -481,22 +409,19 @@ CRITICAL RULES:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الـ PDF."}), 500
             
             html_content = extracted_html
-   
+
         if html_content:
             logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
-   
-            # 🧹 تنظيف الحدود الشبحية، والصفوف الفارغة، ثم حقن حدود الجداول
-            html_content = strip_ghost_boxes(html_content)
-            html_content = clean_empty_table_rows(html_content)
+
             html_content = force_table_borders(html_content)
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
             
-            # 💡 لحام الأرقام
+            # 💡 لحام الأرقام لمنع انعكاسها
             html_content = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', html_content)
             
             is_arabic_doc = has_arabic(html_content)
             body_dir = "rtl" if is_arabic_doc else "ltr"
-   
+
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
@@ -506,7 +431,8 @@ CRITICAL RULES:
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
-   
+
+            # 💡 الستايل الجديد (إخفاء المربعات الوهمية)
             full_html = f"""<html lang="ar" dir="{body_dir}">
 <head>
 <meta charset="utf-8">
@@ -514,8 +440,7 @@ CRITICAL RULES:
   * {{ font-family: 'Arial', sans-serif !important; }}
   table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }}
   th, td {{ border: 1px solid #000000; padding: 4px !important; margin: 0; line-height: 1.1 !important; vertical-align: middle !important; background-color: transparent !important; }}
-  div, p, span, h1, h2, h3, h4, h5, h6 {{ border: none !important; outline: none !important; box-shadow: none !important; background: transparent !important; }}
-  p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; line-height: 1.2 !important; }}
+  p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}
 </style>
 </head>
 <body>
@@ -523,7 +448,7 @@ CRITICAL RULES:
 </body>
 </html>"""
             file_bytes = full_html.encode('utf-8')
-
+            
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
@@ -533,9 +458,9 @@ CRITICAL RULES:
             return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
 
         # ══════════════════════════════════════════════════════════
-        # معالجة الوورد — إزالة الحدود الشبحية + ضبط الخطوط + إزالة الخانات الفارغة
+        # معالجة الوورد: الحرية للمحاذاة وإصلاح انعكاس الأعمدة والتاريخ
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Deep XML Fixes for Fonts, Tables & Ghost Box Removal...")
+        logger.info("💉 Local Processing: Deep XML Fixes for Fonts and Tables...")
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         section = doc.sections[0]
@@ -552,11 +477,7 @@ CRITICAL RULES:
 
             pPr = paragraph._element.get_or_add_pPr()
             
-            # ══ إزالة حدود الفقرات (مكافحة المربعات الشبحية في الوورد) ══
-            pBdr = pPr.find(qn('w:pBdr'))
-            if pBdr is not None:
-                pPr.remove(pBdr)
-            
+            # ✂️ حل المسافات العمودية
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -572,6 +493,7 @@ CRITICAL RULES:
                 spacing.set(qn('w:line'), '276') 
             spacing.set(qn('w:lineRule'), 'auto')
 
+            # 💡 إزالة حقنة (w:rtl) من الكلمات لمنع تخريب تنسيق التواريخ كـ 32/3/2023
             for run in paragraph.runs:
                 rPr = run._element.get_or_add_rPr()
                 
@@ -588,32 +510,8 @@ CRITICAL RULES:
                 szCs = rPr.find(qn('w:szCs'))
                 if szCs is None: szCs = OxmlElement('w:szCs'); rPr.append(szCs)
                 szCs.set(qn('w:val'), '24')
-                
-                # ══ إزالة حدود النصوص (مكافحة المربعات الشبحية) ══
-                rBdr = rPr.find(qn('w:bdr'))
-                if rBdr is not None:
-                    rPr.remove(rBdr)
 
         for table in doc.tables:
-            # ══ إزالة الصفوف الفارغة الشبحية فوق العناوين (بدقة عالية) ══
-            rows_to_remove = []
-            for row in table.rows:
-                all_empty = True
-                for cell in row.cells:
-                    # تنظيف شامل للمسافات بأنواعها للتحقق من فراغ الخلية فعلياً
-                    clean_text = cell.text.replace('\xa0', '').replace('\u200b', '').strip()
-                    if clean_text != "" or len(cell.paragraphs) > 1:
-                        all_empty = False
-                        break
-                
-                if all_empty:
-                    rows_to_remove.append(row)
-                else:
-                    break  # توقف عند أول صف يحتوي على محتوى
-            
-            for row in rows_to_remove:
-                table._element.remove(row._tr)
-            
             table.autofit = True
             tblPr = table._element.tblPr
             if tblPr is not None:
@@ -627,6 +525,13 @@ CRITICAL RULES:
                     tblPr.append(tblW)
                 tblW.set(qn('w:w'), '5000') 
                 tblW.set(qn('w:type'), 'pct')
+
+                # 💡 [الحل الجذري]: إجبار الجدول على الاتجاه العربي في الوورد ليمنع انعكاس الأعمدة
+                if is_arabic_doc:
+                    bidiVisual = tblPr.find(qn('w:bidiVisual'))
+                    if bidiVisual is None:
+                        bidiVisual = OxmlElement('w:bidiVisual')
+                        tblPr.append(bidiVisual)
 
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
@@ -716,6 +621,7 @@ CRITICAL RULES:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
+
 # ══════════════════════════════════════════════════════════
 # مسار MAGIC CONVERTER
 # ══════════════════════════════════════════════════════════
@@ -727,7 +633,7 @@ def magic_convert():
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
         is_arabic = data.get("isArabic", True)
-        extract_only = data.get("extractOnly", False)
+        extract_only = data.get("extractOnly", False)  
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
@@ -763,8 +669,6 @@ def magic_convert():
             
             if input_ext == "html":
                 html_text = file_bytes.decode('utf-8')
-                html_text = strip_ghost_boxes(html_text)
-                html_text = clean_empty_table_rows(html_text)
                 html_text = force_table_borders(html_text)
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
                 
@@ -773,7 +677,7 @@ def magic_convert():
                 body_dir = "rtl" if is_arabic_doc else "ltr"
                 
                 full_html = f"""<html lang="ar" dir="{body_dir}"><head><meta charset="utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; background-color: transparent !important; }} div, p, span, h1, h2, h3, h4, h5, h6 {{ border: none !important; outline: none !important; box-shadow: none !important; background: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}</style>
 </head><body>{html_text}</body></html>"""
                 file_bytes = full_html.encode('utf-8')
 
@@ -811,9 +715,9 @@ CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
 3. TABLES FOR GRIDS ONLY: Use `<table>` ONLY for actual tabular data (items, prices, schedules). Regular text, headers, and dates MUST be in `<p>` or `<div>`. NEVER put the whole document in a table.
-4. 📊 INVOICE TOTALS (COLSPAN): For summary/total rows (like الإجمالي / Total / Montant Total): use `colspan` to merge ALL preceding columns, so the total label + value appear ONLY under the amount column. The merged label cells should have `border:none`.
-5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for `<table>`, `<th>`, `<td>` ONLY.
-6. 🔴 TABLE HEADER ORDER: Output `<th>` cells in the SAME left-to-right order as they visually appear. The table uses `dir="ltr"`. DO NOT reverse or flip table columns yourself.
+4. COLSPAN: For "Total" (الإجمالي) rows, use `colspan` elegantly.
+5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
+6. 🔄 COLUMN ORDER: Maintain the exact natural reading order. Do NOT manually reverse or flip table columns.
 7. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
 8. PURE HTML ONLY. Do not wrap in ```html."""
         
@@ -832,8 +736,6 @@ CRITICAL RULES:
         
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
         
-        extracted_html = strip_ghost_boxes(extracted_html)
-        extracted_html = clean_empty_table_rows(extracted_html)
         extracted_html = force_table_borders(extracted_html)
         extracted_html = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', extracted_html)
         
@@ -841,7 +743,7 @@ CRITICAL RULES:
         body_dir = "rtl" if is_arabic_doc else "ltr"
         
         full_html = f"""<html lang="ar" dir="{body_dir}"><head><meta charset="utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; line-height: 1.1 !important; background-color: transparent !important; }} div, p, span, h1, h2, h3, h4, h5, h6 {{ border: none !important; outline: none !important; box-shadow: none !important; background: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; line-height: 1.2 !important; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; line-height: 1.1 !important; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}</style>
 </head><body>{extracted_html}</body></html>"""
         
         final_bytes = full_html.encode('utf-8')
@@ -860,6 +762,7 @@ CRITICAL RULES:
     except Exception as e:
         logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 # ══════════════════════════════════════════════════════════
 # مسار TRANSLATE DOCUMENT
@@ -889,44 +792,43 @@ def translate_document():
 ⚠️ BIDI & LAYOUT LOCKS:
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`
-- 🔴 TABLE HEADER ORDER (CRITICAL): Output `<th>` cells in the SAME left-to-right order as they visually appear. The table uses `dir="ltr"`. DO NOT reverse or flip table columns yourself.
+- TABLE COLUMN ORDER: Output HTML columns in their NATURAL logical order exactly as they appear. DO NOT manually reverse the columns.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
-  
+
         prompt = f"""You are an Expert Professional Translator and Strict Document Formatter.
 YOUR MISSION:
 1. Clone the exact layout, structure, and tables of the provided document image.
-2. TRANSLATE all text into {target_language} with high professional accuracy.
+2. TRANSLATE all text into {target_language} with high professional accuracy. 
 3. DO NOT invent fake data, logos, or headers. Translate exactly what is there.
 4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any original letterheads, footers, logos, stamps, and signatures.
-5. 📊 INVOICE TOTALS (COLSPAN): For summary/total rows: use `colspan` to merge preceding columns, so the total label + value appear ONLY under the amount column. Merged label cells have `border:none`.
 {bidi_rules}
 {orientation_instruction}
 TECHNICAL RULES:
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
 2. NO BORDERS AROUND DOCUMENT.
 OUTPUT: Return raw HTML only."""
-   
+
         contents = [f"Translate this document to {target_language} while keeping the exact layout."]
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرفاق المستند"}), 400
-   
+
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
-   
+
         try:
             resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
-   
+
         clean_html = clean_html_output(resp.text or "")
         logger.info(f"✅ Generated Translation HTML (Target: {target_language})")
         return jsonify({"response": clean_html})
-        
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
+
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
