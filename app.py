@@ -14,7 +14,7 @@ from flask import Flask, request, jsonify
 # ✅ استدعاء مكتبات الوورد المطلوبة للحقن العميق للرأسية وضبط الهوامش
 # ══════════════════════════════════════════════════════════
 import docx
-from docx.shared import Inches, Cm
+from docx.shared import Inches, Cm, Pt
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
@@ -67,13 +67,13 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول (النسخة الآمنة لمنع انهيار الـ HTML)
+# 🛡️ حقنة الجداول (النسخة المعالجة لمنع تمدد الخلايا العمودي والأفقي)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
-    """هذه الدالة تزرع خصائص الجداول الكلاسيكية بأمان دون تدمير الكود الأصلي"""
-    html_text = html_text.replace("<table", "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black;' ")
-    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 5px; text-align: center;' ")
-    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 5px;' ")
+    """تعديل ذكي: تقليل الـ Padding بشكل كبير لكي لا تظهر الجداول عملاقة وعريضة"""
+    html_text = html_text.replace("<table", "<table border='1' cellpadding='2' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black; margin: 0;' ")
+    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 2px 4px; text-align: center; vertical-align: middle;' ")
+    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 2px 4px; vertical-align: middle;' ")
     return html_text
 
 # ══════════════════════════════════════════════════════════
@@ -97,10 +97,7 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             }
             lo_filter = filters.get(output_ext, output_ext)
             
-            # 🌟 استخدام xvfb-run لحل مشكلة (X11 error) جذرياً وإنشاء شاشة وهمية آمنة في الذاكرة
             command = [
-                'xvfb-run',
-                '-a', # البحث التلقائي عن شاشة وهمية متاحة
                 'libreoffice',
                 f'-env:UserInstallation=file://{profile_dir}',
                 '--headless',
@@ -115,9 +112,11 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 input_path
             ]
             
+            # 🌟 إجبار LibreOffice على إطفاء أي محاولة للرسم الجرافيكي وتوجيهه للشاشة الوهمية في Docker
             env = os.environ.copy()
             env["SAL_USE_VCLPLUGIN"] = "gen"
             env["LC_ALL"] = "C.UTF-8"
+            env["DISPLAY"] = ":99"
             
             process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, env=env)
             output_path = os.path.join(temp_dir, f"input.{output_ext}")
@@ -162,7 +161,7 @@ def get_style_prompt(style, mode):
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-- TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+- TABLES MUST COMPLY: `width: 100%; max-width: 100%; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
 - DYNAMIC TABLE COLUMN ORDER (CRITICAL): Since `<table>` is forced to `dir="ltr"`, the FIRST `<td>` in HTML renders on the FAR LEFT. 
   * For ALL ARABIC tables (regardless of content/headers): You MUST output the HTML columns in REVERSE ORDER. The logical first column (which belongs on the far right) MUST be the LAST `<td>` in your code.
   * For ALL FRENCH/ENGLISH tables: You MUST output the HTML columns in NORMAL ORDER. The logical first column (which belongs on the far left) MUST be the FIRST `<td>` in your code.
@@ -382,7 +381,7 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# مسار تحويل HTML/PDF إلى Word (مع استخدام الذكاء الاصطناعي للـ PDF)
+# مسار تحويل HTML/PDF إلى Word (مع معالجة متقدمة للجداول والمحاذاة)
 # ══════════════════════════════════════════════════════════
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
@@ -404,7 +403,7 @@ Your task is to precisely extract ALL content from the attached document and con
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures. DO NOT simulate or describe them. Extract ONLY the core content and tables.
-3. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
+3. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags. Do not use CSS widths or fixed layouts.
 4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>`.
 5. NO MARKDOWN: Output strictly pure HTML code. Do not wrap in ```html."""
             
@@ -423,6 +422,7 @@ CRITICAL RULES:
         if html_content:
             logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
 
+            # تطبيق حقنة الجداول (الآمنة والمضغوطة)
             html_content = force_table_borders(html_content)
 
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
@@ -436,14 +436,15 @@ CRITICAL RULES:
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
+            # CSS ذكي جداً يقلل مساحات الـ HTML لكي لا يفهمها LibreOffice بشكل خاطئ
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
-  table {{ border-collapse: collapse; width: 100% !important; margin: 0; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }}
-  p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}
+  table {{ border-collapse: collapse; margin: 0; }}
+  th, td {{ border: 1px solid #000000; padding: 2px 4px !important; margin: 0; line-height: 1.1 !important; vertical-align: middle !important; }}
+  p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; line-height: 1.2 !important; }}
 </style>
 </head>
 <body dir="rtl">
@@ -460,14 +461,10 @@ CRITICAL RULES:
         if not raw_docx_bytes:
             return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
 
-        if not letterhead_b64:
-            docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
-            return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
-
         # ══════════════════════════════════════════════════════════
-        # معالجة الوورد: التطابق البصري 100% (أحجام، تباعد، وهوامش ذكية)
+        # معالجة الوورد: درع الـ BIDI وفتح أقفال الجداول (Anti-Squish & Anti-Flip)
         # ══════════════════════════════════════════════════════════
-        logger.info("💉 Local Processing: Visual Parity (Size, Spacing, Margins)...")
+        logger.info("💉 Local Processing: Deep XML Fixes for Tables and BIDI...")
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
         section = doc.sections[0]
@@ -480,50 +477,89 @@ CRITICAL RULES:
 
         def clean_and_format_paragraph(paragraph, is_table=False):
             pPr = paragraph._element.get_or_add_pPr()
+            
+            # 🛡️ الدرع المضاد للانعكاس (Bulletproof RTL/BIDI)
+            bidi = pPr.find(qn('w:bidi'))
+            if bidi is None:
+                bidi = OxmlElement('w:bidi')
+                pPr.append(bidi)
+            bidi.set(qn('w:val'), '1')
+
+            # إجبار المحاذاة على اليمين إذا لم تكن محددة مسبقاً
+            jc = pPr.find(qn('w:jc'))
+            if jc is None:
+                jc = OxmlElement('w:jc')
+                jc.set(qn('w:val'), 'right')
+                pPr.append(jc)
+
+            # ✂️ حل المسافات العمودية (تصفير التباعد)
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
                 pPr.append(spacing)
+            
             if is_table:
                 spacing.set(qn('w:before'), '0')
                 spacing.set(qn('w:after'), '0')
-                spacing.set(qn('w:line'), '240') 
+                spacing.set(qn('w:line'), '240') # Single spacing
             else:
                 spacing.set(qn('w:before'), '0')
-                spacing.set(qn('w:after'), '160') 
-                spacing.set(qn('w:line'), '300')  
+                spacing.set(qn('w:after'), '120') 
+                spacing.set(qn('w:line'), '276') # 1.15 spacing
             spacing.set(qn('w:lineRule'), 'auto')
 
+            # تثبيت الخط (Arial) وتفعيل خصائص قراءة اليمين لليسار للكلمات (Runs)
             for run in paragraph.runs:
-                run.font.name = 'Arial'
-                from docx.shared import Pt
-                run.font.size = Pt(12) 
                 rPr = run._element.get_or_add_rPr()
+                
+                # إجبار الكلمات على أن تكون RTL
+                rtl = rPr.find(qn('w:rtl'))
+                if rtl is None:
+                    rtl = OxmlElement('w:rtl')
+                    rPr.append(rtl)
+                rtl.set(qn('w:val'), '1')
+
+                # تطبيق خط Arial إجبارياً على جميع اللغات
                 rFonts = rPr.get_or_add_rFonts()
                 rFonts.set(qn('w:cs'), 'Arial')
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
+                rFonts.set(qn('w:eastAsia'), 'Arial')
+                
                 sz = rPr.find(qn('w:sz'))
-                if sz is None:
-                    sz = OxmlElement('w:sz')
-                    rPr.append(sz)
+                if sz is None: sz = OxmlElement('w:sz'); rPr.append(sz)
                 sz.set(qn('w:val'), '24')
+                
                 szCs = rPr.find(qn('w:szCs'))
-                if szCs is None:
-                    szCs = OxmlElement('w:szCs')
-                    rPr.append(szCs)
+                if szCs is None: szCs = OxmlElement('w:szCs'); rPr.append(szCs)
                 szCs.set(qn('w:val'), '24')
 
+        # 🔓 فتح أقفال الجداول (تدمير الارتفاع والعرض الثابت لكي تتأقلم بحرية AutoFit)
         for table in doc.tables:
+            table.autofit = True
+            tblPr = table._element.tblPr
+            if tblPr is not None:
+                tblLayout = tblPr.find(qn('w:tblLayout'))
+                if tblLayout is not None:
+                    tblLayout.set(qn('w:type'), 'autofit')
+
             for row in table.rows:
                 trPr = row._tr.get_or_add_trPr()
+                # تدمير أي ارتفاع إجباري مسجل للصف (يسمح بالتضييق العمودي)
                 for trHeight in trPr.findall(qn('w:trHeight')):
                     trPr.remove(trHeight)
+                
                 for cell in row.cells:
                     tcPr = cell._element.get_or_add_tcPr()
+                    
+                    # تدمير العرض الثابت للخلية (يسمح بالتضييق الأفقي)
+                    tcW = tcPr.find(qn('w:tcW'))
+                    if tcW is not None:
+                        tcW.set(qn('w:type'), 'auto')
+
+                    # تصفير هوامش الخلية (Margins)
                     tcMar = tcPr.find(qn('w:tcMar'))
-                    if tcMar is not None:
-                        tcPr.remove(tcMar)
+                    if tcMar is not None: tcPr.remove(tcMar)
                     tcMar = OxmlElement('w:tcMar')
                     for attr in ['top', 'bottom']:
                         node = OxmlElement(f'w:{attr}')
@@ -531,59 +567,63 @@ CRITICAL RULES:
                         node.set(qn('w:type'), 'dxa')
                         tcMar.append(node)
                     tcPr.append(tcMar)
+
+                    # معالجة النصوص داخل الخلية
                     for p in cell.paragraphs:
                         clean_and_format_paragraph(p, is_table=True)
 
         for p in doc.paragraphs:
             clean_and_format_paragraph(p, is_table=False)
 
-        header_img_data = base64.b64decode(letterhead_b64)
-        header_img_stream = io.BytesIO(header_img_data)
-        
-        if not letterhead_on_all_pages:
-            section.different_first_page_header_footer = True
-            target_header = section.first_page_header
-        else:
-            target_header = section.header
+        # إضافة الرأسية إذا وُجدت
+        if letterhead_b64:
+            header_img_data = base64.b64decode(letterhead_b64)
+            header_img_stream = io.BytesIO(header_img_data)
             
-        if not target_header.paragraphs:
-            target_header.add_paragraph()
-        paragraph = target_header.paragraphs[0]
-        
-        run = paragraph.add_run()
-        shape = run.add_picture(header_img_stream, width=Inches(8.27), height=Inches(11.69))
-        
-        inline = shape._inline
-        anchor = OxmlElement('wp:anchor')
-        anchor.set('distT', '0'); anchor.set('distB', '0'); anchor.set('distL', '0'); anchor.set('distR', '0')
-        anchor.set('simplePos', '0'); anchor.set('relativeHeight', '0'); anchor.set('behindDoc', '1') 
-        anchor.set('locked', '0'); anchor.set('layoutInCell', '1'); anchor.set('allowOverlap', '1')
+            if not letterhead_on_all_pages:
+                section.different_first_page_header_footer = True
+                target_header = section.first_page_header
+            else:
+                target_header = section.header
+                
+            if not target_header.paragraphs:
+                target_header.add_paragraph()
+            paragraph = target_header.paragraphs[0]
+            
+            run = paragraph.add_run()
+            shape = run.add_picture(header_img_stream, width=Inches(8.27), height=Inches(11.69))
+            
+            inline = shape._inline
+            anchor = OxmlElement('wp:anchor')
+            anchor.set('distT', '0'); anchor.set('distB', '0'); anchor.set('distL', '0'); anchor.set('distR', '0')
+            anchor.set('simplePos', '0'); anchor.set('relativeHeight', '0'); anchor.set('behindDoc', '1') 
+            anchor.set('locked', '0'); anchor.set('layoutInCell', '1'); anchor.set('allowOverlap', '1')
 
-        simplePos = OxmlElement('wp:simplePos')
-        simplePos.set('x', '0'); simplePos.set('y', '0')
-        anchor.append(simplePos)
+            simplePos = OxmlElement('wp:simplePos')
+            simplePos.set('x', '0'); simplePos.set('y', '0')
+            anchor.append(simplePos)
 
-        positionH = OxmlElement('wp:positionH')
-        positionH.set('relativeFrom', 'page')
-        alignH = OxmlElement('wp:align'); alignH.text = 'center'
-        positionH.append(alignH); anchor.append(positionH)
-        
-        positionV = OxmlElement('wp:positionV')
-        positionV.set('relativeFrom', 'page')
-        alignV = OxmlElement('wp:align'); alignV.text = 'top'
-        positionV.append(alignV); anchor.append(positionV)
-        
-        anchor.append(inline.extent)
-        effectExtent = OxmlElement('wp:effectExtent')
-        effectExtent.set('l', '0'); effectExtent.set('t', '0'); effectExtent.set('r', '0'); effectExtent.set('b', '0')
-        anchor.append(effectExtent)
-        
-        anchor.append(OxmlElement('wp:wrapNone'))
-        anchor.append(inline.docPr)
-        anchor.append(OxmlElement('wp:cNvGraphicFramePr'))
-        anchor.append(inline.graphic)
-        
-        inline.getparent().replace(inline, anchor)
+            positionH = OxmlElement('wp:positionH')
+            positionH.set('relativeFrom', 'page')
+            alignH = OxmlElement('wp:align'); alignH.text = 'center'
+            positionH.append(alignH); anchor.append(positionH)
+            
+            positionV = OxmlElement('wp:positionV')
+            positionV.set('relativeFrom', 'page')
+            alignV = OxmlElement('wp:align'); alignV.text = 'top'
+            positionV.append(alignV); anchor.append(positionV)
+            
+            anchor.append(inline.extent)
+            effectExtent = OxmlElement('wp:effectExtent')
+            effectExtent.set('l', '0'); effectExtent.set('t', '0'); effectExtent.set('r', '0'); effectExtent.set('b', '0')
+            anchor.append(effectExtent)
+            
+            anchor.append(OxmlElement('wp:wrapNone'))
+            anchor.append(inline.docPr)
+            anchor.append(OxmlElement('wp:cNvGraphicFramePr'))
+            anchor.append(inline.graphic)
+            
+            inline.getparent().replace(inline, anchor)
 
         final_docx_stream = io.BytesIO()
         doc.save(final_docx_stream)
@@ -649,7 +689,7 @@ def magic_convert():
                 body_dir = "rtl" if is_arabic else "ltr"
                 full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
 <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 0; }} th, td {{ border: 1px solid #000; padding: 2px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
 </head><body dir="{body_dir}">{html_text}</body></html>"""
                 file_bytes = full_html.encode('utf-8')
 
@@ -712,7 +752,7 @@ CRITICAL RULES:
         body_dir = "rtl" if is_arabic else "ltr"
         full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 0; }} th, td {{ border: 1px solid #000; padding: 2px 4px !important; margin: 0; line-height: 1.1 !important; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; line-height: 1.2 !important; }}</style>
 </head><body dir="{body_dir}">{extracted_html}</body></html>"""
         
         final_bytes = full_html.encode('utf-8')
@@ -762,7 +802,7 @@ def translate_document():
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-- TABLES MUST COMPLY: `width: 100%; max-width: 100%; table-layout: fixed; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
+- TABLES MUST COMPLY: `width: 100%; max-width: 100%; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;`.
 - DYNAMIC TABLE COLUMN ORDER (CRITICAL): Since `<table>` is forced to `dir="ltr"`, the FIRST `<td>` in HTML renders on the FAR LEFT. 
   * For ALL ARABIC tables (regardless of content/headers): You MUST output the HTML columns in REVERSE ORDER. The logical first column (which belongs on the far right) MUST be the LAST `<td>` in your code.
   * For ALL FRENCH/ENGLISH tables: You MUST output the HTML columns in NORMAL ORDER. The logical first column (which belongs on the far left) MUST be the FIRST `<td>` in your code.
