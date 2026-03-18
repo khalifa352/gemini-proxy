@@ -66,11 +66,19 @@ def clean_html_output(raw_text):
     raw = re.sub(r'\s?contenteditable', '', raw, flags=re.IGNORECASE)
     return raw.strip()
 
+# ══════════════════════════════════════════════════════════
+# 🛡️ حقنة الجداول (لإجبار LibreOffice على رسم الحدود بوضوح)
+# ══════════════════════════════════════════════════════════
+def force_table_borders(html_text):
+    """هذه الدالة تعترض الـ HTML وتزرع خصائص الجداول الكلاسيكية بالقوة الجبرية"""
+    # إضافة حدود صريحة لوسم الجدول
+    html_text = re.sub(r'<table([^>]*)>', r'<table\1 border="1" cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; border: 1px solid black;">', html_text, flags=re.IGNORECASE)
+    # إضافة حدود صريحة للخلايا
+    html_text = re.sub(r'<th([^>]*)>', r'<th\1 style="border: 1px solid black; padding: 5px;">', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'<td([^>]*)>', r'<td\1 style="border: 1px solid black; padding: 5px;">', html_text, flags=re.IGNORECASE)
+    return html_text
 
-# ══════════════════════════════════════════════════════════
-# 🚀 Local LibreOffice Converter (Free & Native RTL Support)
-# الاعتماد الكلي على السيرفر المحلي بدون أي خدمات خارجية
-# ══════════════════════════════════════════════════════════
+
 # ══════════════════════════════════════════════════════════
 # 🚀 Local LibreOffice Converter (Free & Native RTL Support)
 # ══════════════════════════════════════════════════════════
@@ -84,7 +92,7 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             
             profile_dir = os.path.join(temp_dir, "lo_profile")
             
-            # 🌟 السحر هنا: تحديد الفلتر البرمجي الدقيق لـ LibreOffice لمنع خطأ no export filter
+            # الفلاتر البرمجية الدقيقة لـ LibreOffice
             filters = {
                 "docx": "docx:MS Word 2007 XML",
                 "xlsx": "xlsx:Calc MS Excel 2007 XML",
@@ -109,7 +117,6 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             ]
             
             process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
-            
             output_path = os.path.join(temp_dir, f"input.{output_ext}")
             
             if process.returncode == 0 and os.path.exists(output_path):
@@ -121,14 +128,12 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 error_msg = process.stderr.decode('utf-8', errors='ignore').strip()
                 if not error_msg:
                     error_msg = process.stdout.decode('utf-8', errors='ignore').strip() or "Unknown error"
-                
                 logger.error(f"❌ LibreOffice Failed! Code: {process.returncode}")
                 logger.error(f"❌ Error Details: {error_msg}")
                 return None, f"خطأ المحرك (Code {process.returncode}): {error_msg}"
     except Exception as e:
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None, f"استثناء المحرك: {str(e)}"
-
 
 
 def get_style_prompt(style, mode):
@@ -141,7 +146,8 @@ def get_style_prompt(style, mode):
 
 ⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
 1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer. Use `<table>` ONLY for true tabular data (invoices, price lists, data grids, schedules). NEVER put standard paragraphs, messages, letters, or general text inside tables.
-2. ENHANCED READABILITY (FONTS): Make the default text slightly larger and exceptionally clear. Use a baseline font size of 15px-16px for `<p>`, `<li>`, and `<span>`. Keep headings proportionately larger. Do not randomly shrink or enlarge fonts.
+2. NO DIV TABLES (CRITICAL): NEVER use `<div>`, `flexbox`, or CSS grid for tabular data or grids. You MUST use classical HTML `<table border="1">`, `<tr>`, `<td>`, `<th>`.
+3. ENHANCED READABILITY (FONTS): Make the default text slightly larger and exceptionally clear. Use a baseline font size of 15px-16px for `<p>`, `<li>`, and `<span>`. Keep headings proportionately larger. Do not randomly shrink or enlarge fonts.
 
 ⚠️ SMART SPACE UTILIZATION & NATURAL FLOW (ANTI-SQUISH RULE):
 1. EXTEND HORIZONTALLY: Use the full width of the page naturally. DO NOT artificially compress or squish the content. Let it breathe from left to right.
@@ -264,6 +270,7 @@ OUTPUT: Return raw HTML only."""
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
+
 @app.route("/modify", methods=["POST"])
 def modify():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
@@ -371,7 +378,7 @@ OUTPUT FORMAT:
 
 
 # ══════════════════════════════════════════════════════════
-# مسار تحويل HTML/PDF إلى Word (اعتماد كلي 100% على LibreOffice المجاني)
+# مسار تحويل HTML/PDF إلى Word (مع استخدام الذكاء الاصطناعي للـ PDF)
 # ══════════════════════════════════════════════════════════
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
@@ -381,11 +388,40 @@ def convert_to_word():
         pdf_b64 = data.get("pdf_base64", "")
         letterhead_b64 = data.get("letterhead_base64", "") 
         letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
+        
+        input_fmt = "html"
+
+        # 🚀 إذا كان الملف PDF ولم نرسل معه HTML، نجبره على المرور بجيميني أولاً لمنع ضياع الجداول
+        if pdf_b64 and not html_content:
+            logger.info("📄 Converting PDF to Word via AI Bridge first (To preserve tables)...")
+            gemini_bytes = base64.b64decode(pdf_b64)
+            
+            bridge_prompt = """You are an OCR and Document Extraction Engine.
+Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
+CRITICAL RULES:
+1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
+2. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
+3. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>`.
+4. NO MARKDOWN: Output strictly pure HTML code. Do not wrap in ```html."""
+            
+            contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
+            gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
+            
+            try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+            except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+            
+            extracted_html = clean_html_output(resp.text or "")
+            if not extracted_html:
+                return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الـ PDF."}), 500
+            
+            html_content = extracted_html
 
         if html_content:
             logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
 
-            # التنظيف الجراحي للـ HTML 
+            # تطبيق حقنة الجداول بالقوة الجبرية
+            html_content = force_table_borders(html_content)
+
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
@@ -397,7 +433,7 @@ def convert_to_word():
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>
@@ -412,23 +448,17 @@ def convert_to_word():
 </body>
 </html>"""
             file_bytes = full_html.encode('utf-8')
-            input_fmt = "html"
             
-        elif pdf_b64:
-            logger.info("📄 Converting PDF to Word...")
-            file_bytes = base64.b64decode(pdf_b64)
-            input_fmt = "pdf"
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        # 🚀 التحويل المجاني الخالص عبر LibreOffice
+        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط!
         raw_docx_bytes, err_msg = local_libreoffice_convert(file_bytes, input_fmt, "docx")
         
         if not raw_docx_bytes:
-            # هنا سيرسل السيرفر الخطأ الفعلي للتطبيق لكي تقرأه على الشاشة
             return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
 
-        if not letterhead_b64 or input_fmt == "pdf":
+        if not letterhead_b64:
             docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
@@ -613,11 +643,16 @@ def magic_convert():
         if (input_ext, output_ext) in direct_conversions and not extract_only:
             logger.info("⚡ Route 1: Direct LibreOffice Conversion (No AI needed)...")
             
+            # إذا كان الإدخال HTML، نقوم بتنظيفه وحقن الجداول
             if input_ext == "html":
                 html_text = file_bytes.decode('utf-8')
+                
+                # تطبيق حقنة الجداول بالقوة الجبرية
+                html_text = force_table_borders(html_text)
+
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
                 body_dir = "rtl" if is_arabic else "ltr"
-                full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
 <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
 </head><body dir="{body_dir}">{html_text}</body></html>"""
@@ -635,7 +670,7 @@ def magic_convert():
             else:
                 logger.warning(f"⚠️ Direct conversion failed: {err_msg}. Falling back to AI Route if applicable.")
 
-        # 🌟 المسار الثاني: مسار الذكاء الاصطناعي (تحويل PDF/Images إلى Word/Excel)
+        # 🌟 المسار الثاني: مسار الذكاء الاصطناعي (لضمان الجداول)
         logger.info("🧠 Route 2: AI OCR & Extraction Bridge...")
         gemini_bytes = file_bytes
         gemini_mime = "application/pdf"
@@ -650,7 +685,6 @@ def magic_convert():
         elif input_ext == "png": gemini_mime = "image/png"
 
         lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language. You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
-
         target_focus = "tables and grids format specifically for Excel" if output_ext == "xlsx" else "general document structure"
         
         bridge_prompt = f"""You are an elite OCR and Document Extraction Engine.
@@ -659,7 +693,7 @@ Your task is to precisely extract ALL content from the attached document and con
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 {lang_instruction}
-3. TABLES: Use proper `<table>`, `<tr>`, `<td>`, and `<th>` tags with `border="1"`. Ensure correct logical column order (Reverse order for RTL tables).
+3. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
 4. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>` to prevent RTL flipping.
 5. PURE HTML ONLY. Do not wrap in ```html."""
         
@@ -676,16 +710,19 @@ CRITICAL RULES:
         if extract_only or target_format == "html":
             return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
         
-        # 🌟 المسار الثالث: تحويل الـ HTML المستخرج إلى الصيغة النهائية المطلوبة
+        # 🌟 المسار الثالث: تجميع الكود وتحويله
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
+        
+        # تطبيق حقنة الجداول بالقوة الجبرية
+        extracted_html = force_table_borders(extracted_html)
+        
         body_dir = "rtl" if is_arabic else "ltr"
-        full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
+        full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
 </head><body dir="{body_dir}">{extracted_html}</body></html>"""
         
         final_bytes = full_html.encode('utf-8')
-        
         result_bytes, err_msg = local_libreoffice_convert(final_bytes, "html", output_ext)
         
         if not result_bytes:
@@ -698,11 +735,9 @@ CRITICAL RULES:
             "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
         })
 
-    # 🛑 هذا هو القفل المفقود الذي كان يسبب الخطأ
     except Exception as e:
         logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 
 # ══════════════════════════════════════════════════════════
@@ -808,7 +843,7 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
         models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -826,5 +861,3 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
-
-
