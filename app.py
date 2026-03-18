@@ -165,10 +165,16 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
 CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
     else:
-        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design with strong professional hierarchy.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
 ⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal and printable.
-TYPOGRAPHY: Dynamic sizes. Title bold centered."""
+TYPOGRAPHY & HIERARCHY:
+- Document Title: Bold, centered, font-size 22px-24px, with generous margin-bottom (15px) to create breathing space.
+- Section Headings (h2/h3): Bold, font-size 17px-18px, with a subtle thin underline (`border-bottom: 1.5px solid #333; padding-bottom: 4px; margin-top: 15px; margin-bottom: 8px;`) to create clean visual separation between sections. This underline is ONLY on headings, NOT on paragraphs.
+- Body text: 15px-16px, line-height 1.5 for readability.
+- Labels/Field names (like "الاسم:", "التاريخ:", "الموضوع:"): Use `font-weight:bold;` to distinguish them from their values.
+- Use consistent spacing: 12px between paragraphs, 18px before section headings.
+- Dates and reference numbers should be slightly smaller (13px-14px) and positioned cleanly at the top."""
 
     return f"{design_base}\n\n{global_rules}"
 
@@ -574,6 +580,20 @@ CRITICAL RULES:
                     rPr.remove(rBdr)
 
         for table in doc.tables:
+            # ══ إزالة الصفوف الفارغة الشبحية فوق العناوين ══
+            rows_to_remove = []
+            for row in table.rows:
+                all_empty = all(
+                    cell.text.strip() == "" and len(cell.paragraphs) <= 1
+                    for cell in row.cells
+                )
+                if all_empty:
+                    rows_to_remove.append(row)
+                else:
+                    break  # توقف عند أول صف يحتوي على محتوى
+            for row in rows_to_remove:
+                table._element.remove(row._tr)
+            
             table.autofit = True
             tblPr = table._element.tblPr
             if tblPr is not None:
