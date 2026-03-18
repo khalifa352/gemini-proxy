@@ -603,7 +603,6 @@ def magic_convert():
         logger.info(f"🔄 Magic Request: {input_ext.upper()} ➡️ {output_ext.upper()}")
 
         # 🌟 المسار الأول: التحويل المباشر السريع (بدون ذكاء اصطناعي - LibreOffice فقط)
-        # مثل: Word->PDF أو Excel->PDF أو HTML->Word/Excel
         direct_conversions = [
             ("docx", "pdf"), ("doc", "pdf"),
             ("xlsx", "pdf"), ("xls", "pdf"),
@@ -614,7 +613,6 @@ def magic_convert():
         if (input_ext, output_ext) in direct_conversions and not extract_only:
             logger.info("⚡ Route 1: Direct LibreOffice Conversion (No AI needed)...")
             
-            # إذا كان الإدخال HTML، نقوم بتنظيفه وضبط الهوامش أولاً
             if input_ext == "html":
                 html_text = file_bytes.decode('utf-8')
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
@@ -638,12 +636,10 @@ def magic_convert():
                 logger.warning(f"⚠️ Direct conversion failed: {err_msg}. Falling back to AI Route if applicable.")
 
         # 🌟 المسار الثاني: مسار الذكاء الاصطناعي (تحويل PDF/Images إلى Word/Excel)
-        # أو تحويل معقد مثل Word إلى Excel (يتطلب استخراج الجداول)
         logger.info("🧠 Route 2: AI OCR & Extraction Bridge...")
         gemini_bytes = file_bytes
         gemini_mime = "application/pdf"
         
-        # إذا كان الملف ليس PDF وصورة، نحوله لـ PDF أولاً ليقرأه Gemini
         if input_ext in ["docx", "doc", "xlsx", "xls", "pptx", "ppt"]:
             logger.info("🔄 Converting Document to PDF first via LibreOffice for AI Reading...")
             gemini_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, "pdf")
@@ -655,7 +651,6 @@ def magic_convert():
 
         lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language. You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
 
-        # بناء أمر الذكاء الاصطناعي بناءً على الصيغة المطلوبة
         target_focus = "tables and grids format specifically for Excel" if output_ext == "xlsx" else "general document structure"
         
         bridge_prompt = f"""You are an elite OCR and Document Extraction Engine.
@@ -678,7 +673,6 @@ CRITICAL RULES:
         if not extracted_html:
             return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
         
-        # إذا كان المطلوب مجرد استخراج نص للتطبيق
         if extract_only or target_format == "html":
             return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
         
@@ -703,6 +697,11 @@ CRITICAL RULES:
             "extension": output_ext,
             "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
         })
+
+    # 🛑 هذا هو القفل المفقود الذي كان يسبب الخطأ
+    except Exception as e:
+        logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
 
