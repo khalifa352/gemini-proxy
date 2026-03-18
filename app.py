@@ -67,13 +67,18 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول (الجدول الرسمي الممتد الكلاسيكي بدون ألوان)
+# 🛡️ حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
-    # إجبار الجدول على الامتداد الكامل 100% مع شكل كلاسيكي رسمي (حدود سوداء فقط)
-    html_text = html_text.replace("<table", "<table border='1' width='100%' cellpadding='5' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black; margin: 10px 0;' ")
-    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 5px; text-align: center; vertical-align: middle; background-color: transparent !important; color: black !important;' ")
-    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 5px; vertical-align: middle; background-color: transparent !important;' ")
+    # 1. إجبار الجدول على التنسيق النظيف المندمج لمنع الخطوط المزدوجة
+    html_text = html_text.replace("<table", "<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse; border-spacing:0; width:100%; border: 1px solid black; margin: 10px 0;' ")
+    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 4px; text-align: center; vertical-align: middle; color: black;' ")
+    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 4px; vertical-align: middle;' ")
+    
+    # 2. درع التنظيف: مسح أي صفوف فارغة (Empty Rows) أنشأها الذكاء الاصطناعي وتسبب الخانة الفارغة
+    html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*&nbsp;\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
+    
     return html_text
 
 # ══════════════════════════════════════════════════════════
@@ -145,20 +150,20 @@ def get_style_prompt(style, mode):
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
 1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
 2. DO NOT invent fake data, placeholders, or dummy text.
-3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document.
+3. DO NOT CREATE FAKE LETTERHEADS.
 4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures.
 
-⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
+⚠️ SMART HTML STRUCTURE & TABLE USAGE:
 1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer.
 2. NO DIV TABLES: You MUST use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
 3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-4. 🚫 NO EMPTY ROWS (DOUBLE LINES FIX): NEVER create empty `<tr>` rows, spacer rows, or blank `<th>`/`<td>` at the top of the table to simulate spacing or double lines. The table MUST start directly with the actual text headers.
-5. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي) at the bottom of tables, use the `colspan` attribute to merge empty cells nicely.
+4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers.
+5. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
 
 ⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`.
-- 🔄 TABLE COLUMN ORDER (FOOLPROOF RULE): The system automatically applies RTL. This means the FIRST `<td>` or `<th>` you write in your HTML code will automatically appear on the FAR RIGHT of the screen. Therefore, you MUST write the columns starting with the rightmost column first. DO NOT overthink it or reverse it again.
+- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns for Arabic. The system will handle RTL automatically.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
     if mode == "simulation":
@@ -172,7 +177,7 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
     design_base = ""
     if style == "modern":
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
-CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers, stylish accents for section headings."""
+CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
     else:
         design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
@@ -391,10 +396,10 @@ Your task is to precisely extract ALL content from the attached document and con
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
-3. TABLES & COLSPAN: Use proper `<table>`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` to merge empty cells nicely.
-4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or narrow blank cells above the table headers. Start the table directly with the actual headers.
-5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
-6. 🔄 COLUMN ORDER: Output HTML `<td>` tags in the exact visual order from Right-to-Left (First td = Far Right column).
+3. TABLES & COLSPAN: Use proper `<table>`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` nicely.
+4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer cells.
+5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`.
+6. 🔄 COLUMN ORDER: Extract columns exactly as they appear in their natural logical order without reversing them.
 7. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
 8. NO MARKDOWN: Output strictly pure HTML code."""
             
@@ -432,14 +437,13 @@ CRITICAL RULES:
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # 💡 الستايل الجديد (إخفاء المربعات الوهمية)
             full_html = f"""<html lang="ar" dir="{body_dir}">
 <head>
 <meta charset="utf-8">
 <style>
   * {{ font-family: 'Arial', sans-serif !important; }}
-  table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }}
-  th, td {{ border: 1px solid #000000; padding: 4px !important; margin: 0; line-height: 1.1 !important; vertical-align: middle !important; background-color: transparent !important; }}
+  table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }}
+  th, td {{ border: 1px solid #000000; padding: 4px !important; line-height: 1.1 !important; vertical-align: middle !important; }}
   p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}
 </style>
 </head>
@@ -477,7 +481,6 @@ CRITICAL RULES:
 
             pPr = paragraph._element.get_or_add_pPr()
             
-            # ✂️ حل المسافات العمودية
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -493,7 +496,6 @@ CRITICAL RULES:
                 spacing.set(qn('w:line'), '276') 
             spacing.set(qn('w:lineRule'), 'auto')
 
-            # 💡 إزالة حقنة (w:rtl) من الكلمات لمنع تخريب تنسيق التواريخ كـ 32/3/2023
             for run in paragraph.runs:
                 rPr = run._element.get_or_add_rPr()
                 
@@ -526,7 +528,7 @@ CRITICAL RULES:
                 tblW.set(qn('w:w'), '5000') 
                 tblW.set(qn('w:type'), 'pct')
 
-                # 💡 [الحل الجذري]: إجبار الجدول على الاتجاه العربي في الوورد ليمنع انعكاس الأعمدة
+                # 💡 [الحل الجذري المعتمد]: إجبار الجدول على الاتجاه العربي في الوورد ليمنع انعكاس الأعمدة
                 if is_arabic_doc:
                     bidiVisual = tblPr.find(qn('w:bidiVisual'))
                     if bidiVisual is None:
@@ -623,7 +625,7 @@ CRITICAL RULES:
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER
+# مسار MAGIC CONVERTER (المحول الشامل)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -677,7 +679,7 @@ def magic_convert():
                 body_dir = "rtl" if is_arabic_doc else "ltr"
                 
                 full_html = f"""<html lang="ar" dir="{body_dir}"><head><meta charset="utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; line-height: 1.1 !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; }}</style>
 </head><body>{html_text}</body></html>"""
                 file_bytes = full_html.encode('utf-8')
 
@@ -716,10 +718,11 @@ CRITICAL RULES:
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
 3. TABLES FOR GRIDS ONLY: Use `<table>` ONLY for actual tabular data (items, prices, schedules). Regular text, headers, and dates MUST be in `<p>` or `<div>`. NEVER put the whole document in a table.
 4. COLSPAN: For "Total" (الإجمالي) rows, use `colspan` elegantly.
-5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
-6. 🔄 COLUMN ORDER: Maintain the exact natural reading order. Do NOT manually reverse or flip table columns.
-7. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
-8. PURE HTML ONLY. Do not wrap in ```html."""
+5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` or `<th>` rows. Start directly with the text headers.
+6. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
+7. 🔄 COLUMN ORDER: Extract columns exactly as they appear in their natural logical order without reversing them.
+8. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
+9. PURE HTML ONLY. Do not wrap in ```html."""
         
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -743,7 +746,7 @@ CRITICAL RULES:
         body_dir = "rtl" if is_arabic_doc else "ltr"
         
         full_html = f"""<html lang="ar" dir="{body_dir}"><head><meta charset="utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; border: none !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; line-height: 1.1 !important; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; line-height: 1.1 !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}</style>
 </head><body>{extracted_html}</body></html>"""
         
         final_bytes = full_html.encode('utf-8')
