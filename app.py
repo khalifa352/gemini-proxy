@@ -97,7 +97,10 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             }
             lo_filter = filters.get(output_ext, output_ext)
             
+            # 🌟 استخدام xvfb-run لحل مشكلة (X11 error) جذرياً وإنشاء شاشة وهمية آمنة في الذاكرة
             command = [
+                'xvfb-run',
+                '-a', # البحث التلقائي عن شاشة وهمية متاحة
                 'libreoffice',
                 f'-env:UserInstallation=file://{profile_dir}',
                 '--headless',
@@ -112,11 +115,9 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 input_path
             ]
             
-            # 🌟 إجبار LibreOffice على إطفاء أي محاولة للرسم الجرافيكي وتقديم شاشة وهمية لمنع الانهيار
             env = os.environ.copy()
             env["SAL_USE_VCLPLUGIN"] = "gen"
             env["LC_ALL"] = "C.UTF-8"
-            env["DISPLAY"] = ":99"  # 🪄 السحر هنا لحل مشكلة (X11 error: Can't open display)
             
             process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, env=env)
             output_path = os.path.join(temp_dir, f"input.{output_ext}")
