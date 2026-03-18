@@ -112,10 +112,11 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 input_path
             ]
             
-            # 🌟 إجبار LibreOffice على إطفاء أي محاولة للرسم الجرافيكي لمنع الانهيار
+            # 🌟 إجبار LibreOffice على إطفاء أي محاولة للرسم الجرافيكي وتقديم شاشة وهمية لمنع الانهيار
             env = os.environ.copy()
             env["SAL_USE_VCLPLUGIN"] = "gen"
             env["LC_ALL"] = "C.UTF-8"
+            env["DISPLAY"] = ":99"  # 🪄 السحر هنا لحل مشكلة (X11 error: Can't open display)
             
             process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, env=env)
             output_path = os.path.join(temp_dir, f"input.{output_ext}")
@@ -853,3 +854,5 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
+
