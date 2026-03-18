@@ -67,17 +67,14 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول (لإجبار LibreOffice على رسم الحدود بوضوح)
+# 🛡️ حقنة الجداول (النسخة الآمنة لمنع انهيار الـ HTML)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
-    """هذه الدالة تعترض الـ HTML وتزرع خصائص الجداول الكلاسيكية بالقوة الجبرية"""
-    # إضافة حدود صريحة لوسم الجدول
-    html_text = re.sub(r'<table([^>]*)>', r'<table\1 border="1" cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; border: 1px solid black;">', html_text, flags=re.IGNORECASE)
-    # إضافة حدود صريحة للخلايا
-    html_text = re.sub(r'<th([^>]*)>', r'<th\1 style="border: 1px solid black; padding: 5px;">', html_text, flags=re.IGNORECASE)
-    html_text = re.sub(r'<td([^>]*)>', r'<td\1 style="border: 1px solid black; padding: 5px;">', html_text, flags=re.IGNORECASE)
+    """هذه الدالة تزرع خصائص الجداول الكلاسيكية بأمان دون تدمير الكود الأصلي"""
+    html_text = html_text.replace("<table", "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black;' ")
+    html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 5px; text-align: center;' ")
+    html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 5px;' ")
     return html_text
-
 
 # ══════════════════════════════════════════════════════════
 # 🚀 Local LibreOffice Converter (Free & Native RTL Support)
@@ -92,7 +89,6 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             
             profile_dir = os.path.join(temp_dir, "lo_profile")
             
-            # الفلاتر البرمجية الدقيقة لـ LibreOffice
             filters = {
                 "docx": "docx:MS Word 2007 XML",
                 "xlsx": "xlsx:Calc MS Excel 2007 XML",
@@ -116,7 +112,12 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 input_path
             ]
             
-            process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            # 🌟 إجبار LibreOffice على إطفاء أي محاولة للرسم الجرافيكي لمنع الانهيار
+            env = os.environ.copy()
+            env["SAL_USE_VCLPLUGIN"] = "gen"
+            env["LC_ALL"] = "C.UTF-8"
+            
+            process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, env=env)
             output_path = os.path.join(temp_dir, f"input.{output_ext}")
             
             if process.returncode == 0 and os.path.exists(output_path):
@@ -141,8 +142,9 @@ def get_style_prompt(style, mode):
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
 1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
 2. DO NOT invent fake data, placeholders, or dummy text.
-3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document. The user has their own letterhead tool. Start directly with the document title and content.
+3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document. Start directly with the document title and content.
 4. ONLY DRAFT IF EXPLICITLY ASKED: You may generate/write text ONLY if the user explicitly uses words like "write for me", "draft", "research", or asks you to create content from scratch based on a topic.
+5. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures. DO NOT simulate them, DO NOT describe them (e.g., do not write '[Logo]' or '[Stamp]'), and DO NOT extract their text. Extract ONLY the core body text, paragraphs, and data tables of the document.
 
 ⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
 1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer. Use `<table>` ONLY for true tabular data (invoices, price lists, data grids, schedules). NEVER put standard paragraphs, messages, letters, or general text inside tables.
@@ -391,7 +393,6 @@ def convert_to_word():
         
         input_fmt = "html"
 
-        # 🚀 إذا كان الملف PDF ولم نرسل معه HTML، نجبره على المرور بجيميني أولاً لمنع ضياع الجداول
         if pdf_b64 and not html_content:
             logger.info("📄 Converting PDF to Word via AI Bridge first (To preserve tables)...")
             gemini_bytes = base64.b64decode(pdf_b64)
@@ -400,9 +401,10 @@ def convert_to_word():
 Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
-2. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
-3. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>`.
-4. NO MARKDOWN: Output strictly pure HTML code. Do not wrap in ```html."""
+2. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures. DO NOT simulate or describe them. Extract ONLY the core content and tables.
+3. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
+4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>`.
+5. NO MARKDOWN: Output strictly pure HTML code. Do not wrap in ```html."""
             
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -419,7 +421,6 @@ CRITICAL RULES:
         if html_content:
             logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
 
-            # تطبيق حقنة الجداول بالقوة الجبرية
             html_content = force_table_borders(html_content)
 
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
@@ -452,7 +453,6 @@ CRITICAL RULES:
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط!
         raw_docx_bytes, err_msg = local_libreoffice_convert(file_bytes, input_fmt, "docx")
         
         if not raw_docx_bytes:
@@ -604,14 +604,13 @@ def magic_convert():
         data = request.json
         file_b64 = data.get("fileBase64")
         mime_type = data.get("mimeType", "")
-        target_format = data.get("targetFormat", "word") # word, excel, pdf, html
-        is_arabic = data.get("isArabic", True) # افتراضياً نعم لدعم لغتنا
+        target_format = data.get("targetFormat", "word")
+        is_arabic = data.get("isArabic", True)
         extract_only = data.get("extractOnly", False)  
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
 
-        # 1️⃣ تحديد صيغة الإدخال
         mime_lower = mime_type.lower()
         input_ext = "pdf"
         if "html" in mime_lower: input_ext = "html"
@@ -623,7 +622,6 @@ def magic_convert():
         
         file_bytes = base64.b64decode(file_b64)
         
-        # 2️⃣ تحديد صيغة الإخراج
         output_ext = "docx"
         if target_format == "excel": output_ext = "xlsx"
         elif target_format == "powerpoint": output_ext = "pptx"
@@ -632,7 +630,6 @@ def magic_convert():
 
         logger.info(f"🔄 Magic Request: {input_ext.upper()} ➡️ {output_ext.upper()}")
 
-        # 🌟 المسار الأول: التحويل المباشر السريع (بدون ذكاء اصطناعي - LibreOffice فقط)
         direct_conversions = [
             ("docx", "pdf"), ("doc", "pdf"),
             ("xlsx", "pdf"), ("xls", "pdf"),
@@ -643,13 +640,9 @@ def magic_convert():
         if (input_ext, output_ext) in direct_conversions and not extract_only:
             logger.info("⚡ Route 1: Direct LibreOffice Conversion (No AI needed)...")
             
-            # إذا كان الإدخال HTML، نقوم بتنظيفه وحقن الجداول
             if input_ext == "html":
                 html_text = file_bytes.decode('utf-8')
-                
-                # تطبيق حقنة الجداول بالقوة الجبرية
                 html_text = force_table_borders(html_text)
-
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
                 body_dir = "rtl" if is_arabic else "ltr"
                 full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
@@ -670,7 +663,6 @@ def magic_convert():
             else:
                 logger.warning(f"⚠️ Direct conversion failed: {err_msg}. Falling back to AI Route if applicable.")
 
-        # 🌟 المسار الثاني: مسار الذكاء الاصطناعي (لضمان الجداول)
         logger.info("🧠 Route 2: AI OCR & Extraction Bridge...")
         gemini_bytes = file_bytes
         gemini_mime = "application/pdf"
@@ -692,10 +684,11 @@ Your task is to precisely extract ALL content from the attached document and con
 
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
+2. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures. DO NOT simulate or describe them. Extract ONLY the core content and tables.
 {lang_instruction}
-3. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
-4. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>` to prevent RTL flipping.
-5. PURE HTML ONLY. Do not wrap in ```html."""
+4. TABLES: Use proper `<table border="1">`, `<tr>`, `<td>`, and `<th>` tags.
+5. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>` to prevent RTL flipping.
+6. PURE HTML ONLY. Do not wrap in ```html."""
         
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -710,10 +703,8 @@ CRITICAL RULES:
         if extract_only or target_format == "html":
             return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
         
-        # 🌟 المسار الثالث: تجميع الكود وتحويله
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
         
-        # تطبيق حقنة الجداول بالقوة الجبرية
         extracted_html = force_table_borders(extracted_html)
         
         body_dir = "rtl" if is_arabic else "ltr"
@@ -781,6 +772,7 @@ YOUR MISSION:
 1. Clone the exact layout, structure, and tables of the provided document image.
 2. TRANSLATE all text into {target_language} with high professional accuracy. Do not act like a basic machine translator; use correct legal/official terminology.
 3. DO NOT invent fake data, logos, or headers. Translate exactly what is there.
+4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any original letterheads, footers, logos, stamps, and signatures. DO NOT translate or simulate them. Extract only the core body and tables.
 {bidi_rules}
 {orientation_instruction}
 TECHNICAL RULES:
