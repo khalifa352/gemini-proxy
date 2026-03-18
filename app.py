@@ -146,19 +146,20 @@ def get_style_prompt(style, mode):
 1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
 2. DO NOT invent fake data, placeholders, or dummy text.
 3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document. Start directly with the document title and content.
-4. ONLY DRAFT IF EXPLICITLY ASKED: You may generate/write text ONLY if the user explicitly uses words like "write for me", "draft", "research", or asks you to create content from scratch based on a topic.
-5. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures. DO NOT simulate them, DO NOT describe them (e.g., do not write '[Logo]' or '[Stamp]'), and DO NOT extract their text. Extract ONLY the core body text, paragraphs, and data tables of the document.
+4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures. DO NOT simulate them, DO NOT describe them (e.g., do not write '[Logo]' or '[Stamp]'), and DO NOT extract their text. Extract ONLY the core body text, paragraphs, and data tables of the document.
 
 ⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
 1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer. Use `<table>` ONLY for true tabular data. NEVER put standard paragraphs inside tables.
 2. NO DIV TABLES (CRITICAL): NEVER use `<div>`, `flexbox`, or CSS grid for tabular data. You MUST use classical HTML `<table border="1" width="100%">`, `<tr>`, `<td>`, `<th>`.
-3. ENHANCED READABILITY (FONTS): Make the default text slightly larger and exceptionally clear. Use a baseline font size of 15px-16px.
+3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
+4. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي) at the bottom of tables, you MUST use the `colspan` attribute to merge empty cells on the right, so the word "Total" aligns nicely, and the amount aligns directly under the numbers column.
+5. ENHANCED READABILITY (FONTS): Make the default text slightly larger and exceptionally clear. Use a baseline font size of 15px-16px.
 
 ⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
 - French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-- TABLE COLUMN ORDER: Output HTML columns in their NATURAL logical order exactly as they appear in the original document. DO NOT manually reverse the columns for Arabic. The system will handle the RTL direction natively.
+- 🔄 TABLE COLUMN ORDER (CRITICAL FIX): For Arabic tables, you MUST write the HTML `<td>` elements in the EXACT visual reading order from RIGHT to LEFT. The first `<td>` in your HTML code must be the column that appears on the FAR RIGHT of the page. DO NOT overthink it. DO NOT manually reverse them.
 - NUMBER ANTI-REVERSAL (CRITICAL): ALL numbers, prices, quantities, dates, and spaced digits (e.g., "250 000") MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`. This is mandatory to prevent RTL flipping inside tables.
 - FILL-IN-THE-BLANK / PUNCTUATION: MS Word DOES NOT support `display: flex`. NEVER use flexbox for dotted lines or signatures. You MUST use standard text dots/underscores inside a simple paragraph. Example: `<p dir="rtl" style="text-align:right;">الاسم: ........................................</p>`. DO NOT use nested divs or borders for empty lines.
 """
@@ -175,7 +176,6 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
 CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers, stylish accents for section headings."""
     else:
-        # 💡 الحل الجذري للخطوط العمودية المزعجة والجداول الرسمية
         design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
 ⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table border="1" style="width:100%;">` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
@@ -392,10 +392,12 @@ def convert_to_word():
 Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
-2. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
-3. TABLES: Use proper `<table border="1" width="100%">`, `<tr>`, `<td>`, and `<th>` tags. NO background colors. Output columns in NATURAL logical order.
-4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>`.
-5. NO MARKDOWN: Output strictly pure HTML code. Do not wrap in ```html."""
+2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
+3. TABLES & COLSPAN: Use proper `<table border="1" width="100%">`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` to merge empty cells nicely.
+4. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
+5. 🔄 COLUMN ORDER: Output HTML `<td>` tags in the exact visual order from Right-to-Left (First td = Far Right column).
+6. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
+7. NO MARKDOWN: Output strictly pure HTML code."""
             
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -432,7 +434,7 @@ CRITICAL RULES:
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # 💡 التغليف البسيط: نعتمد على الاتجاه الديناميكي لتنظيم الوورد
+            # 💡 التغليف البسيط (CloudConvert Style): نعتمد على الاتجاه الديناميكي + إخفاء المربعات الوهمية (Ghost Boxes)
             full_html = f"""<html lang="ar" dir="{body_dir}">
 <head>
 <meta charset="utf-8">
@@ -440,7 +442,7 @@ CRITICAL RULES:
   * {{ font-family: 'Arial', sans-serif !important; }}
   table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }}
   th, td {{ border: 1px solid #000000; padding: 4px !important; margin: 0; line-height: 1.1 !important; vertical-align: middle !important; background-color: transparent !important; }}
-  p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; line-height: 1.2 !important; }}
+  p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}
 </style>
 </head>
 <body>
@@ -676,7 +678,7 @@ def magic_convert():
                 body_dir = "rtl" if is_arabic_doc else "ltr"
                 
                 full_html = f"""<html lang="ar" dir="{body_dir}"><head><meta charset="utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; }}</style>
 </head><body>{html_text}</body></html>"""
                 file_bytes = full_html.encode('utf-8')
 
@@ -713,11 +715,13 @@ Your task is to precisely extract ALL content from the attached document and con
 
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
-2. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures. DO NOT simulate or describe them. Extract ONLY the core content and tables.
+2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
 {lang_instruction}
-4. TABLES: Use proper `<table border="1" width="100%">`, `<tr>`, `<td>`, and `<th>` tags. NO BACKGROUND COLORS. Output HTML columns in their NATURAL logical order.
-5. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>` to prevent RTL flipping.
-6. PURE HTML ONLY. Do not wrap in ```html."""
+4. TABLES & COLSPAN: Use proper `<table border="1" width="100%">`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` to merge empty cells elegantly.
+5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
+6. 🔄 COLUMN ORDER: Output HTML `<td>` tags in the exact visual order from Right-to-Left (First td = Far Right column).
+7. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
+8. PURE HTML ONLY. Do not wrap in ```html."""
         
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -744,7 +748,7 @@ CRITICAL RULES:
         body_dir = "rtl" if is_arabic_doc else "ltr"
         
         full_html = f"""<html lang="ar" dir="{body_dir}"><head><meta charset="utf-8">
-<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; line-height: 1.1 !important; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; line-height: 1.2 !important; }}</style>
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; margin: 10px 0; width: 100% !important; }} th, td {{ border: 1px solid #000; padding: 4px !important; margin: 0; line-height: 1.1 !important; background-color: transparent !important; }} p, h1, h2, h3, h4, h5, h6, div, span {{ margin: 0; padding: 0; border: none !important; background: transparent !important; line-height: 1.2 !important; }}</style>
 </head><body>{extracted_html}</body></html>"""
         
         final_bytes = full_html.encode('utf-8')
@@ -865,7 +869,7 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
         models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
