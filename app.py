@@ -55,7 +55,7 @@ def call_gemini(model, contents, config, timeout):
 
 def clean_html_output(raw_text):
     raw = raw_text.strip()
-    if raw.startswith("`" * 3):
+    if raw.startswith("`" * 3): 
         raw = re.sub(r"^`{3}(?:html|xml)?\n?", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\n?`{3}$", "", raw)
     div_match = re.search(r'<div[^>]*xmlns="http://www.w3.org/1999/xhtml"[^>]*>(.*?)</div>\s*</foreignObject>', raw, re.DOTALL)
@@ -67,7 +67,7 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول 
+# 🛡️ حقنة الجداول
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
     html_text = html_text.replace("<table", "<table border='1' width='100%' cellpadding='4' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black; margin: 10px 0;' ")
@@ -81,9 +81,8 @@ def force_table_borders(html_text):
 def strip_ghost_boxes(html_text):
     """Remove border, outline, box-shadow from non-table elements (div, p, span, h1-h6)
     to prevent LibreOffice from rendering ghost boxes in Word export."""
-    
     NON_TABLE_TAGS = r'(div|p|span|h[1-6]|section|article|header|footer|main|nav)'
-    
+
     def clean_style_attr(m):
         full_tag = m.group(0)
         style_match = re.search(r'style="([^"]*)"', full_tag, re.IGNORECASE)
@@ -98,14 +97,14 @@ def strip_ghost_boxes(html_text):
         new_style = re.sub(r'box-shadow\s*:[^;"]*;?', '', new_style, flags=re.IGNORECASE)
         new_style = re.sub(r';\s*;', ';', new_style).strip().rstrip(';')
         return full_tag.replace(style_match.group(0), f'style="{new_style}"')
-    
+
     html_text = re.sub(
         rf'<{NON_TABLE_TAGS}\b[^>]*style="[^"]*"[^>]*>',
         clean_style_attr,
         html_text,
         flags=re.IGNORECASE
     )
-    
+
     # Also strip standalone border HTML attributes on non-table elements
     html_text = re.sub(
         rf'(<{NON_TABLE_TAGS}\b[^>]*)\s+border=["\'][^"\']*["\']',
@@ -113,7 +112,24 @@ def strip_ghost_boxes(html_text):
         html_text,
         flags=re.IGNORECASE
     )
+
+    return html_text
+
+# ══════════════════════════════════════════════════════════
+# 🧹 تنظيف الصفوف الفارغة من الجداول (العلاج السحري للخانة العلوية)
+# ══════════════════════════════════════════════════════════
+def clean_empty_table_rows(html_text):
+    """إزالة أي صفوف أو خلايا جدول فارغة تماماً من الـ HTML لمنع ظهور خانات شبحية فوق العناوين"""
+    # يبحث عن <tr> يحتوي فقط على <td> أو <th> فارغة أو تحتوي على مسافات أو &nbsp;
+    row_pattern = re.compile(r'<tr[^>]*>\s*(?:<t[dh][^>]*>\s*(?:&nbsp;|\s|<br\s*/?>|&#160;)*\s*</t[dh]>\s*)+</tr>', re.IGNORECASE)
+    prev_html = ""
+    while html_text != prev_html:
+        prev_html = html_text
+        html_text = row_pattern.sub('', html_text)
     
+    # إزالة <thead> أو <tbody> إذا أصبحت فارغة تماماً
+    html_text = re.sub(r'<thead[^>]*>\s*</thead>', '', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'<tbody[^>]*>\s*</tbody>', '', html_text, flags=re.IGNORECASE)
     return html_text
 
 def has_arabic(text):
@@ -122,7 +138,7 @@ def has_arabic(text):
 def get_style_prompt(style, mode):
     global_rules = """
 ⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
-1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
+1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML.
 2. DO NOT invent fake data, placeholders, or dummy text.
 3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document.
 4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures.
@@ -146,7 +162,7 @@ def get_style_prompt(style, mode):
 - 🔴 TABLE HEADER ORDER (CRITICAL — DO NOT REVERSE):
   The `<table>` uses `dir="ltr"`, which means the FIRST `<th>` in code appears on the LEFT side visually.
   For an Arabic RTL document where the reader reads right-to-left, the rightmost column should be LAST in HTML code.
-  Example: If the visual table reads right-to-left as [المرجع | الوصف | الكمية | السعر | المجموع], 
+  Example: If the visual table reads right-to-left as [المرجع | الوصف | الكمية | السعر | المجموع],
   then in HTML write: `<th>المجموع</th><th>السعر</th><th>الكمية</th><th>الوصف</th><th>المرجع</th>`.
   This ensures the browser renders المرجع on the right (as expected in Arabic reading order).
   ⚠️ NEVER reverse this logic. NEVER put the first Arabic column as the first <th>.
@@ -188,7 +204,6 @@ def detect_document_type(user_msg):
         if kw in msg_lower: return "multi_page"
     return "auto"
 
-
 # ══════════════════════════════════════════════════════════
 # 🚀 Local LibreOffice Converter
 # ══════════════════════════════════════════════════════════
@@ -199,7 +214,7 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             input_path = os.path.join(temp_dir, f"input.{input_ext}")
             with open(input_path, 'wb') as f:
                 f.write(file_bytes)
-            
+
             profile_dir = os.path.join(temp_dir, "lo_profile")
             
             filters = {
@@ -249,7 +264,6 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None, f"استثناء المحرك: {str(e)}"
 
-
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
@@ -297,28 +311,28 @@ TECHNICAL RULES:
 2. NO BORDERS AROUND DOCUMENT.
 3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
 OUTPUT: Return raw HTML only."""
-
+   
         contents = [user_msg] if user_msg else ["Create a formal document."]
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         if letterhead_b64:
             contents.append("Ensure layout fits empty space below this letterhead.")
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
-
+   
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
-
+   
         try:
             resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
-
+   
         clean_html = clean_html_output(resp.text or "")
         logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size})")
         return jsonify({"response": clean_html})
+        
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 @app.route("/modify", methods=["POST"])
 def modify():
@@ -350,21 +364,21 @@ OUTPUT FORMAT:
 [HTML]
 (ضع هنا كود الـ HTML المعدل كاملاً)
 [/HTML]"""
-
+   
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         cts = [f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."]
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
-
+   
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
-
+   
         text = resp.text or ""
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-
+   
         if html_match:
             new_inner = html_match.group(1).strip()
             message = msg_match.group(1).strip() if msg_match else "تم التعديل بنجاح ✨"
@@ -372,12 +386,12 @@ OUTPUT FORMAT:
             new_inner = clean_html_output(text)
             new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
             message = "تم التعديل بنجاح ✨"
-
+   
         return jsonify({"response": new_inner, "message": message})
+        
     except Exception as e:
         logger.error(f"Modify Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 @app.route("/format", methods=["POST"])
 def smart_format():
@@ -398,19 +412,19 @@ OUTPUT FORMAT:
 [HTML]
 (ضع هنا كود الـ HTML المنسق كاملاً)
 [/HTML]"""
-
+   
         cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
-
+   
         try:
             resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
-
+   
         text = resp.text or ""
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-
+   
         if html_match:
             new_inner = html_match.group(1).strip()
             message = msg_match.group(1).strip() if msg_match else "تم التنسيق ✨"
@@ -418,16 +432,16 @@ OUTPUT FORMAT:
             new_inner = clean_html_output(text)
             new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
             message = "تم التنسيق ✨"
-
+   
         logger.info("✅ Document Smartly Formatted")
         return jsonify({"response": new_inner, "message": message})
+        
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
-
 # ══════════════════════════════════════════════════════════
-# مسار تحويل HTML/PDF إلى Word 
+# مسار تحويل HTML/PDF إلى Word
 # ══════════════════════════════════════════════════════════
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
@@ -435,9 +449,9 @@ def convert_to_word():
         data = request.json
         html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
-        letterhead_b64 = data.get("letterhead_base64", "") 
+        letterhead_b64 = data.get("letterhead_base64", "")
         letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
-        
+
         input_fmt = "html"
 
         if pdf_b64 and not html_content:
@@ -455,7 +469,7 @@ CRITICAL RULES:
 6. 🔴 TABLE HEADER ORDER: Output `<th>` cells in the SAME left-to-right order as they visually appear. The table uses `dir="ltr"`. DO NOT reverse or flip table columns yourself.
 7. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
 8. NO MARKDOWN: Output strictly pure HTML code."""
-            
+   
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
@@ -467,12 +481,13 @@ CRITICAL RULES:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الـ PDF."}), 500
             
             html_content = extracted_html
-
+   
         if html_content:
             logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
-
-            # 🧹 تنظيف الحدود الشبحية أولاً ثم حقن حدود الجداول
+   
+            # 🧹 تنظيف الحدود الشبحية، والصفوف الفارغة، ثم حقن حدود الجداول
             html_content = strip_ghost_boxes(html_content)
+            html_content = clean_empty_table_rows(html_content)
             html_content = force_table_borders(html_content)
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
             
@@ -481,7 +496,7 @@ CRITICAL RULES:
             
             is_arabic_doc = has_arabic(html_content)
             body_dir = "rtl" if is_arabic_doc else "ltr"
-
+   
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
@@ -491,7 +506,7 @@ CRITICAL RULES:
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
-
+   
             full_html = f"""<html lang="ar" dir="{body_dir}">
 <head>
 <meta charset="utf-8">
@@ -508,7 +523,7 @@ CRITICAL RULES:
 </body>
 </html>"""
             file_bytes = full_html.encode('utf-8')
-            
+
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
@@ -518,7 +533,7 @@ CRITICAL RULES:
             return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
 
         # ══════════════════════════════════════════════════════════
-        # معالجة الوورد — إزالة الحدود الشبحية + ضبط الخطوط
+        # معالجة الوورد — إزالة الحدود الشبحية + ضبط الخطوط + إزالة الخانات الفارغة
         # ══════════════════════════════════════════════════════════
         logger.info("💉 Local Processing: Deep XML Fixes for Fonts, Tables & Ghost Box Removal...")
         doc_stream = io.BytesIO(raw_docx_bytes)
@@ -580,17 +595,22 @@ CRITICAL RULES:
                     rPr.remove(rBdr)
 
         for table in doc.tables:
-            # ══ إزالة الصفوف الفارغة الشبحية فوق العناوين ══
+            # ══ إزالة الصفوف الفارغة الشبحية فوق العناوين (بدقة عالية) ══
             rows_to_remove = []
             for row in table.rows:
-                all_empty = all(
-                    cell.text.strip() == "" and len(cell.paragraphs) <= 1
-                    for cell in row.cells
-                )
+                all_empty = True
+                for cell in row.cells:
+                    # تنظيف شامل للمسافات بأنواعها للتحقق من فراغ الخلية فعلياً
+                    clean_text = cell.text.replace('\xa0', '').replace('\u200b', '').strip()
+                    if clean_text != "" or len(cell.paragraphs) > 1:
+                        all_empty = False
+                        break
+                
                 if all_empty:
                     rows_to_remove.append(row)
                 else:
                     break  # توقف عند أول صف يحتوي على محتوى
+            
             for row in rows_to_remove:
                 table._element.remove(row._tr)
             
@@ -696,7 +716,6 @@ CRITICAL RULES:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
-
 # ══════════════════════════════════════════════════════════
 # مسار MAGIC CONVERTER
 # ══════════════════════════════════════════════════════════
@@ -708,7 +727,7 @@ def magic_convert():
         mime_type = data.get("mimeType", "")
         target_format = data.get("targetFormat", "word")
         is_arabic = data.get("isArabic", True)
-        extract_only = data.get("extractOnly", False)  
+        extract_only = data.get("extractOnly", False)
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
@@ -745,6 +764,7 @@ def magic_convert():
             if input_ext == "html":
                 html_text = file_bytes.decode('utf-8')
                 html_text = strip_ghost_boxes(html_text)
+                html_text = clean_empty_table_rows(html_text)
                 html_text = force_table_borders(html_text)
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
                 
@@ -813,6 +833,7 @@ CRITICAL RULES:
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
         
         extracted_html = strip_ghost_boxes(extracted_html)
+        extracted_html = clean_empty_table_rows(extracted_html)
         extracted_html = force_table_borders(extracted_html)
         extracted_html = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', extracted_html)
         
@@ -839,7 +860,6 @@ CRITICAL RULES:
     except Exception as e:
         logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 # ══════════════════════════════════════════════════════════
 # مسار TRANSLATE DOCUMENT
@@ -872,11 +892,11 @@ def translate_document():
 - 🔴 TABLE HEADER ORDER (CRITICAL): Output `<th>` cells in the SAME left-to-right order as they visually appear. The table uses `dir="ltr"`. DO NOT reverse or flip table columns yourself.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
-
+  
         prompt = f"""You are an Expert Professional Translator and Strict Document Formatter.
 YOUR MISSION:
 1. Clone the exact layout, structure, and tables of the provided document image.
-2. TRANSLATE all text into {target_language} with high professional accuracy. 
+2. TRANSLATE all text into {target_language} with high professional accuracy.
 3. DO NOT invent fake data, logos, or headers. Translate exactly what is there.
 4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any original letterheads, footers, logos, stamps, and signatures.
 5. 📊 INVOICE TOTALS (COLSPAN): For summary/total rows: use `colspan` to merge preceding columns, so the total label + value appear ONLY under the amount column. Merged label cells have `border:none`.
@@ -886,27 +906,27 @@ TECHNICAL RULES:
 1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. NO `<svg>`, `<html>`, `<body>`.
 2. NO BORDERS AROUND DOCUMENT.
 OUTPUT: Return raw HTML only."""
-
+   
         contents = [f"Translate this document to {target_language} while keeping the exact layout."]
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرفاق المستند"}), 400
-
+   
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
-
+   
         try:
             resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
-
+   
         clean_html = clean_html_output(resp.text or "")
         logger.info(f"✅ Generated Translation HTML (Target: {target_language})")
         return jsonify({"response": clean_html})
+        
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e)}), 500
-
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
@@ -941,7 +961,7 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
         models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -959,3 +979,5 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
+
