@@ -71,6 +71,9 @@ def clean_html_output(raw_text):
 # 🚀 Local LibreOffice Converter (Free & Native RTL Support)
 # الاعتماد الكلي على السيرفر المحلي بدون أي خدمات خارجية
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# 🚀 Local LibreOffice Converter (Free & Native RTL Support)
+# ══════════════════════════════════════════════════════════
 def local_libreoffice_convert(file_bytes, input_ext, output_ext):
     logger.info(f"🖥️ Local LibreOffice: Converting {input_ext.upper()} to {output_ext.upper()}...")
     try:
@@ -79,10 +82,17 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             with open(input_path, 'wb') as f:
                 f.write(file_bytes)
             
-            # إنشاء مسار آمن لبروفايل المستخدم الخاص بـ LibreOffice لمنع التعارض في السيرفر
             profile_dir = os.path.join(temp_dir, "lo_profile")
             
-            # الأوامر القوية لتشغيل LibreOffice في بيئة الخوادم بأمان تام
+            # 🌟 السحر هنا: تحديد الفلتر البرمجي الدقيق لـ LibreOffice لمنع خطأ no export filter
+            filters = {
+                "docx": "docx:MS Word 2007 XML",
+                "xlsx": "xlsx:Calc MS Excel 2007 XML",
+                "pptx": "pptx:Impress MS PowerPoint 2007 XML",
+                "pdf": "pdf"
+            }
+            lo_filter = filters.get(output_ext, output_ext)
+            
             command = [
                 'libreoffice',
                 f'-env:UserInstallation=file://{profile_dir}',
@@ -93,7 +103,7 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 '--nofirststartwizard',
                 '--nologo',
                 '--norestore',
-                '--convert-to', output_ext,
+                '--convert-to', lo_filter,
                 '--outdir', temp_dir,
                 input_path
             ]
@@ -108,18 +118,17 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 logger.info("✅ Local LibreOffice: Conversion successful!")
                 return result_bytes, None
             else:
-                # اصطياد رسالة الخطأ الحقيقية لإرسالها للتطبيق
                 error_msg = process.stderr.decode('utf-8', errors='ignore').strip()
                 if not error_msg:
                     error_msg = process.stdout.decode('utf-8', errors='ignore').strip() or "Unknown error"
                 
                 logger.error(f"❌ LibreOffice Failed! Code: {process.returncode}")
                 logger.error(f"❌ Error Details: {error_msg}")
-                
                 return None, f"خطأ المحرك (Code {process.returncode}): {error_msg}"
     except Exception as e:
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None, f"استثناء المحرك: {str(e)}"
+
 
 
 def get_style_prompt(style, mode):
