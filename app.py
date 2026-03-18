@@ -69,6 +69,7 @@ def clean_html_output(raw_text):
 
 # ══════════════════════════════════════════════════════════
 # 🚀 Local LibreOffice Converter (Free & Native RTL Support)
+# الاعتماد الكلي على السيرفر المحلي بدون أي خدمات خارجية
 # ══════════════════════════════════════════════════════════
 def local_libreoffice_convert(file_bytes, input_ext, output_ext):
     logger.info(f"🖥️ Local LibreOffice: Converting {input_ext.upper()} to {output_ext.upper()}...")
@@ -78,7 +79,7 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             with open(input_path, 'wb') as f:
                 f.write(file_bytes)
             
-            # Command to run LibreOffice in headless mode
+            # أمر تشغيل LibreOffice في الخلفية
             process = subprocess.run([
                 'libreoffice', '--headless', '--convert-to', output_ext,
                 input_path, '--outdir', temp_dir
@@ -97,217 +98,6 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
     except Exception as e:
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None
-
-
-# ══════════════════════════════════════════════════════════
-# CloudConvert API — PDF/HTML to Word (DOCX)
-# ══════════════════════════════════════════════════════════
-
-def cloudconvert_pdf_to_word(file_bytes, input_format="pdf"):
-    import urllib.request
-    import urllib.error
-    import urllib.parse
-
-    raw_api_key = os.environ.get("CLOUDCONVERT_API_KEY")
-    if not raw_api_key:
-        raise ValueError("CLOUDCONVERT_API_KEY غير مُعرّف في متغيرات البيئة")
-
-    api_key = raw_api_key.strip().replace('\n', '').replace('\r', '').replace(' ', '')
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-
-    logger.info(f"⚙️ CloudConvert: Creating Job (Input: {input_format.upper()})...")
-    job_payload = {
-        "tasks": {
-            "import-it": {"operation": "import/upload"},
-            "convert-it": {"operation": "convert", "input_format": input_format, "output_format": "docx", "input": ["import-it"]},
-            "export-it": {"operation": "export/url", "input": ["convert-it"]}
-        }
-    }
-
-    try:
-        req = urllib.request.Request("https://api.cloudconvert.com/v2/jobs", data=json.dumps(job_payload).encode('utf-8'), headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            job_data = json.loads(resp.read().decode('utf-8'))['data']
-        job_id = job_data['id']
-        upload_task = next(t for t in job_data['tasks'] if t['name'] == 'import-it')
-        upload_url = upload_task['result']['form']['url']
-        upload_params = upload_task['result']['form']['parameters']
-    except Exception as e:
-        raise ValueError(f"فشل بدء مهمة التحويل مع CloudConvert: {str(e)}")
-
-    logger.info(f"📤 CloudConvert: Uploading {input_format.upper()}...")
-    try:
-        boundary = f"----CloudConvertBoundary{int(time.time() * 1000)}"
-        body = b""
-        for k, v in upload_params.items():
-            body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
-        
-        filename = b"document.pdf" if input_format == "pdf" else b"document.html"
-        content_type = b"application/pdf" if input_format == "pdf" else b"text/html"
-
-        body += f"--{boundary}\r\n".encode()
-        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + b"\"\r\n"
-        body += b"Content-Type: " + content_type + b"\r\n\r\n" + file_bytes + b"\r\n"
-        body += f"--{boundary}--\r\n".encode()
-
-        upload_req = urllib.request.Request(upload_url, data=body, method='POST')
-        upload_req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
-        with urllib.request.urlopen(upload_req, timeout=60) as resp:
-            pass
-        logger.info(f"✅ {input_format.upper()} Uploaded")
-    except Exception as e:
-        raise ValueError(f"فشل رفع الملف إلى الخادم: {str(e)}")
-
-    logger.info("⏳ CloudConvert: Polling job status...")
-    download_url = None
-    attempts = 0
-    while attempts < 40:
-        time.sleep(3)
-        attempts += 1
-        try:
-            poll_req = urllib.request.Request(f"https://api.cloudconvert.com/v2/jobs/{job_id}", headers=headers)
-            with urllib.request.urlopen(poll_req, timeout=15) as resp:
-                status_data = json.loads(resp.read().decode('utf-8'))['data']
-            status = status_data['status']
-            if status == 'finished':
-                export_task = next(t for t in status_data['tasks'] if t['name'] == 'export-it')
-                download_url = export_task['result']['files'][0]['url']
-                logger.info("✅ Conversion done!")
-                break
-            elif status == 'error':
-                raise ValueError("فشلت عملية التحويل داخل CloudConvert.")
-        except urllib.error.HTTPError:
-            continue
-    
-    if not download_url:
-        raise ValueError("انتهى وقت الانتظار. استغرقت عملية التحويل وقتاً طويلاً.")
-
-    logger.info("📥 CloudConvert: Downloading Word file...")
-    try:
-        req_dl = urllib.request.Request(download_url)
-        with urllib.request.urlopen(req_dl, timeout=60) as resp:
-            docx_bytes = resp.read()
-        logger.info(f"✅ Word downloaded: {len(docx_bytes)} bytes")
-        return docx_bytes
-    except Exception as e:
-        raise ValueError(f"فشل تحميل ملف الوورد: {str(e)}")
-
-# ══════════════════════════════════════════════════════════
-# CloudConvert API — MAGIC CONVERTER (Dynamic Formats)
-# ══════════════════════════════════════════════════════════
-def cloudconvert_dynamic(file_bytes, input_ext, output_ext):
-    import urllib.request
-    import urllib.error
-    import urllib.parse
-
-    raw_api_key = os.environ.get("CLOUDCONVERT_API_KEY")
-    if not raw_api_key:
-        raise ValueError("CLOUDCONVERT_API_KEY غير مُعرّف في متغيرات البيئة")
-
-    api_key = raw_api_key.strip().replace('\n', '').replace('\r', '').replace(' ', '')
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-
-    logger.info(f"🪄 CloudConvert Magic: {input_ext.upper()} -> {output_ext.upper()}...")
-    
-    # ✅ حيلة التحويل الجسري للملفات التي لا تدعم التحويل المباشر
-    needs_pdf_bridge = False
-    
-    # HTML -> Excel / PowerPoint
-    if input_ext == "html" and output_ext in ["xlsx", "xls", "pptx", "ppt"]:
-        needs_pdf_bridge = True
-    # Word <-> Excel
-    elif input_ext in ["doc", "docx"] and output_ext in ["xls", "xlsx"]:
-        needs_pdf_bridge = True
-    elif input_ext in ["xls", "xlsx"] and output_ext in ["doc", "docx"]:
-        needs_pdf_bridge = True
-    # Word/Excel -> PowerPoint
-    elif input_ext in ["doc", "docx", "xls", "xlsx"] and output_ext in ["pptx", "ppt"]:
-        needs_pdf_bridge = True
-
-    if needs_pdf_bridge:
-        logger.info(f"🔄 Using PDF Bridge for unsupported direct conversion ({input_ext} -> {output_ext})...")
-        job_payload = {
-            "tasks": {
-                "import-it": {"operation": "import/upload"},
-                "convert-pdf": {"operation": "convert", "input_format": input_ext, "output_format": "pdf", "input": ["import-it"]},
-                "convert-it": {"operation": "convert", "input_format": "pdf", "output_format": output_ext, "input": ["convert-pdf"]},
-                "export-it": {"operation": "export/url", "input": ["convert-it"]}
-            }
-        }
-    else:
-        job_payload = {
-            "tasks": {
-                "import-it": {"operation": "import/upload"},
-                "convert-it": {"operation": "convert", "input_format": input_ext, "output_format": output_ext, "input": ["import-it"]},
-                "export-it": {"operation": "export/url", "input": ["convert-it"]}
-            }
-        }
-
-    try:
-        req = urllib.request.Request("https://api.cloudconvert.com/v2/jobs", data=json.dumps(job_payload).encode('utf-8'), headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            job_data = json.loads(resp.read().decode('utf-8'))['data']
-        job_id = job_data['id']
-        upload_task = next(t for t in job_data['tasks'] if t['name'] == 'import-it')
-        upload_url = upload_task['result']['form']['url']
-        upload_params = upload_task['result']['form']['parameters']
-    except Exception as e:
-        raise ValueError(f"فشل بدء مهمة التحويل: {str(e)}")
-
-    logger.info(f"📤 CloudConvert Magic: Uploading...")
-    try:
-        boundary = f"----CloudConvertBoundary{int(time.time() * 1000)}"
-        body = b""
-        for k, v in upload_params.items():
-            body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
-
-        filename = f"document.{input_ext}".encode()
-        content_type = b"text/html" if input_ext == "html" else b"application/octet-stream"
-
-        body += f"--{boundary}\r\n".encode()
-        body += b"Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + b"\"\r\n"
-        body += b"Content-Type: " + content_type + b"\r\n\r\n" + file_bytes + b"\r\n"
-        body += f"--{boundary}--\r\n".encode()
-
-        upload_req = urllib.request.Request(upload_url, data=body, method='POST')
-        upload_req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
-        with urllib.request.urlopen(upload_req, timeout=60) as resp:
-            pass
-        logger.info("✅ Magic Uploaded")
-    except Exception as e:
-        raise ValueError(f"فشل رفع الملف: {str(e)}")
-
-    logger.info("⏳ CloudConvert Magic: Polling...")
-    download_url = None
-    attempts = 0
-    while attempts < 40:
-        time.sleep(3)
-        attempts += 1
-        try:
-            poll_req = urllib.request.Request(f"https://api.cloudconvert.com/v2/jobs/{job_id}", headers=headers)
-            with urllib.request.urlopen(poll_req, timeout=15) as resp:
-                status_data = json.loads(resp.read().decode('utf-8'))['data']
-            status = status_data['status']
-            if status == 'finished':
-                export_task = next(t for t in status_data['tasks'] if t['name'] == 'export-it')
-                download_url = export_task['result']['files'][0]['url']
-                break
-            elif status == 'error':
-                raise ValueError("فشلت عملية التحويل في السيرفر.")
-        except urllib.error.HTTPError:
-            continue
-
-    if not download_url:
-        raise ValueError("استغرق التحويل وقتاً طويلاً جداً.")
-
-    logger.info("📥 CloudConvert Magic: Downloading result...")
-    try:
-        req_dl = urllib.request.Request(download_url)
-        with urllib.request.urlopen(req_dl, timeout=60) as resp:
-            result_bytes = resp.read()
-        return result_bytes
-    except Exception as e:
-        raise ValueError(f"فشل تحميل النتيجة: {str(e)}")
 
 
 def get_style_prompt(style, mode):
@@ -549,12 +339,12 @@ OUTPUT FORMAT:
         return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
+# ══════════════════════════════════════════════════════════
+# مسار تحويل HTML/PDF إلى Word (اعتماد كلي 100% على LibreOffice المجاني)
+# ══════════════════════════════════════════════════════════
 @app.route("/convert_to_word", methods=["POST"])
 def convert_to_word():
     try:
-        if not os.environ.get("CLOUDCONVERT_API_KEY"):
-            return jsonify({"error": "Failed", "details": "مفتاح CLOUDCONVERT_API_KEY غير مُعرّف."}), 500
-
         data = request.json
         html_content = data.get("html_content") or data.get("current_html")
         pdf_b64 = data.get("pdf_base64", "")
@@ -562,27 +352,20 @@ def convert_to_word():
         letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
 
         if html_content:
-            logger.info("📄 Converting HTML to Word via CloudConvert (Content Only)...🚀")
+            logger.info("📄 Preparing HTML for LibreOffice Word Conversion...")
 
-            # 🛠️ التنظيف الجراحي للـ HTML 
+            # التنظيف الجراحي للـ HTML 
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
-
-            # معالجة التوقيعات والنقاط لتحويلها إلى نص مفهوم للوورد
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
-                html_content,
-                flags=re.IGNORECASE | re.DOTALL
-            )
+                html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
                 r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
-                html_content,
-                flags=re.IGNORECASE | re.DOTALL
-            )
+                html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # ✅ HTML مرن بدون قيود CSS تعاكس الاتجاهات
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -597,7 +380,6 @@ def convert_to_word():
 {html_content}
 </body>
 </html>"""
-            
             file_bytes = full_html.encode('utf-8')
             input_fmt = "html"
             
@@ -605,34 +387,29 @@ def convert_to_word():
             logger.info("📄 Converting PDF to Word...")
             file_bytes = base64.b64decode(pdf_b64)
             input_fmt = "pdf"
-            
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        # محاولة التحويل عبر السيرفر الداخلي (LibreOffice) أولاً 🚀
+        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط!
         raw_docx_bytes = local_libreoffice_convert(file_bytes, input_fmt, "docx")
         
-        # إذا فشل التحويل الداخلي، نلجأ إلى CloudConvert ☁️
         if not raw_docx_bytes:
-            logger.warning("⚠️ Local conversion failed. Falling back to CloudConvert...")
-            raw_docx_bytes = cloudconvert_pdf_to_word(file_bytes, input_format=input_fmt)
+            logger.error("❌ Local LibreOffice conversion failed completely.")
+            return jsonify({"error": "Failed", "details": "فشل تحويل الملف عبر محرك السيرفر المحلي. يرجى المحاولة مرة أخرى."}), 500
 
         if not letterhead_b64 or input_fmt == "pdf":
             docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
             return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
 
         # ══════════════════════════════════════════════════════════
-        # ✅ معالجة الوورد: التطابق البصري 100% (أحجام، تباعد، وهوامش ذكية)
+        # معالجة الوورد: التطابق البصري 100% (أحجام، تباعد، وهوامش ذكية)
         # ══════════════════════════════════════════════════════════
         logger.info("💉 Local Processing: Visual Parity (Size, Spacing, Margins)...")
-        
         doc_stream = io.BytesIO(raw_docx_bytes)
         doc = docx.Document(doc_stream)
-        
         section = doc.sections[0]
         section.page_width = Inches(8.27)
         section.page_height = Inches(11.69)
-        
         section.top_margin = Cm(4.5)
         section.bottom_margin = Cm(2.0)
         section.left_margin = Cm(1.8)
@@ -640,12 +417,10 @@ def convert_to_word():
 
         def clean_and_format_paragraph(paragraph, is_table=False):
             pPr = paragraph._element.get_or_add_pPr()
-            
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
                 pPr.append(spacing)
-                
             if is_table:
                 spacing.set(qn('w:before'), '0')
                 spacing.set(qn('w:after'), '0')
@@ -654,26 +429,22 @@ def convert_to_word():
                 spacing.set(qn('w:before'), '0')
                 spacing.set(qn('w:after'), '160') 
                 spacing.set(qn('w:line'), '300')  
-
             spacing.set(qn('w:lineRule'), 'auto')
 
             for run in paragraph.runs:
                 run.font.name = 'Arial'
                 from docx.shared import Pt
                 run.font.size = Pt(12) 
-                
                 rPr = run._element.get_or_add_rPr()
                 rFonts = rPr.get_or_add_rFonts()
                 rFonts.set(qn('w:cs'), 'Arial')
                 rFonts.set(qn('w:ascii'), 'Arial')
                 rFonts.set(qn('w:hAnsi'), 'Arial')
-                
                 sz = rPr.find(qn('w:sz'))
                 if sz is None:
                     sz = OxmlElement('w:sz')
                     rPr.append(sz)
                 sz.set(qn('w:val'), '24')
-                
                 szCs = rPr.find(qn('w:szCs'))
                 if szCs is None:
                     szCs = OxmlElement('w:szCs')
@@ -685,7 +456,6 @@ def convert_to_word():
                 trPr = row._tr.get_or_add_trPr()
                 for trHeight in trPr.findall(qn('w:trHeight')):
                     trPr.remove(trHeight)
-                
                 for cell in row.cells:
                     tcPr = cell._element.get_or_add_tcPr()
                     tcMar = tcPr.find(qn('w:tcMar'))
@@ -698,7 +468,6 @@ def convert_to_word():
                         node.set(qn('w:type'), 'dxa')
                         tcMar.append(node)
                     tcPr.append(tcMar)
-
                     for p in cell.paragraphs:
                         clean_and_format_paragraph(p, is_table=True)
 
@@ -723,53 +492,32 @@ def convert_to_word():
         
         inline = shape._inline
         anchor = OxmlElement('wp:anchor')
-        anchor.set('distT', '0')
-        anchor.set('distB', '0')
-        anchor.set('distL', '0')
-        anchor.set('distR', '0')
-        anchor.set('simplePos', '0')
-        anchor.set('relativeHeight', '0')
-        anchor.set('behindDoc', '1') 
-        anchor.set('locked', '0')
-        anchor.set('layoutInCell', '1')
-        anchor.set('allowOverlap', '1')
+        anchor.set('distT', '0'); anchor.set('distB', '0'); anchor.set('distL', '0'); anchor.set('distR', '0')
+        anchor.set('simplePos', '0'); anchor.set('relativeHeight', '0'); anchor.set('behindDoc', '1') 
+        anchor.set('locked', '0'); anchor.set('layoutInCell', '1'); anchor.set('allowOverlap', '1')
 
         simplePos = OxmlElement('wp:simplePos')
-        simplePos.set('x', '0')
-        simplePos.set('y', '0')
+        simplePos.set('x', '0'); simplePos.set('y', '0')
         anchor.append(simplePos)
 
         positionH = OxmlElement('wp:positionH')
         positionH.set('relativeFrom', 'page')
-        alignH = OxmlElement('wp:align')
-        alignH.text = 'center'
-        positionH.append(alignH)
-        anchor.append(positionH)
+        alignH = OxmlElement('wp:align'); alignH.text = 'center'
+        positionH.append(alignH); anchor.append(positionH)
         
         positionV = OxmlElement('wp:positionV')
         positionV.set('relativeFrom', 'page')
-        alignV = OxmlElement('wp:align')
-        alignV.text = 'top'
-        positionV.append(alignV)
-        anchor.append(positionV)
+        alignV = OxmlElement('wp:align'); alignV.text = 'top'
+        positionV.append(alignV); anchor.append(positionV)
         
         anchor.append(inline.extent)
-        
         effectExtent = OxmlElement('wp:effectExtent')
-        effectExtent.set('l', '0')
-        effectExtent.set('t', '0')
-        effectExtent.set('r', '0')
-        effectExtent.set('b', '0')
+        effectExtent.set('l', '0'); effectExtent.set('t', '0'); effectExtent.set('r', '0'); effectExtent.set('b', '0')
         anchor.append(effectExtent)
         
-        wrapNone = OxmlElement('wp:wrapNone')
-        anchor.append(wrapNone)
-        
+        anchor.append(OxmlElement('wp:wrapNone'))
         anchor.append(inline.docPr)
-        
-        cNvGraphicFramePr = OxmlElement('wp:cNvGraphicFramePr')
-        anchor.append(cNvGraphicFramePr)
-        
+        anchor.append(OxmlElement('wp:cNvGraphicFramePr'))
         anchor.append(inline.graphic)
         
         inline.getparent().replace(inline, anchor)
@@ -777,19 +525,17 @@ def convert_to_word():
         final_docx_stream = io.BytesIO()
         doc.save(final_docx_stream)
         docx_bytes = final_docx_stream.getvalue()
-        
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
         logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
         return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
-
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (الجديد كلياً لتحويل جميع الصيغ)
+# مسار MAGIC CONVERTER (اعتماد كلي 100% على LibreOffice المجاني)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -804,7 +550,6 @@ def magic_convert():
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
 
-        # 1. تحديد صيغة الإدخال
         mime_lower = mime_type.lower()
         if "html" in mime_lower:
             input_ext = "html"
@@ -817,22 +562,23 @@ def magic_convert():
             elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
             file_bytes = base64.b64decode(file_b64)
         
-        # 2. تحديد صيغة الإخراج
         output_ext = "docx"
         if target_format == "excel": output_ext = "xlsx"
         elif target_format == "powerpoint": output_ext = "pptx"
         elif target_format == "pdf": output_ext = "pdf"
 
-        # 🌟 3. مسار الذكاء الاصطناعي للملفات العربية أو الاستخراج 🌟
+        # مسار الذكاء الاصطناعي للملفات العربية أو الاستخراج
         if extract_only or (is_arabic and input_ext != "html"):
             logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML...")
-            
             gemini_bytes = file_bytes
             gemini_mime = "application/pdf"
             
-            if input_ext in ["doc", "xls"]:
-                logger.info("🔄 Converting DOC/XLS to PDF first for AI Extraction...")
-                gemini_bytes = cloudconvert_dynamic(file_bytes, input_ext, "pdf")
+            if input_ext in ["doc", "xls", "docx", "xlsx"]:
+                logger.info("🔄 Converting Document to PDF first via LibreOffice for AI...")
+                # 🚀 استخدام LibreOffice للتحويل إلى PDF لكي يقرأه الذكاء الاصطناعي بدلاً من CloudConvert
+                gemini_bytes = local_libreoffice_convert(file_bytes, input_ext, "pdf")
+                if not gemini_bytes:
+                    return jsonify({"error": "Failed", "details": "فشل تجهيز المستند للقراءة عبر السيرفر."}), 500
                 gemini_mime = "application/pdf"
             elif input_ext == "jpg":
                 gemini_mime = "image/jpeg"
@@ -854,80 +600,52 @@ CRITICAL RULES:
 4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>` to prevent RTL/LTR flipping.
 5. NO MARKDOWN: Output strictly pure HTML code (starting with <!DOCTYPE html>). Do not wrap in ```html."""
             
-            contents = [
-                bridge_prompt,
-                get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)
-            ]
-            
+            contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try:
-                resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90) # رفعنا المهلة لتفادي توقف السيرفر
-            except:
-                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+            try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+            except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
             extracted_html = clean_html_output(resp.text or "")
-            
             if not extracted_html:
                 return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
             
-            # إعادة الـ HTML مباشرة للتطبيق إذا كان الطلب من المحرر
             if extract_only:
-                logger.info("✅ AI Bridge: Returning HTML directly to app.")
-                return jsonify({
-                    "html_content": extracted_html,
-                    "message": "تم استخراج النصوص بنجاح ✨"
-                })
+                return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
             
-            logger.info("✅ AI Bridge: HTML extracted successfully. Converting to Final Format...")
             input_ext = "html"
             file_bytes = extracted_html.encode('utf-8')
 
-        # ⚡ 4. التحويل المباشر (أو تحويل الـ HTML المستخرج إلى الصيغة النهائية)
+        # التحويل المباشر
         if input_ext == "html":
             logger.info("📄 Wrapping HTML for proper conversion in Magic Convert...")
             html_text = file_bytes.decode('utf-8')
-            
             html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
             html_text = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
-                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
-                html_text, flags=re.IGNORECASE | re.DOTALL)
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>', html_text, flags=re.IGNORECASE | re.DOTALL)
             html_text = re.sub(
                 r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
-                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>',
-                html_text, flags=re.IGNORECASE | re.DOTALL)
+                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>', html_text, flags=re.IGNORECASE | re.DOTALL)
             html_text = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_text, flags=re.IGNORECASE)
 
             body_dir = "rtl" if is_arabic else "ltr"
             full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<style>
-  * {{ font-family: 'Arial', sans-serif !important; }}
-  table {{ border-collapse: collapse; width: 100% !important; margin: 0; }}
-  th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }}
-  p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}
-</style>
-</head>
-<body dir="{body_dir}">
-{html_text}
-</body>
-</html>"""
+<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
+</head><body dir="{body_dir}">{html_text}</body></html>"""
             file_bytes = full_html.encode('utf-8')
 
-        logger.info(f"⚡ Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
+        logger.info(f"⚡ Pure LibreOffice Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
         
-        # محاولة التحويل عبر السيرفر الداخلي (LibreOffice) أولاً 🚀
+        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط! لا يوجد CloudConvert هنا!
         result_bytes = local_libreoffice_convert(file_bytes, input_ext, output_ext)
         
-        # إذا فشل التحويل الداخلي، نلجأ إلى CloudConvert ☁️
         if not result_bytes:
-            logger.warning("⚠️ Local magic conversion failed. Falling back to CloudConvert...")
-            result_bytes = cloudconvert_dynamic(file_bytes, input_ext, output_ext)
+            logger.error("❌ Local magic conversion failed completely.")
+            return jsonify({"error": "Failed", "details": f"فشل السيرفر المحلي في تحويل الملف إلى {target_format.upper()}."}), 500
             
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
-
         return jsonify({
             "file_base64": result_b64,
             "extension": output_ext,
@@ -1060,3 +778,4 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
