@@ -566,7 +566,7 @@ def convert_to_word():
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (اعتماد كلي 100% على LibreOffice المجاني)
+# مسار MAGIC CONVERTER (المحول الشامل لجميع الصيغ مجاناً)
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -574,108 +574,128 @@ def magic_convert():
         data = request.json
         file_b64 = data.get("fileBase64")
         mime_type = data.get("mimeType", "")
-        target_format = data.get("targetFormat", "word")
-        is_arabic = data.get("isArabic", False)
+        target_format = data.get("targetFormat", "word") # word, excel, pdf, html
+        is_arabic = data.get("isArabic", True) # افتراضياً نعم لدعم لغتنا
         extract_only = data.get("extractOnly", False)  
 
         if not file_b64:
             return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
 
+        # 1️⃣ تحديد صيغة الإدخال
         mime_lower = mime_type.lower()
-        if "html" in mime_lower:
-            input_ext = "html"
-            file_bytes = base64.b64decode(file_b64)
-        else:
-            input_ext = "pdf"
-            if "jpeg" in mime_lower or "jpg" in mime_lower: input_ext = "jpg"
-            elif "png" in mime_lower: input_ext = "png"
-            elif "msword" in mime_lower or "word" in mime_lower: input_ext = "doc" 
-            elif "excel" in mime_lower or "xls" in mime_lower: input_ext = "xls"
-            file_bytes = base64.b64decode(file_b64)
+        input_ext = "pdf"
+        if "html" in mime_lower: input_ext = "html"
+        elif "jpeg" in mime_lower or "jpg" in mime_lower: input_ext = "jpg"
+        elif "png" in mime_lower: input_ext = "png"
+        elif "msword" in mime_lower or "word" in mime_lower or "docx" in mime_lower: input_ext = "docx" 
+        elif "excel" in mime_lower or "xls" in mime_lower or "spreadsheet" in mime_lower: input_ext = "xlsx"
+        elif "powerpoint" in mime_lower or "ppt" in mime_lower or "presentation" in mime_lower: input_ext = "pptx"
         
+        file_bytes = base64.b64decode(file_b64)
+        
+        # 2️⃣ تحديد صيغة الإخراج
         output_ext = "docx"
         if target_format == "excel": output_ext = "xlsx"
         elif target_format == "powerpoint": output_ext = "pptx"
         elif target_format == "pdf": output_ext = "pdf"
+        elif target_format == "html": output_ext = "html"
 
-        # مسار الذكاء الاصطناعي للملفات العربية أو الاستخراج
-        if extract_only or (is_arabic and input_ext != "html"):
-            logger.info(f"🧠 AI Bridge: Extracting {input_ext.upper()} to HTML...")
-            gemini_bytes = file_bytes
-            gemini_mime = "application/pdf"
+        logger.info(f"🔄 Magic Request: {input_ext.upper()} ➡️ {output_ext.upper()}")
+
+        # 🌟 المسار الأول: التحويل المباشر السريع (بدون ذكاء اصطناعي - LibreOffice فقط)
+        # مثل: Word->PDF أو Excel->PDF أو HTML->Word/Excel
+        direct_conversions = [
+            ("docx", "pdf"), ("doc", "pdf"),
+            ("xlsx", "pdf"), ("xls", "pdf"),
+            ("pptx", "pdf"), ("ppt", "pdf"),
+            ("html", "docx"), ("html", "xlsx"), ("html", "pdf")
+        ]
+        
+        if (input_ext, output_ext) in direct_conversions and not extract_only:
+            logger.info("⚡ Route 1: Direct LibreOffice Conversion (No AI needed)...")
             
-            if input_ext in ["doc", "xls", "docx", "xlsx"]:
-                logger.info("🔄 Converting Document to PDF first via LibreOffice for AI...")
-                # 🚀 استخدام LibreOffice للتحويل إلى PDF لكي يقرأه الذكاء الاصطناعي
-                gemini_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, "pdf")
-                if not gemini_bytes:
-                    # إرسال الخطأ الحقيقي
-                    return jsonify({"error": "Failed", "details": f"فشل تجهيز المستند للقراءة: {err_msg}"}), 500
-                gemini_mime = "application/pdf"
-            elif input_ext == "jpg":
-                gemini_mime = "image/jpeg"
-            elif input_ext == "png":
-                gemini_mime = "image/png"
+            # إذا كان الإدخال HTML، نقوم بتنظيفه وضبط الهوامش أولاً
+            if input_ext == "html":
+                html_text = file_bytes.decode('utf-8')
+                html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
+                body_dir = "rtl" if is_arabic else "ltr"
+                full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
+</head><body dir="{body_dir}">{html_text}</body></html>"""
+                file_bytes = full_html.encode('utf-8')
 
-            simulation_style = get_style_prompt("formal", "simulation")
-            lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language. You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
+            result_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, output_ext)
+            
+            if result_bytes:
+                result_b64 = base64.b64encode(result_bytes).decode('utf-8')
+                return jsonify({
+                    "file_base64": result_b64,
+                    "extension": output_ext,
+                    "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
+                })
+            else:
+                logger.warning(f"⚠️ Direct conversion failed: {err_msg}. Falling back to AI Route if applicable.")
 
-            bridge_prompt = f"""You are an OCR and Document Extraction Engine.
-Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document.
+        # 🌟 المسار الثاني: مسار الذكاء الاصطناعي (تحويل PDF/Images إلى Word/Excel)
+        # أو تحويل معقد مثل Word إلى Excel (يتطلب استخراج الجداول)
+        logger.info("🧠 Route 2: AI OCR & Extraction Bridge...")
+        gemini_bytes = file_bytes
+        gemini_mime = "application/pdf"
+        
+        # إذا كان الملف ليس PDF وصورة، نحوله لـ PDF أولاً ليقرأه Gemini
+        if input_ext in ["docx", "doc", "xlsx", "xls", "pptx", "ppt"]:
+            logger.info("🔄 Converting Document to PDF first via LibreOffice for AI Reading...")
+            gemini_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, "pdf")
+            if not gemini_bytes:
+                return jsonify({"error": "Failed", "details": f"فشل تجهيز المستند للقراءة: {err_msg}"}), 500
+            gemini_mime = "application/pdf"
+        elif input_ext in ["jpg", "jpeg"]: gemini_mime = "image/jpeg"
+        elif input_ext == "png": gemini_mime = "image/png"
 
-{simulation_style}
+        lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language. You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
+
+        # بناء أمر الذكاء الاصطناعي بناءً على الصيغة المطلوبة
+        target_focus = "tables and grids format specifically for Excel" if output_ext == "xlsx" else "general document structure"
+        
+        bridge_prompt = f"""You are an elite OCR and Document Extraction Engine.
+Your task is to precisely extract ALL content from the attached document and convert it into a fully structured, professional HTML document. Focus on {target_focus}.
 
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 {lang_instruction}
-3. TABLES: If there is tabular data, use proper `<table>`, `<tr>`, `<td>`, and `<th>` tags with `border="1"`. Ensure the correct column logical order.
-4. NUMBERS: Wrap any standalone numbers, phone numbers, or dates in `<span dir="ltr"></span>` to prevent RTL/LTR flipping.
-5. NO MARKDOWN: Output strictly pure HTML code (starting with <!DOCTYPE html>). Do not wrap in ```html."""
-            
-            contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
-            gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
-            
-            try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
-            
-            extracted_html = clean_html_output(resp.text or "")
-            if not extracted_html:
-                return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
-            
-            if extract_only:
-                return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
-            
-            input_ext = "html"
-            file_bytes = extracted_html.encode('utf-8')
-
-        # التحويل المباشر
-        if input_ext == "html":
-            logger.info("📄 Wrapping HTML for proper conversion in Magic Convert...")
-            html_text = file_bytes.decode('utf-8')
-            html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
-            html_text = re.sub(
-                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*>(.*?)</div>.*?</div>',
-                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>', html_text, flags=re.IGNORECASE | re.DOTALL)
-            html_text = re.sub(
-                r'<div[^>]*display\s*:\s*flex[^>]*>.*?<div[^>]*>(.*?)</div>.*?<div[^>]*>\s*:\s*</div>.*?<div[^>]*border-bottom[^>]*>.*?</div>.*?</div>',
-                r'<p dir="rtl" style="text-align:right; margin:0;">\1: ........................................</p>', html_text, flags=re.IGNORECASE | re.DOTALL)
-            html_text = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_text, flags=re.IGNORECASE)
-
-            body_dir = "rtl" if is_arabic else "ltr"
-            full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
+3. TABLES: Use proper `<table>`, `<tr>`, `<td>`, and `<th>` tags with `border="1"`. Ensure correct logical column order (Reverse order for RTL tables).
+4. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>` to prevent RTL flipping.
+5. PURE HTML ONLY. Do not wrap in ```html."""
+        
+        contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
+        gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
+        
+        try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+        except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+        
+        extracted_html = clean_html_output(resp.text or "")
+        if not extracted_html:
+            return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
+        
+        # إذا كان المطلوب مجرد استخراج نص للتطبيق
+        if extract_only or target_format == "html":
+            return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
+        
+        # 🌟 المسار الثالث: تحويل الـ HTML المستخرج إلى الصيغة النهائية المطلوبة
+        logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
+        body_dir = "rtl" if is_arabic else "ltr"
+        full_html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
 <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style>* {{ font-family: 'Arial', sans-serif !important; }} table {{ border-collapse: collapse; width: 100% !important; margin: 0; }} th, td {{ border: 1px solid #d5dbdb; padding: 0px 4px !important; margin: 0; }} p, h1, h2, h3, h4, h5, h6 {{ margin: 0; padding: 0; }}</style>
-</head><body dir="{body_dir}">{html_text}</body></html>"""
-            file_bytes = full_html.encode('utf-8')
-
-        logger.info(f"⚡ Pure LibreOffice Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
+</head><body dir="{body_dir}">{extracted_html}</body></html>"""
         
-        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط!
-        result_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, output_ext)
+        final_bytes = full_html.encode('utf-8')
+        
+        result_bytes, err_msg = local_libreoffice_convert(final_bytes, "html", output_ext)
         
         if not result_bytes:
-            # إرسال الخطأ الحقيقي للمستخدم لكي نعرف ما هي المشكلة بالضبط
-            return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
+            return jsonify({"error": "Failed", "details": f"فشل تجميع الملف النهائي: {err_msg}"}), 500
             
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
         return jsonify({
@@ -684,9 +704,6 @@ CRITICAL RULES:
             "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
         })
 
-    except Exception as e:
-        logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
 # ══════════════════════════════════════════════════════════
