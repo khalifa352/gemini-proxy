@@ -5,17 +5,28 @@ FROM python:3.10-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# تثبيت LibreOffice بكامل ملحقاته (الكاتب، الجدول) لمنع خطأ الفلاتر
+# تفعيل مستودعات contrib و non-free لتحميل خط Arial الأصلي من مايكروسوفت
+RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/g' /etc/apt/sources.list.d/debian.sources || true
+
+# الموافقة التلقائية على اتفاقية استخدام خطوط مايكروسوفت
+RUN echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | debconf-set-selections
+
+# تثبيت Xvfb (الشاشة الوهمية)، LibreOffice، خط Arial، وأدوات التحميل
 RUN apt-get update && apt-get install -y \
+    wget \
+    cabextract \
+    xvfb \
     libreoffice \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
     default-jre \
-    fonts-liberation \
-    fonts-kacst \
-    fonts-hosny-amiri \
+    ttf-mscorefonts-installer \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
+
+# تحديث كاش الخطوط في السيرفر ليتعرف LibreOffice على خط Arial كخط أساسي
+RUN fc-cache -f -v
 
 # تحديد مجلد العمل داخل السيرفر
 WORKDIR /app
@@ -30,5 +41,7 @@ COPY . .
 # تحديد البورت
 EXPOSE 10000
 
-# أمر التشغيل
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000", "--timeout", "120"]
+# 🌟 السحر هنا: تشغيل الشاشة الوهمية (:99) في الخلفية أولاً، ثم تشغيل سيرفر بايثون
+# هذا سيلبي طلب app.py ويمنع خطأ (Can't open display) دون المساس بالكود البرمجي!
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1024x768x24 & gunicorn app:app --bind 0.0.0.0:10000 --timeout 120"]
+
