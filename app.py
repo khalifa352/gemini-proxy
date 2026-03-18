@@ -67,11 +67,10 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول (النسخة المعالجة لمنع الخط المزدوج / الخانة الوهمية)
+# 🛡️ حقنة الجداول 
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
-    # 💡 تم إزالة border='1' والحدود من علامة الجدول نفسها، لجعل الوورد يعتمد فقط على حدود الخلايا ويمنع الازدواجية
-    html_text = html_text.replace("<table", "<table cellpadding='4' cellspacing='0' style='border-collapse:collapse; width:100%; margin: 10px 0; border: none !important;' ")
+    html_text = html_text.replace("<table", "<table border='1' width='100%' cellpadding='4' cellspacing='0' style='border-collapse:collapse; width:100%; border: 1px solid black; margin: 10px 0;' ")
     html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 4px; text-align: center; vertical-align: middle; background-color: transparent !important; color: black !important;' ")
     html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 4px; vertical-align: middle; background-color: transparent !important;' ")
     return html_text
@@ -136,7 +135,6 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None, f"استثناء المحرك: {str(e)}"
 
-# 💡 الرادار اللغوي الذكي (يحدد هل النص عربي أم لاتيني)
 def has_arabic(text):
     return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
 
@@ -148,17 +146,17 @@ def get_style_prompt(style, mode):
 3. DO NOT CREATE FAKE LETTERHEADS: Never invent fake company names, logos, or headers at the top of the document.
 4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures.
 
-⚠️ SMART HTML STRUCTURE & TABLE USAGE (HUMAN DESIGNER LOGIC):
-1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer.
-2. NO DIV TABLES: You MUST use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
+⚠️ SMART HTML STRUCTURE & TABLE USAGE (CRITICAL FIX):
+1. TABLES FOR ACTUAL GRIDS ONLY: You MUST use `<table>` ONLY for actual grid data (e.g., lists of items, prices, quantities). Regular paragraphs, document titles, dates, or recipient info MUST NEVER be inside a table. Use `<p>`, `<h1>`, or `<div>` for regular text.
+2. NO DIV TABLES: For grids, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
 3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-4. 🚫 NO EMPTY ROWS (DOUBLE LINES FIX): NEVER create empty `<tr>` rows, spacer rows, or blank `<th>`/`<td>` at the top of the table to simulate spacing or double lines. The table MUST start directly with the actual text headers.
-5. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي) at the bottom of tables, use the `colspan` attribute to merge empty cells nicely.
+4. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي) at the bottom of tables, use the `colspan` attribute to merge empty cells nicely.
+5. ENHANCED READABILITY: Use a baseline font size of 15px-16px.
 
-⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
+⚠️ BIDI & LAYOUT LOCKS:
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
 - Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`.
-- 🔄 TABLE COLUMN ORDER (FOOLPROOF RULE): The system automatically applies RTL. This means the FIRST `<td>` or `<th>` you write in your HTML code will automatically appear on the FAR RIGHT of the screen. Therefore, you MUST write the columns starting with the rightmost column first. DO NOT overthink it or reverse it again.
+- COLUMN ORDER: Maintain the natural exact reading order of the table. Do NOT manually reverse or flip columns.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
     if mode == "simulation":
@@ -172,11 +170,11 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
     design_base = ""
     if style == "modern":
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
-CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers, stylish accents for section headings."""
+CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
     else:
         design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
-⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
+⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal and printable.
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
@@ -391,10 +389,10 @@ Your task is to precisely extract ALL content from the attached document and con
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
-3. TABLES & COLSPAN: Use proper `<table>`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` to merge empty cells nicely.
-4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or narrow blank cells above the table headers. Start the table directly with the actual headers.
+3. TABLES FOR GRIDS ONLY: Use `<table>` ONLY for actual tabular data (items, prices, schedules). Regular text, headers, and dates MUST be in `<p>` or `<div>`. NEVER put the whole document in a table.
+4. COLSPAN: For "Total" (الإجمالي) rows, use `colspan` to merge empty cells nicely.
 5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
-6. 🔄 COLUMN ORDER: Output HTML `<td>` tags in the exact visual order from Right-to-Left (First td = Far Right column).
+6. 🔄 COLUMN ORDER: Maintain the exact natural reading order. Do NOT manually reverse or flip table columns.
 7. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
 8. NO MARKDOWN: Output strictly pure HTML code."""
             
@@ -416,10 +414,9 @@ CRITICAL RULES:
             html_content = force_table_borders(html_content)
             html_content = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_content, flags=re.IGNORECASE)
             
-            # 💡 لحام الأرقام المتباعدة لمنع انعكاسها في الجداول
+            # 💡 لحام الأرقام
             html_content = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', html_content)
             
-            # 💡 كشف لغة المستند الأساسية لمنع كسر المحاذاة عند إضافة الرأسية
             is_arabic_doc = has_arabic(html_content)
             body_dir = "rtl" if is_arabic_doc else "ltr"
 
@@ -433,7 +430,6 @@ CRITICAL RULES:
                 html_content, flags=re.IGNORECASE | re.DOTALL)
             html_content = re.sub(r'<div[^>]*border-bottom[^>]*>(\s|&nbsp;)*</div>', ' ........................................ ', html_content, flags=re.IGNORECASE)
 
-            # 💡 إزالة أي حدود للمربعات الوهمية عبر الستايل (السطر الأخير بالستايل يقضي عليها)
             full_html = f"""<html lang="ar" dir="{body_dir}">
 <head>
 <meta charset="utf-8">
@@ -459,7 +455,7 @@ CRITICAL RULES:
             return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
 
         # ══════════════════════════════════════════════════════════
-        # معالجة الوورد: الحرية الكاملة للمحاذاة والجداول
+        # معالجة الوورد
         # ══════════════════════════════════════════════════════════
         logger.info("💉 Local Processing: Deep XML Fixes for Fonts and Tables...")
         doc_stream = io.BytesIO(raw_docx_bytes)
@@ -478,7 +474,6 @@ CRITICAL RULES:
 
             pPr = paragraph._element.get_or_add_pPr()
             
-            # ✂️ حل المسافات العمودية فقط
             spacing = pPr.find(qn('w:spacing'))
             if spacing is None:
                 spacing = OxmlElement('w:spacing')
@@ -487,14 +482,13 @@ CRITICAL RULES:
             if is_table:
                 spacing.set(qn('w:before'), '0')
                 spacing.set(qn('w:after'), '0')
-                spacing.set(qn('w:line'), '240') # Single spacing
+                spacing.set(qn('w:line'), '240') 
             else:
                 spacing.set(qn('w:before'), '0')
                 spacing.set(qn('w:after'), '120') 
-                spacing.set(qn('w:line'), '276') # 1.15 spacing
+                spacing.set(qn('w:line'), '276') 
             spacing.set(qn('w:lineRule'), 'auto')
 
-            # تثبيت خط Arial فقط
             for run in paragraph.runs:
                 rPr = run._element.get_or_add_rPr()
                 
@@ -524,7 +518,7 @@ CRITICAL RULES:
                 if tblW is None:
                     tblW = OxmlElement('w:tblW')
                     tblPr.append(tblW)
-                tblW.set(qn('w:w'), '5000') # 5000 pct = 100% width
+                tblW.set(qn('w:w'), '5000') 
                 tblW.set(qn('w:type'), 'pct')
 
             for row in table.rows:
@@ -617,7 +611,7 @@ CRITICAL RULES:
 
 
 # ══════════════════════════════════════════════════════════
-# مسار MAGIC CONVERTER (المحول الشامل لجميع الصيغ مجاناً)
+# مسار MAGIC CONVERTER
 # ══════════════════════════════════════════════════════════
 @app.route("/magic_convert", methods=["POST"])
 def magic_convert():
@@ -666,10 +660,7 @@ def magic_convert():
                 html_text = force_table_borders(html_text)
                 html_text = re.sub(r'font-family\s*:[^;"]+[;]?', '', html_text, flags=re.IGNORECASE)
                 
-                # 💡 لحام الأرقام
                 html_text = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', html_text)
-                
-                # 💡 كشف لغة المستند الأساسية
                 is_arabic_doc = has_arabic(html_text)
                 body_dir = "rtl" if is_arabic_doc else "ltr"
                 
@@ -703,7 +694,6 @@ def magic_convert():
         elif input_ext in ["jpg", "jpeg"]: gemini_mime = "image/jpeg"
         elif input_ext == "png": gemini_mime = "image/png"
 
-        lang_instruction = "2. RTL DIRECTION: The document is in Arabic. You MUST set `<body dir=\"rtl\" style=\"text-align: right; font-family: Arial, sans-serif;\">` and ensure all text flows Right-to-Left." if is_arabic else "2. LTR DIRECTION: The document is in a Latin language. You MUST set `<body dir=\"ltr\" style=\"text-align: left; font-family: Arial, sans-serif;\">`."
         target_focus = "tables and grids format specifically for Excel" if output_ext == "xlsx" else "general document structure"
         
         bridge_prompt = f"""You are an elite OCR and Document Extraction Engine.
@@ -712,13 +702,12 @@ Your task is to precisely extract ALL content from the attached document and con
 CRITICAL RULES:
 1. NO HALLUCINATIONS: Extract the exact words, numbers, and tables. Do not summarize or invent text.
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
-{lang_instruction}
-4. TABLES & COLSPAN: Use proper `<table border="1" width="100%">`. NO BACKGROUND COLORS. For "Total" (الإجمالي) rows, use `colspan` elegantly.
-5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or narrow blank cells above the table headers to prevent double lines. Start directly with the actual text headers.
-6. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`.
-7. 🔄 COLUMN ORDER: The environment is RTL. The FIRST `<td>`/`<th>` you write will automatically render on the FAR RIGHT. Write columns starting from the rightmost one.
-8. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
-9. PURE HTML ONLY. Do not wrap in ```html."""
+3. TABLES FOR GRIDS ONLY: Use `<table>` ONLY for actual tabular data (items, prices, schedules). Regular text, headers, and dates MUST be in `<p>` or `<div>`. NEVER put the whole document in a table.
+4. COLSPAN: For "Total" (الإجمالي) rows, use `colspan` elegantly.
+5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
+6. 🔄 COLUMN ORDER: Maintain the exact natural reading order. Do NOT manually reverse or flip table columns.
+7. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
+8. PURE HTML ONLY. Do not wrap in ```html."""
         
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
@@ -736,11 +725,8 @@ CRITICAL RULES:
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
         
         extracted_html = force_table_borders(extracted_html)
-        
-        # 💡 لحام الأرقام
         extracted_html = re.sub(r'(\d)\s+(?=\d)', r'\1&nbsp;', extracted_html)
         
-        # 💡 كشف لغة المستند الأساسية
         is_arabic_doc = has_arabic(extracted_html)
         body_dir = "rtl" if is_arabic_doc else "ltr"
         
@@ -791,12 +777,11 @@ def translate_document():
         orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra}"
 
         bidi_rules = """
-⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
+⚠️ BIDI & LAYOUT LOCKS:
 - Outermost wrapper & ALL `<table>` elements MUST use `dir="ltr"`.
-- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"` on the specific cell/paragraph ONLY.
-- French/English text MUST explicitly use `dir="ltr" style="text-align: left;"`.
-- TABLE COLUMN ORDER: Output HTML columns in their NATURAL logical order exactly as they appear. DO NOT manually reverse the columns for Arabic tables. The system will handle the RTL direction natively.
-- NUMBER ANTI-REVERSAL (CRITICAL): ALL numbers, prices, quantities, dates MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
+- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`
+- TABLE COLUMN ORDER: Output HTML columns in their NATURAL logical order exactly as they appear. DO NOT manually reverse the columns.
+- NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
 
         prompt = f"""You are an Expert Professional Translator and Strict Document Formatter.
