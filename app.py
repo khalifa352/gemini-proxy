@@ -106,19 +106,20 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 with open(output_path, 'rb') as f:
                     result_bytes = f.read()
                 logger.info("✅ Local LibreOffice: Conversion successful!")
-                return result_bytes
+                return result_bytes, None
             else:
-                # طباعة تفاصيل الخطأ في سجلات Render لمعرفة السبب بدقة إذا فشل
-                error_msg = process.stderr.decode('utf-8', errors='ignore')
-                out_msg = process.stdout.decode('utf-8', errors='ignore')
+                # اصطياد رسالة الخطأ الحقيقية لإرسالها للتطبيق
+                error_msg = process.stderr.decode('utf-8', errors='ignore').strip()
+                if not error_msg:
+                    error_msg = process.stdout.decode('utf-8', errors='ignore').strip() or "Unknown error"
+                
                 logger.error(f"❌ LibreOffice Failed! Code: {process.returncode}")
-                logger.error(f"❌ STDERR: {error_msg}")
-                logger.error(f"❌ STDOUT: {out_msg}")
-                return None
+                logger.error(f"❌ Error Details: {error_msg}")
+                
+                return None, f"خطأ المحرك (Code {process.returncode}): {error_msg}"
     except Exception as e:
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
-        return None
-
+        return None, f"استثناء المحرك: {str(e)}"
 
 
 def get_style_prompt(style, mode):
@@ -411,12 +412,12 @@ def convert_to_word():
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
 
-        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط!
-        raw_docx_bytes = local_libreoffice_convert(file_bytes, input_fmt, "docx")
+        # 🚀 التحويل المجاني الخالص عبر LibreOffice
+        raw_docx_bytes, err_msg = local_libreoffice_convert(file_bytes, input_fmt, "docx")
         
         if not raw_docx_bytes:
-            logger.error("❌ Local LibreOffice conversion failed completely.")
-            return jsonify({"error": "Failed", "details": "فشل تحويل الملف عبر محرك السيرفر المحلي. يرجى المحاولة مرة أخرى."}), 500
+            # هنا سيرسل السيرفر الخطأ الفعلي للتطبيق لكي تقرأه على الشاشة
+            return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
 
         if not letterhead_b64 or input_fmt == "pdf":
             docx_b64 = base64.b64encode(raw_docx_bytes).decode('utf-8')
@@ -596,10 +597,11 @@ def magic_convert():
             
             if input_ext in ["doc", "xls", "docx", "xlsx"]:
                 logger.info("🔄 Converting Document to PDF first via LibreOffice for AI...")
-                # 🚀 استخدام LibreOffice للتحويل إلى PDF لكي يقرأه الذكاء الاصطناعي بدلاً من CloudConvert
-                gemini_bytes = local_libreoffice_convert(file_bytes, input_ext, "pdf")
+                # 🚀 استخدام LibreOffice للتحويل إلى PDF لكي يقرأه الذكاء الاصطناعي
+                gemini_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, "pdf")
                 if not gemini_bytes:
-                    return jsonify({"error": "Failed", "details": "فشل تجهيز المستند للقراءة عبر السيرفر."}), 500
+                    # إرسال الخطأ الحقيقي
+                    return jsonify({"error": "Failed", "details": f"فشل تجهيز المستند للقراءة: {err_msg}"}), 500
                 gemini_mime = "application/pdf"
             elif input_ext == "jpg":
                 gemini_mime = "image/jpeg"
@@ -659,12 +661,12 @@ CRITICAL RULES:
 
         logger.info(f"⚡ Pure LibreOffice Magic Conversion: {input_ext.upper()} -> {output_ext.upper()}")
         
-        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط! لا يوجد CloudConvert هنا!
-        result_bytes = local_libreoffice_convert(file_bytes, input_ext, output_ext)
+        # 🚀 التحويل المجاني الخالص عبر LibreOffice فقط!
+        result_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, output_ext)
         
         if not result_bytes:
-            logger.error("❌ Local magic conversion failed completely.")
-            return jsonify({"error": "Failed", "details": f"فشل السيرفر المحلي في تحويل الملف إلى {target_format.upper()}."}), 500
+            # إرسال الخطأ الحقيقي للمستخدم لكي نعرف ما هي المشكلة بالضبط
+            return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
             
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
         return jsonify({
@@ -799,4 +801,5 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
 
