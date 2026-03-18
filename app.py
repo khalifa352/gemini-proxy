@@ -79,11 +79,26 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
             with open(input_path, 'wb') as f:
                 f.write(file_bytes)
             
-            # أمر تشغيل LibreOffice في الخلفية
-            process = subprocess.run([
-                'libreoffice', '--headless', '--convert-to', output_ext,
-                input_path, '--outdir', temp_dir
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=100)
+            # إنشاء مسار آمن لبروفايل المستخدم الخاص بـ LibreOffice لمنع التعارض في السيرفر
+            profile_dir = os.path.join(temp_dir, "lo_profile")
+            
+            # الأوامر القوية لتشغيل LibreOffice في بيئة الخوادم بأمان تام
+            command = [
+                'libreoffice',
+                f'-env:UserInstallation=file://{profile_dir}',
+                '--headless',
+                '--invisible',
+                '--nocrashreport',
+                '--nodefault',
+                '--nofirststartwizard',
+                '--nologo',
+                '--norestore',
+                '--convert-to', output_ext,
+                '--outdir', temp_dir,
+                input_path
+            ]
+            
+            process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
             
             output_path = os.path.join(temp_dir, f"input.{output_ext}")
             
@@ -93,11 +108,17 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
                 logger.info("✅ Local LibreOffice: Conversion successful!")
                 return result_bytes
             else:
-                logger.error(f"❌ Local LibreOffice Error: {process.stderr.decode('utf-8', errors='ignore')}")
+                # طباعة تفاصيل الخطأ في سجلات Render لمعرفة السبب بدقة إذا فشل
+                error_msg = process.stderr.decode('utf-8', errors='ignore')
+                out_msg = process.stdout.decode('utf-8', errors='ignore')
+                logger.error(f"❌ LibreOffice Failed! Code: {process.returncode}")
+                logger.error(f"❌ STDERR: {error_msg}")
+                logger.error(f"❌ STDOUT: {out_msg}")
                 return None
     except Exception as e:
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None
+
 
 
 def get_style_prompt(style, mode):
