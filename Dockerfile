@@ -1,13 +1,14 @@
-# استخدام نسخة بايثون ونظام (Bookworm) المستقرة لتجنب اختفاء الحزم
+# استخدام نسخة بايثون ونظام (Bookworm) المستقرة
 FROM python:3.10-slim-bookworm
 
 # منع بايثون من كتابة ملفات التخزين المؤقت وتوجيه السجلات مباشرة
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# تحديث النظام وتثبيت LibreOffice وخطوط Arial الأساسية وأفضل الخطوط العربية
+# تحديث النظام وتثبيت LibreOffice والجافا (الضرورية لملفات DOCX/XLSX) والخطوط
 RUN apt-get update && apt-get install -y \
     libreoffice \
+    default-jre \
     fonts-liberation \
     fonts-kacst \
     fonts-hosny-amiri \
