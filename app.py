@@ -164,19 +164,19 @@ def has_arabic(text):
 
 def get_style_prompt(style, mode):
     global_rules = """
-⚠️ DRAFTING VS. FORMATTING (CRITICAL RULE):
-- DRAFTING MODE: If the user asks you to "write", "compose", "draft", or "create a letter about...", you MUST act as a professional copywriter. Generate the full, rich, and appropriate content for that document. Do NOT just repeat their prompt.
-- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data to be formatted, you MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. DO NOT invent fake data.
+⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
+- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names. If a required detail is missing, use empty placeholders (e.g., [الاسم], [التاريخ], أو .............).
+- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content. ZERO hallucination.
 
 ⚠️ EXCLUSION RULE:
 - 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
 
 ⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
-1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge (whether right or left) is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language (Arabic, French, English, etc.):
+1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language:
    - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
    - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
-   - METADATA (Dates, Ref numbers): Place them intelligently (e.g., opposite to the main text direction) or use flexbox (`display: flex; justify-content: space-between;`) to distribute elements nicely across the page.
-   - SIGNATURES / SENDER INFO: Do not stack them directly under the main text. Move them to the opposite bottom corner or center them.
+   - METADATA (Dates, Ref numbers): Place them intelligently or use flexbox (`display: flex; justify-content: space-between;`) to distribute elements nicely.
+   - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
    - Make the layout dynamic, breathing, and visually balanced!
 2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
 3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
@@ -210,6 +210,7 @@ CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. U
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 
 
