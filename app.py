@@ -171,20 +171,24 @@ def get_style_prompt(style, mode):
 ⚠️ EXCLUSION RULE:
 - 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
 
-⚠️ SMART HTML STRUCTURE, ALIGNMENT & TABLE USAGE:
-1. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
-2. PROFESSIONAL ALIGNMENT: Do NOT right-align everything. Center the main titles and dates. Use `text-align: justify` for long paragraphs. Align signatures properly (left or right depending on context). Make the layout dynamic, breathing, and visually professional.
+⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
+1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge (whether right or left) is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language (Arabic, French, English, etc.):
+   - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
+   - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
+   - METADATA (Dates, Ref numbers): Place them intelligently (e.g., opposite to the main text direction) or use flexbox (`display: flex; justify-content: space-between;`) to distribute elements nicely across the page.
+   - SIGNATURES / SENDER INFO: Do not stack them directly under the main text. Move them to the opposite bottom corner or center them.
+   - Make the layout dynamic, breathing, and visually balanced!
+2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
 3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
 4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
 5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
 6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
 
-⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
+⚠️ BIDI & MULTILINGUAL LAYOUT LOCKS (MANDATORY):
 - Outermost wrapper MUST use `dir="ltr"`.
-- Arabic `<table>` elements MUST use `dir="rtl"`.
-- Non-Arabic (Latin/French) `<table>` elements MUST use `dir="ltr"`.
-- Arabic text MUST explicitly use `dir="rtl"`. (Combine with justify/center as needed).
-- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns for Arabic. The browser handles RTL table rendering automatically.
+- Arabic text and `<table>` elements MUST explicitly use `dir="rtl"`.
+- Latin/French/English text and `<table>` elements MUST explicitly use `dir="ltr"`.
+- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns. The browser handles RTL/LTR table rendering automatically based on the `dir` attribute.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
     if mode == "simulation":
@@ -206,6 +210,7 @@ CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. U
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 
 def detect_document_type(user_msg):
