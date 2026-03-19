@@ -164,24 +164,26 @@ def has_arabic(text):
 
 def get_style_prompt(style, mode):
     global_rules = """
-⚠️ STRICT PRESERVATION RULE (CRITICAL - DO NOT HALLUCINATE):
-1. If the user provides text, names, numbers, or a draft: You MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. 
-2. DO NOT invent fake data, placeholders, or dummy text.
-3. DO NOT CREATE FAKE LETTERHEADS.
-4. 🚫 CRITICAL EXCLUSION RULE: You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures.
+⚠️ DRAFTING VS. FORMATTING (CRITICAL RULE):
+- DRAFTING MODE: If the user asks you to "write", "compose", "draft", or "create a letter about...", you MUST act as a professional copywriter. Generate the full, rich, and appropriate content for that document. Do NOT just repeat their prompt.
+- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data to be formatted, you MUST NOT add, modify, or remove a single letter of their content. Your ONLY job is to format their exact text into professional HTML. DO NOT invent fake data.
 
-⚠️ SMART HTML STRUCTURE & TABLE USAGE:
-1. TABLES FOR TABULAR DATA ONLY: Act like a professional human designer.
-2. NO DIV TABLES: You MUST use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
-3. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
-5. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
+⚠️ EXCLUSION RULE:
+- 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
+
+⚠️ SMART HTML STRUCTURE, ALIGNMENT & TABLE USAGE:
+1. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
+2. PROFESSIONAL ALIGNMENT: Do NOT right-align everything. Center the main titles and dates. Use `text-align: justify` for long paragraphs. Align signatures properly (left or right depending on context). Make the layout dynamic, breathing, and visually professional.
+3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
+4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
+5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
+6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
 
 ⚠️ BIDI & LAYOUT LOCKS (MANDATORY TO PREVENT REVERSALS):
 - Outermost wrapper MUST use `dir="ltr"`.
 - Arabic `<table>` elements MUST use `dir="rtl"`.
 - Non-Arabic (Latin/French) `<table>` elements MUST use `dir="ltr"`.
-- Arabic text MUST explicitly use `dir="rtl" style="text-align: right;"`.
+- Arabic text MUST explicitly use `dir="rtl"`. (Combine with justify/center as needed).
 - 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns for Arabic. The browser handles RTL table rendering automatically.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
@@ -204,6 +206,7 @@ CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. U
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
