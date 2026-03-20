@@ -212,10 +212,6 @@ TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
 
-
-
-
-
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
     single_page_keywords = ['فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon', 'شهادة', 'certificate', 'attestation', 'رسالة', 'letter', 'lettre', 'courrier', 'إيصال', 'receipt', 'reçu', 'تصريح', 'declaration', 'إذن', 'autorisation', 'بطاقة', 'card']
@@ -506,7 +502,7 @@ CRITICAL RULES:
         section.left_margin = Cm(1.8)
         section.right_margin = Cm(1.8)
 
-                def clean_and_format_paragraph(paragraph, is_table=False):
+        def clean_and_format_paragraph(paragraph, is_table=False):
             text = paragraph.text.strip()
             is_arabic_para = has_arabic(text) if text else is_arabic_doc
 
@@ -547,7 +543,6 @@ CRITICAL RULES:
                 szCs = rPr.find(qn('w:szCs'))
                 if szCs is None: szCs = OxmlElement('w:szCs'); rPr.append(szCs)
                 szCs.set(qn('w:val'), target_size)
-                szCs.set(qn('w:val'), '24')
 
         for table in doc.tables:
             table.autofit = True
@@ -906,7 +901,7 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
         models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
 
         for model_id, model_name, timeout in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
