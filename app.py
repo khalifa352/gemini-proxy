@@ -184,6 +184,7 @@ def get_style_prompt(style, mode):
 4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
 5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
 6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
+7. 🚫 NO FIXED FONT SIZES (CRITICAL FOR DYNAMIC SCALING): NEVER use hardcoded pixel or point sizes (e.g., `font-size: 14px;` or `12pt`). You MUST use standard semantic tags (`<h1>`, `<h2>`) or relative sizes (e.g., `font-size: 1.2em;`, `120%`) for visual hierarchy. The parent container controls the base size.
 
 ⚠️ BIDI & MULTILINGUAL LAYOUT LOCKS (MANDATORY):
 - Outermost wrapper MUST use `dir="ltr"`.
@@ -211,6 +212,7 @@ CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. U
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
