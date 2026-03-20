@@ -165,7 +165,8 @@ def has_arabic(text):
 def get_style_prompt(style, mode):
     global_rules = """
 ⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
-- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names. If a required detail is missing, use empty placeholders (e.g., [الاسم], [التاريخ], أو .............).
+- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names.
+- 🚫 NO PLACEHOLDERS: If the user does not provide a specific piece of information (like a date, phone number, name, or reference), DO NOT create empty placeholders (like [الاسم], [التاريخ], or .........). Simply OMIT that element entirely from the design. Only display what was explicitly requested.
 - FORMATTING MODE: If the user provides ready-made text, a draft, or specific data, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content. ZERO hallucination.
 
 ⚠️ EXCLUSION RULE:
@@ -210,6 +211,7 @@ CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. U
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
+
 
 
 
