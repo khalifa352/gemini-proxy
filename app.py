@@ -506,7 +506,7 @@ CRITICAL RULES:
         section.left_margin = Cm(1.8)
         section.right_margin = Cm(1.8)
 
-        def clean_and_format_paragraph(paragraph, is_table=False):
+                def clean_and_format_paragraph(paragraph, is_table=False):
             text = paragraph.text.strip()
             is_arabic_para = has_arabic(text) if text else is_arabic_doc
 
@@ -517,15 +517,19 @@ CRITICAL RULES:
                 spacing = OxmlElement('w:spacing')
                 pPr.append(spacing)
             
+            # ✅ ضبط التباعد (مرونة للنص العادي، وتماسك للجداول)
             if is_table:
                 spacing.set(qn('w:before'), '0')
-                spacing.set(qn('w:after'), '0')
-                spacing.set(qn('w:line'), '240') 
+                spacing.set(qn('w:after'), '60')  # تباعد خفيف للجدول
+                spacing.set(qn('w:line'), '280')  
             else:
                 spacing.set(qn('w:before'), '0')
-                spacing.set(qn('w:after'), '120') 
-                spacing.set(qn('w:line'), '276') 
+                spacing.set(qn('w:after'), '240') # تباعد واضح بين الفقرات (12pt)
+                spacing.set(qn('w:line'), '360')  # تباعد أسطر يعادل 1.5 للنصوص العادية
             spacing.set(qn('w:lineRule'), 'auto')
+
+            # ✅ ضبط حجم الخط (30 تعني 15pt للنص العادي | 24 تعني 12pt للجدول)
+            target_size = '24' if is_table else '30'
 
             for run in paragraph.runs:
                 rPr = run._element.get_or_add_rPr()
@@ -538,10 +542,11 @@ CRITICAL RULES:
                 
                 sz = rPr.find(qn('w:sz'))
                 if sz is None: sz = OxmlElement('w:sz'); rPr.append(sz)
-                sz.set(qn('w:val'), '24')
+                sz.set(qn('w:val'), target_size)
                 
                 szCs = rPr.find(qn('w:szCs'))
                 if szCs is None: szCs = OxmlElement('w:szCs'); rPr.append(szCs)
+                szCs.set(qn('w:val'), target_size)
                 szCs.set(qn('w:val'), '24')
 
         for table in doc.tables:
