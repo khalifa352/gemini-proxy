@@ -175,7 +175,9 @@ def get_style_prompt(style, mode):
 ⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
 1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language:
    - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
-   - RECIPIENT BLOCK (المرسل إليه / À Monsieur): In our regional administrative customs, placing the recipient block at the extreme right or extreme left edge is visually incorrect and against official norms. It must gracefully float towards the opposite inner half of the page (e.g., pushed inwards gracefully) to create a formal visual balance. Use your structural creativity to achieve this elegant, culturally accurate placement.
+   - RECIPIENT BLOCK (المرسل إليه / À Monsieur): 
+     * For Latin/French/English (e.g., "À monsieur..."): It MUST be aligned to the EXTREME LEFT (`text-align: left; margin-left: 0;`) OR explicitly CENTERED. NEVER push it to the right.
+     * For Arabic (e.g., "إلى السيد..."): It MUST be pushed towards the INNER LEFT side (opposite of RTL reading direction) using `<div style="margin-right: 40%; text-align: right;">` or centered. NEVER stick it to the extreme right edge.
    - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
    - METADATA (Dates, Ref numbers): Place them intelligently or use flexbox (`display: flex; justify-content: space-between;`) to distribute elements nicely.
    - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
@@ -213,6 +215,8 @@ CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. U
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
+
+
 
 
 def detect_document_type(user_msg):
