@@ -926,7 +926,57 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
     except Exception as e:
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
 
+# ══════════════════════════════════════════════════════════
+# 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
+# ══════════════════════════════════════════════════════════
+@app.route("/enhance_text", methods=["POST"])
+def enhance_text():
+    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
+    try:
+        data = request.json
+        text = data.get("text", "")
+        if not text.strip():
+            return jsonify({"error": "Failed", "details": "النص فارغ"}), 400
 
+        sys_prompt = """You are an expert corporate billing specialist and strict proofreader.
+Analyze the following product/service description from an invoice.
+
+CRITICAL RULES:
+1. LANGUAGE: You MUST respond in the EXACT SAME LANGUAGE as the user's input text. Do not translate.
+2. TONE: Strictly formal, concise, and professional. NO marketing fluff, NO enthusiasm, NO promotional adjectives (like "amazing", "best", "perfect"). Use precise, standard business/billing terminology suitable for an official corporate invoice.
+
+Return ONLY a valid JSON object with exactly these two keys:
+"correction": The original text with only spelling and grammatical errors fixed. Keep the exact original words and meaning.
+"suggestion": A refined, highly formal, and concise rewritten version of the text, matching standard corporate billing language.
+
+Do NOT wrap the response in ```json, just return the raw JSON object."""
+
+        cfg = get_types().GenerateContentConfig(
+            system_instruction=sys_prompt,
+            temperature=0.1,  # تقليل الإبداع لتكون اللغة رسمية وجافة
+            response_mime_type="application/json"
+        )
+        
+        contents = [f"Text to enhance: {text}"]
+        
+        try:
+            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
+        except:
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
+            
+        result_text = resp.text.strip()
+        
+        if result_text.startswith("```json"):
+            result_text = result_text[7:-3].strip()
+        elif result_text.startswith("```"):
+            result_text = result_text[3:-3].strip()
+            
+        parsed_json = json.loads(result_text)
+        return jsonify(parsed_json)
+        
+    except Exception as e:
+        logger.error(f"Enhance Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
 
 
 if __name__ == "__main__":
