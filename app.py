@@ -926,6 +926,53 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
     except Exception as e:
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
 
+
+
+# ══════════════════════════════════════════════════════════
+# 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
+# ══════════════════════════════════════════════════════════
+@app.route("/enhance_text", methods=["POST"])
+def enhance_text():
+    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
+    try:
+        data = request.json
+        text = data.get("text", "")
+        if not text.strip():
+            return jsonify({"error": "Failed", "details": "النص فارغ"}), 400
+
+        sys_prompt = """You are an expert Arabic business copywriter.
+Analyze the following product/service description.
+Return ONLY a valid JSON object with exactly these two keys:
+"correction": The original text with only spelling and grammar fixed. (Keep the original words).
+"suggestion": A rewritten, highly professional and commercial version of the text suitable for an official invoice.
+Do NOT wrap the response in ```json, just return the raw JSON object."""
+
+        cfg = get_types().GenerateContentConfig(
+            system_instruction=sys_prompt,
+            temperature=0.3,
+            response_mime_type="application/json"
+        )
+        
+        contents = [f"Text to enhance: {text}"]
+        
+        try:
+            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
+        except:
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
+            
+        result_text = resp.text.strip()
+        
+        if result_text.startswith("```json"):
+            result_text = result_text[7:-3].strip()
+        elif result_text.startswith("```"):
+            result_text = result_text[3:-3].strip()
+            
+        parsed_json = json.loads(result_text)
+        return jsonify(parsed_json)
+        
+    except Exception as e:
+        logger.error(f"Enhance Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": str(e)}), 500
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
