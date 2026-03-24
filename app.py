@@ -53,6 +53,15 @@ def call_gemini(model, contents, config, timeout):
         f = ex.submit(get_client().models.generate_content, model=model, contents=contents, config=config)
         return f.result(timeout=timeout)
 
+# 💡 دالة جديدة لاستخراج الاستهلاك الدقيق للتوكنز
+def extract_tokens(resp):
+    try:
+        if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+            return getattr(resp.usage_metadata, 'total_token_count', 0)
+    except Exception as e:
+        logger.error(f"Token extraction error: {e}")
+    return 0
+
 def clean_html_output(raw_text):
     raw = raw_text.strip()
     if raw.startswith("`" * 3):
@@ -216,12 +225,6 @@ TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
 
-
-
-
-
-
-
 def detect_document_type(user_msg):
     msg_lower = user_msg.lower()
     single_page_keywords = ['فاتورة', 'facture', 'invoice', 'devis', 'عرض سعر', 'bon', 'شهادة', 'certificate', 'attestation', 'رسالة', 'letter', 'lettre', 'courrier', 'إيصال', 'receipt', 'reçu', 'تصريح', 'declaration', 'إذن', 'autorisation', 'بطاقة', 'card']
@@ -296,11 +299,12 @@ OUTPUT: Return raw HTML only."""
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
-        logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size})")
-        return jsonify({"response": clean_html})
+        used_tokens = extract_tokens(resp)
+        logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size}) | Tokens: {used_tokens}")
+        return jsonify({"response": clean_html, "used_tokens": used_tokens})
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
 @app.route("/modify", methods=["POST"])
@@ -344,6 +348,7 @@ OUTPUT FORMAT:
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
+        used_tokens = extract_tokens(resp)
         text = resp.text or ""
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
@@ -356,10 +361,10 @@ OUTPUT FORMAT:
             new_inner = re.sub(r'\[MESSAGE\].*?\[/MESSAGE\]', '', new_inner, flags=re.DOTALL | re.IGNORECASE).strip()
             message = "تم التعديل بنجاح ✨"
 
-        return jsonify({"response": new_inner, "message": message})
+        return jsonify({"response": new_inner, "message": message, "used_tokens": used_tokens})
     except Exception as e:
         logger.error(f"Modify Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
 @app.route("/format", methods=["POST"])
@@ -390,6 +395,7 @@ OUTPUT FORMAT:
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
+        used_tokens = extract_tokens(resp)
         text = resp.text or ""
         msg_match = re.search(r'\[MESSAGE\](.*?)\[/MESSAGE\]', text, re.DOTALL | re.IGNORECASE)
         html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
@@ -403,10 +409,10 @@ OUTPUT FORMAT:
             message = "تم التنسيق ✨"
 
         logger.info("✅ Document Smartly Formatted")
-        return jsonify({"response": new_inner, "message": message})
+        return jsonify({"response": new_inner, "message": message, "used_tokens": used_tokens})
     except Exception as e:
         logger.error(f"Format Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
 # ══════════════════════════════════════════════════════════
@@ -422,6 +428,7 @@ def convert_to_word():
         letterhead_on_all_pages = data.get("letterhead_on_all_pages", False)
         
         input_fmt = "html"
+        used_tokens = 0
 
         if pdf_b64 and not html_content:
             logger.info("📄 Converting PDF to Word via AI Bridge first (To preserve tables)...")
@@ -445,9 +452,10 @@ CRITICAL RULES:
             try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
             except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
+            used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
             if not extracted_html:
-                return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الـ PDF."}), 500
+                return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الـ PDF.", "used_tokens": used_tokens}), 500
             
             html_content = extracted_html
 
@@ -491,12 +499,12 @@ CRITICAL RULES:
             file_bytes = full_html.encode('utf-8')
             
         else:
-            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند."}), 400
+            return jsonify({"error": "Failed", "details": "لم يتم إرسال محتوى المستند.", "used_tokens": 0}), 400
 
         raw_docx_bytes, err_msg = local_libreoffice_convert(file_bytes, input_fmt, "docx")
         
         if not raw_docx_bytes:
-            return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}"}), 500
+            return jsonify({"error": "Failed", "details": f"فشل LibreOffice: {err_msg}", "used_tokens": used_tokens}), 500
 
         # ══════════════════════════════════════════════════════════
         # معالجة الوورد: الحرية للمحاذاة وإصلاح انعكاس الأعمدة والتاريخ
@@ -659,10 +667,10 @@ CRITICAL RULES:
         docx_b64 = base64.b64encode(docx_bytes).decode('utf-8')
 
         logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
-        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨"})
+        return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨", "used_tokens": used_tokens})
     except Exception as e:
         logger.error(f"Word Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}"}), 500
+        return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}", "used_tokens": 0}), 500
 
 
 # ══════════════════════════════════════════════════════════
@@ -679,7 +687,7 @@ def magic_convert():
         extract_only = data.get("extractOnly", False)  
 
         if not file_b64:
-            return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف"}), 400
+            return jsonify({"error": "Failed", "details": "لم يتم العثور على الملف", "used_tokens": 0}), 400
 
         mime_lower = mime_type.lower()
         input_ext = "pdf"
@@ -707,6 +715,8 @@ def magic_convert():
             ("html", "docx"), ("html", "xlsx"), ("html", "pdf")
         ]
         
+        used_tokens = 0
+
         if (input_ext, output_ext) in direct_conversions and not extract_only:
             logger.info("⚡ Route 1: Direct LibreOffice Conversion (No AI needed)...")
             
@@ -732,7 +742,8 @@ def magic_convert():
                 return jsonify({
                     "file_base64": result_b64,
                     "extension": output_ext,
-                    "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
+                    "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨",
+                    "used_tokens": used_tokens
                 })
             else:
                 logger.warning(f"⚠️ Direct conversion failed: {err_msg}. Falling back to AI Route if applicable.")
@@ -745,7 +756,7 @@ def magic_convert():
             logger.info("🔄 Converting Document to PDF first via LibreOffice for AI Reading...")
             gemini_bytes, err_msg = local_libreoffice_convert(file_bytes, input_ext, "pdf")
             if not gemini_bytes:
-                return jsonify({"error": "Failed", "details": f"فشل تجهيز المستند للقراءة: {err_msg}"}), 500
+                return jsonify({"error": "Failed", "details": f"فشل تجهيز المستند للقراءة: {err_msg}", "used_tokens": 0}), 500
             gemini_mime = "application/pdf"
         elif input_ext in ["jpg", "jpeg"]: gemini_mime = "image/jpeg"
         elif input_ext == "png": gemini_mime = "image/png"
@@ -772,12 +783,13 @@ CRITICAL RULES:
         try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
         except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
         
+        used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
         if not extracted_html:
-            return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف"}), 500
+            return jsonify({"error": "Failed", "details": "فشل الذكاء الاصطناعي في قراءة الملف", "used_tokens": used_tokens}), 500
         
         if extract_only or target_format == "html":
-            return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨"})
+            return jsonify({"html_content": extracted_html, "message": "تم استخراج النصوص بنجاح ✨", "used_tokens": used_tokens})
         
         logger.info(f"📄 Wrapping extracted HTML to final format: {output_ext.upper()}...")
         
@@ -796,18 +808,19 @@ CRITICAL RULES:
         result_bytes, err_msg = local_libreoffice_convert(final_bytes, "html", output_ext)
         
         if not result_bytes:
-            return jsonify({"error": "Failed", "details": f"فشل تجميع الملف النهائي: {err_msg}"}), 500
+            return jsonify({"error": "Failed", "details": f"فشل تجميع الملف النهائي: {err_msg}", "used_tokens": used_tokens}), 500
             
         result_b64 = base64.b64encode(result_bytes).decode('utf-8')
         return jsonify({
             "file_base64": result_b64,
             "extension": output_ext,
-            "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨"
+            "message": f"تم التحويل إلى {target_format.upper()} بنجاح ✨",
+            "used_tokens": used_tokens
         })
 
     except Exception as e:
         logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
 # ══════════════════════════════════════════════════════════
@@ -861,7 +874,7 @@ OUTPUT: Return raw HTML only."""
         if reference_b64:
             contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         else:
-            return jsonify({"error": "Failed", "details": "لم يتم إرفاق المستند"}), 400
+            return jsonify({"error": "Failed", "details": "لم يتم إرفاق المستند", "used_tokens": 0}), 400
 
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
@@ -870,12 +883,13 @@ OUTPUT: Return raw HTML only."""
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
+        used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
-        logger.info(f"✅ Generated Translation HTML (Target: {target_language})")
-        return jsonify({"response": clean_html})
+        logger.info(f"✅ Generated Translation HTML (Target: {target_language}) | Tokens: {used_tokens}")
+        return jsonify({"response": clean_html, "used_tokens": used_tokens})
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
 @app.route("/generate_image", methods=["POST"])
@@ -884,14 +898,14 @@ def generate_image():
     try:
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح API غير موجود.", "used_tokens": 0}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
         reference_images = data.get("reference_images", [])
 
         if not user_prompt.strip():
-            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم.", "used_tokens": 0}), 400
 
         system_text = """You are an elite creative designer.
 RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design. Cultural context: Mauritanian features if people are included. 8K quality."""
@@ -919,12 +933,12 @@ RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design.
                 parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 for part in parts:
                     if "inlineData" in part:
-                        return jsonify({"response": part["inlineData"]["data"], "message": f"تم التصميم بنجاح ✨ ({model_name})"})
+                        return jsonify({"response": part["inlineData"]["data"], "message": f"تم التصميم بنجاح ✨ ({model_name})", "used_tokens": 0})
             except: continue
 
-        return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة."}), 500
+        return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة.", "used_tokens": 0}), 500
     except Exception as e:
-        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}", "used_tokens": 0}), 500
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
@@ -936,7 +950,7 @@ def enhance_text():
         data = request.json
         text = data.get("text", "")
         if not text.strip():
-            return jsonify({"error": "Failed", "details": "النص فارغ"}), 400
+            return jsonify({"error": "Failed", "details": "النص فارغ", "used_tokens": 0}), 400
 
         sys_prompt = """You are an expert corporate billing specialist and strict proofreader.
 Analyze the following product/service description from an invoice.
@@ -964,6 +978,7 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         except:
             resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
             
+        used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
         
         if result_text.startswith("```json"):
@@ -972,11 +987,12 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
             result_text = result_text[3:-3].strip()
             
         parsed_json = json.loads(result_text)
+        parsed_json["used_tokens"] = used_tokens
         return jsonify(parsed_json)
         
     except Exception as e:
         logger.error(f"Enhance Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e)}), 500
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
 if __name__ == "__main__":
