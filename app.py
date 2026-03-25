@@ -904,106 +904,105 @@ OUTPUT: Return raw HTML only."""
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
+# ══════════════════════════════════════════════════════════
+# 🚀 NEW: DESIGN GENERATION (Vertex AI: Imagen 4 Ultra -> 3 Fallback)
+# ══════════════════════════════════════════════════════════
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
     import urllib.error
     import json
-
+    
     try:
-        # قراءة مفتاح Vertex AI
         k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API-KEY2")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        reference_image = data.get("reference_image", None)
 
         if not user_prompt.strip():
-            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🎨 Generating with Nano Banana Pro/2...")
+        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        # 🚀 تعليمات النظام الصارمة جداً (منع الموكاب + فرض البيئة الموريتانية)
-        system_text = """You are an elite creative designer and art director.
-RULES:
-1. Generate EXACTLY what the user describes with maximum professional quality.
-2. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly. This section is dedicated to modern professional logos, print materials, and social media.
-3. For logos and branding: Clean, scalable, flat professional design with clear typography. NO 3D mockups.
-4. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
-5. For social media: Visually striking, commercial studio lighting, vibrant colors.
-6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
-7. Render any Arabic text inside images with perfect spelling and beautiful typography.
-8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
-9. If a reference image is provided, incorporate it naturally into the design."""
+        # 🚀 المرحلة 1: المدير الفني الذكي (يمنع الموكاب ويفرض البيئة الموريتانية)
+        gemini_url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key={k}"
+        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
+The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
+CRITICAL RULES:
+1. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
+2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
+3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
+4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
+5. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
-        user_parts = [{"text": user_prompt}]
-        
-        # معالجة الصورة المرجعية إن وجدت
-        if reference_image:
-            clean_b64 = reference_image
-            if "," in clean_b64:
-                clean_b64 = clean_b64.split(",", 1)[1]
-            user_parts.append({
-                "inlineData": {
-                    "mimeType": "image/jpeg",
-                    "data": clean_b64
-                }
-            })
-            logger.info("📎 Reference image attached")
+        gemini_payload = {
+            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "systemInstruction": {"role": "system", "parts": [{"text": sys_instruct}]},
+            "generationConfig": {"temperature": 0.7}
+        }
 
+        try:
+            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req_gemini, timeout=15) as response:
+                gemini_result = json.loads(response.read().decode('utf-8'))
+                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                logger.info(f"✨ Super Prompt: {expanded_prompt}")
+        except Exception as e:
+            logger.warning(f"Gemini enhancement failed, using fallback: {e}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, Mauritanian cultural context. Subject: {user_prompt}"
+
+        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback (Imagen 4 Ultra -> Imagen 3)...")
+
+        headers = {"Content-Type": "application/json"}
         payload = {
-            "contents": [{"role": "user", "parts": user_parts}],
-            "systemInstruction": {"parts": [{"text": system_text}]},
-            "generationConfig": {
-                "responseModalities": ["IMAGE", "TEXT"],
-                "temperature": 0.7,
-                "imageConfig": {"aspectRatio": "1:1"}
+            "instances": [{"prompt": expanded_prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "1:1",
+                "outputOptions": {"mimeType": "image/jpeg"}
             }
         }
 
-        headers = {"Content-Type": "application/json"}
-
-        # 🚀 ترتيب النماذج من الأقوى (Pro) إلى الأسرع (Flash)
-        models = [
-            ("gemini-3-pro-image-preview", "Nano Banana Pro", 120),
-            ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
-            ("gemini-2.5-flash-preview-image-generation", "Gemini 2.5 Flash Image", 90),
+        # 🚀 قائمة النماذج من الأقوى (Imagen 4 Ultra) إلى الأضمن (Imagen 3)
+        models_to_try = [
+            "imagen-4.0-ultra-generate-001",
+            "imagen-4.0-generate-001",
+            "imagen-3.0-generate-002",
+            "imagen-3.0-generate-001"
         ]
 
-        for model_id, model_name, timeout in models:
-            # استخدام خوادم Vertex AI لاختراق الحظر
-            url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_id}:generateContent?key={k}"
+        for model_name in models_to_try:
+            url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_name}:predict?key={k}"
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
-                logger.info(f"🚀 Trying {model_name} ({model_id})...")
-                req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
-                with urllib.request.urlopen(req, timeout=timeout) as response:
+                logger.info(f"🚀 Trying {model_name}...")
+                with urllib.request.urlopen(req, timeout=45) as response:
                     result = json.loads(response.read().decode('utf-8'))
-
-                parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                for part in parts:
-                    if "inlineData" in part:
-                        logger.info(f"✅ Generated with {model_name}")
-                        return jsonify({
-                            "response": part["inlineData"]["data"],
-                            "message": f"تم التصميم بنجاح ✨ ({model_name})"
-                        })
-
-                logger.warning(f"⚠️ {model_name} returned no image")
+                    if "predictions" in result and len(result["predictions"]) > 0:
+                        img_b64 = result["predictions"][0].get("bytesBase64Encoded")
+                        if img_b64:
+                            logger.info(f"✅ Design Generated Successfully with {model_name}!")
+                            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
             except urllib.error.HTTPError as e:
-                error_body = e.read().decode('utf-8')
-                logger.warning(f"❌ {model_name} HTTP {e.code}: {error_body[:300]}")
+                # إذا رد جوجل بخطأ (مثل 404 أو 403)، نتخطى النموذج فوراً للذي بعده
+                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}). Skipping to next...")
+                continue 
             except Exception as e:
-                logger.warning(f"❌ {model_name} failed: {e}")
+                logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
+                continue
 
-        return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة."}), 500
+        # إذا فشلت جميع المحاولات
+        logger.error("❌ All image models failed or are unsupported by this key.")
+        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، يرجى المحاولة لاحقاً."}), 500
 
     except Exception as e:
-        logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء الاتصال بالخادم."}), 500
+
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
