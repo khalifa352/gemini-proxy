@@ -320,16 +320,24 @@ def modify():
             logger.error("❌ ERROR: current_html is empty!")
             return jsonify({"error": "Failed", "details": "لم يتم العثور على محتوى المستند الحالي لإجراء التعديل الذكي. يرجى المحاولة مرة أخرى."}), 400
 
-        img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if ref_b64 else ""
+                img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if ref_b64 else ""
 
+        # 👇 التعديل هنا: دمج القيود الصارمة للإنشاء (الخطوط، الهوامش، المسافات، ومنع الخلفيات)
         sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
-CRITICAL RULES:
-1. EXACT COPY-PASTE: Output the EXACT SAME HTML structure provided. DO NOT delete unrelated text.
+
+CRITICAL RULES (MUST FOLLOW STRICTLY):
+1. EXACT COPY-PASTE: Output the EXACT SAME HTML structure provided. DO NOT delete unrelated text or sections.
 2. SURGICAL EDIT: Apply the exact surgical change requested. DO NOT hallucinate or add fake elements.
-3. BIDI PROTECTION: Preserve `dir="ltr"` on wrappers. Arabic `<table>` elements use `dir="rtl"`. Protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
-4. RETURN FULL HTML: Return the complete patched HTML. Do not truncate.
+3. BIDI & TYPOGRAPHY PROTECTION: 
+   - Preserve `dir="ltr"` on wrappers. Arabic `<table>` elements use `dir="rtl"`.
+   - Protect phone numbers with `<span dir="ltr" style="display:inline-block; unicode-bidi:bidi-override; white-space:nowrap;">`.
+   - Text in Arabic MUST use `font-family: 'Arial', sans-serif;`. Text in Latin/English MUST use `font-family: 'Times New Roman', serif;`.
+4. 🚫 NO BORDERS & NO BACKGROUNDS (CRITICAL): NEVER add outer borders, strokes, shadow boxes, or background colors (especially dark ones) to the main wrappers (`<div>`, `<p>`, `<span>`). The document MUST remain a clean, borderless, transparent standard paper layout.
+5. NO FORCED SPACING: DO NOT inject inline `line-height` or custom `margin/padding` into text elements (`<p>`, `<span>`) unless the user explicitly asks for it. Rely on the document's global layout.
+6. RETURN FULL HTML: Return the complete patched HTML. Do not truncate or use placeholders like '<!-- rest of content -->'.
 {img_note}
+
 OUTPUT FORMAT:
 [MESSAGE]
 وصف قصير للتعديل باللغة العربية
@@ -338,7 +346,12 @@ OUTPUT FORMAT:
 (ضع هنا كود الـ HTML المعدل كاملاً)
 [/HTML]"""
 
-        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
+        cfg = get_types().GenerateContentConfig(
+            system_instruction=sys, 
+            temperature=0.0, 
+            max_output_tokens=16384
+        )
+
         cts = [f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."]
         if ref_b64:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
