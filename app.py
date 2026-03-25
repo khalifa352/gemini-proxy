@@ -908,50 +908,102 @@ OUTPUT: Return raw HTML only."""
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
+    import urllib.error
+    import json
+
     try:
-        k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API_KEY")
+        # قراءة مفتاح Vertex AI
+        k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API-KEY2")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح API غير موجود.", "used_tokens": 0}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح API غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        reference_images = data.get("reference_images", [])
+        reference_image = data.get("reference_image", None)
 
         if not user_prompt.strip():
-            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم.", "used_tokens": 0}), 400
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم."}), 400
 
-        system_text = """You are an elite creative designer.
-RULES: Generate exactly what is described. NO MOCKUPS. Flat professional design. Cultural context: Mauritanian features if people are included. 8K quality."""
+        logger.info(f"🎨 Generating with Nano Banana Pro/2...")
+
+        # 🚀 تعليمات النظام الصارمة جداً (منع الموكاب + فرض البيئة الموريتانية)
+        system_text = """You are an elite creative designer and art director.
+RULES:
+1. Generate EXACTLY what the user describes with maximum professional quality.
+2. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly. This section is dedicated to modern professional logos, print materials, and social media.
+3. For logos and branding: Clean, scalable, flat professional design with clear typography. NO 3D mockups.
+4. For print designs (cards, flyers, posters): Clean layout, negative space, precise text rendering.
+5. For social media: Visually striking, commercial studio lighting, vibrant colors.
+6. CULTURAL CONTEXT (STRICT): If people or environments are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
+7. Render any Arabic text inside images with perfect spelling and beautiful typography.
+8. Always produce 8K quality, cinematic lighting, hyper-realistic or professional graphic style.
+9. If a reference image is provided, incorporate it naturally into the design."""
 
         user_parts = [{"text": user_prompt}]
-        for b64_img in reference_images:
-            clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
-            user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
+        
+        # معالجة الصورة المرجعية إن وجدت
+        if reference_image:
+            clean_b64 = reference_image
+            if "," in clean_b64:
+                clean_b64 = clean_b64.split(",", 1)[1]
+            user_parts.append({
+                "inlineData": {
+                    "mimeType": "image/jpeg",
+                    "data": clean_b64
+                }
+            })
+            logger.info("📎 Reference image attached")
 
         payload = {
             "contents": [{"role": "user", "parts": user_parts}],
             "systemInstruction": {"parts": [{"text": system_text}]},
-            "generationConfig": {"responseModalities": ["IMAGE"], "temperature": 0.7}
+            "generationConfig": {
+                "responseModalities": ["IMAGE", "TEXT"],
+                "temperature": 0.7,
+                "imageConfig": {"aspectRatio": "1:1"}
+            }
         }
 
         headers = {"Content-Type": "application/json"}
-        models = [("gemini-3-pro-image-preview", "Nano Banana Pro", 120), ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90), ("gemini-2.5-flash", "Gemini 2.5 Flash", 90)]
+
+        # 🚀 ترتيب النماذج من الأقوى (Pro) إلى الأسرع (Flash)
+        models = [
+            ("gemini-3-pro-image-preview", "Nano Banana Pro", 120),
+            ("gemini-3.1-flash-image-preview", "Nano Banana 2", 90),
+            ("gemini-2.5-flash-preview-image-generation", "Gemini 2.5 Flash Image", 90),
+        ]
 
         for model_id, model_name, timeout in models:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_id}:generateContent?key={k}"
+            # استخدام خوادم Vertex AI لاختراق الحظر
+            url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_id}:generateContent?key={k}"
+            
             try:
+                logger.info(f"🚀 Trying {model_name} ({model_id})...")
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as response:
                     result = json.loads(response.read().decode('utf-8'))
+
                 parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 for part in parts:
                     if "inlineData" in part:
-                        return jsonify({"response": part["inlineData"]["data"], "message": f"تم التصميم بنجاح ✨ ({model_name})", "used_tokens": 0})
-            except: continue
+                        logger.info(f"✅ Generated with {model_name}")
+                        return jsonify({
+                            "response": part["inlineData"]["data"],
+                            "message": f"تم التصميم بنجاح ✨ ({model_name})"
+                        })
 
-        return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة.", "used_tokens": 0}), 500
+                logger.warning(f"⚠️ {model_name} returned no image")
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                logger.warning(f"❌ {model_name} HTTP {e.code}: {error_body[:300]}")
+            except Exception as e:
+                logger.warning(f"❌ {model_name} failed: {e}")
+
+        return jsonify({"error": "Failed", "details": "جميع النماذج فشلت في توليد الصورة."}), 500
+
     except Exception as e:
-        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}", "used_tokens": 0}), 500
+        logger.error(f"❌ Server Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
