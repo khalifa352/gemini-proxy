@@ -112,6 +112,16 @@ def force_tables_ltr_for_export(html_text):
 # ══════════════════════════════════════════════════════════
 def local_libreoffice_convert(file_bytes, input_ext, output_ext):
     logger.info(f"🖥️ Local LibreOffice: Converting {input_ext.upper()} to {output_ext.upper()}...")
+    
+    # 🧹 [التعديل الجراحي]: تنظيف ملف قفل X99 لتجنب خطأ Server is already active for display 99
+    lock_file = "/tmp/.X99-lock"
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            logger.info("🧹 Cleared stale /tmp/.X99-lock file.")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to clear lock file: {e}")
+
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
             input_path = os.path.join(temp_dir, f"input.{input_ext}")
@@ -323,7 +333,6 @@ def modify():
 
         img_note = f"\nINSERT image: <img src='data:image/jpeg;base64,{ref_b64}' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if ref_b64 else ""
 
-        # 👇 التعديل هنا: دمج القيود الصارمة للإنشاء (الخطوط، الهوامش، المسافات، ومنع الخلفيات)
         sys = f"""You are a STRICT HTML PATCHING ENGINE. You are NOT a designer.
 You will receive a <CURRENT_HTML> document and a <USER_REQUEST>.
 
@@ -908,7 +917,6 @@ OUTPUT: Return raw HTML only."""
 # ══════════════════════════════════════════════════════════
 # 🚀 NEW: DESIGN GENERATION (Vertex AI: Imagen 4 Ultra -> 3 Fallback)
 # ══════════════════════════════════════════════════════════
-
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -1064,4 +1072,5 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
 
