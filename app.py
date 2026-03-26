@@ -909,7 +909,7 @@ OUTPUT: Return raw HTML only."""
 # 🚀 NEW: DESIGN GENERATION (Vertex AI: Imagen 4 Ultra -> 3 Fallback)
 # ══════════════════════════════════════════════════════════
 
-@@app.route("/generate_image", methods=["POST"])
+@app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
     import urllib.error
@@ -931,7 +931,7 @@ def generate_image():
 
         # 🚀 المرحلة 1: المدير الفني الذكي
         # 🚩 تم التوجيه إلى AI Studio ليتوافق مع الـ API Key الخاص بك
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -943,7 +943,6 @@ CRITICAL RULES:
 
         gemini_payload = {
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-            # 🚩 تم تصحيح هيكل systemInstruction ليقبله الخادم
             "systemInstruction": {"parts": [{"text": sys_instruct}]},
             "generationConfig": {"temperature": 0.7}
         }
@@ -980,7 +979,7 @@ CRITICAL RULES:
 
         for model_name in models_to_try:
             # 🚩 تم التوجيه إلى AI Studio لتوليد الصور
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
@@ -1006,12 +1005,6 @@ CRITICAL RULES:
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
-
-
-    except Exception as e:
-        logger.error(f"Design Server Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": "حدث خطأ أثناء الاتصال بالخادم."}), 500
-
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
@@ -1071,3 +1064,4 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+
