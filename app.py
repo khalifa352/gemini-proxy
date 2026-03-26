@@ -913,9 +913,6 @@ OUTPUT: Return raw HTML only."""
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
-# ══════════════════════════════════════════════════════════
-# 🚀 DESIGN GENERATION (Vertex AI: Imagen 4 Ultra -> 3 Fallback)
-# ══════════════════════════════════════════════════════════
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -923,19 +920,24 @@ def generate_image():
     import json
     
     try:
+        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
         k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
+        # 🚩 استرجاع الصور المرجعية والأبعاد من تطبيق سويفت
+        reference_images = data.get("reference_images", [])
+        aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
+        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -945,8 +947,14 @@ CRITICAL RULES:
 4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
 5. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
+        # 🚩 دمج الصور المرجعية إن وجدت
+        user_parts = [{"text": user_prompt}]
+        for b64_img in reference_images:
+            clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
+            user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
+
         gemini_payload = {
-            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "contents": [{"role": "user", "parts": user_parts}],
             "systemInstruction": {"parts": [{"text": sys_instruct}]},
             "generationConfig": {"temperature": 0.7}
         }
@@ -957,8 +965,12 @@ CRITICAL RULES:
                 gemini_result = json.loads(response.read().decode('utf-8'))
                 expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
                 logger.info(f"✨ Super Prompt: {expanded_prompt}")
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, Mauritanian cultural context. Subject: {user_prompt}"
         except Exception as e:
-            logger.warning(f"Gemini enhancement failed, using fallback: {e}")
+            logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
             expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, Mauritanian cultural context. Subject: {user_prompt}"
 
         logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
@@ -968,20 +980,20 @@ CRITICAL RULES:
             "instances": [{"prompt": expanded_prompt}],
             "parameters": {
                 "sampleCount": 1,
-                "aspectRatio": "1:1",
-                "outputOptions": {"mimeType": "image/jpeg"}
+                "aspectRatio": aspect_ratio
             }
         }
 
+        # 🚀 التركيز على نماذج Imagen 3 الموثوقة على AI Studio
         models_to_try = [
-            "imagen-4.0-ultra-generate-001",
-            "imagen-4.0-generate-001",
+            "imagen-3.0-generate-001",
             "imagen-3.0-generate-002",
-            "imagen-3.0-generate-001"
+            "imagen-4.0-generate-001"
         ]
 
+        last_error = ""
         for model_name in models_to_try:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
@@ -994,18 +1006,23 @@ CRITICAL RULES:
                             logger.info(f"✅ Design Generated Successfully with {model_name}!")
                             return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
             except urllib.error.HTTPError as e:
-                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}). Skipping to next...")
+                # 🚩 الكاشف العميق: سيكتب لنا سبب الرفض بالضبط في السجلات!
+                err_body = e.read().decode('utf-8')
+                last_error = err_body
+                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
                 continue 
             except Exception as e:
+                last_error = str(e)
                 logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
                 continue
 
-        logger.error("❌ All image models failed or are unsupported by this key.")
+        logger.error(f"❌ All image models failed. Last error: {last_error}")
         return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، يرجى المحاولة لاحقاً."}), 500
         
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
