@@ -909,14 +909,15 @@ OUTPUT: Return raw HTML only."""
 # 🚀 NEW: DESIGN GENERATION (Vertex AI: Imagen 4 Ultra -> 3 Fallback)
 # ══════════════════════════════════════════════════════════
 
-@app.route("/generate_image", methods=["POST"])
+@@app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
     import urllib.error
     import json
     
     try:
-        k = os.environ.get("GOOGLE_API_KEY2") or os.environ.get("GOOGLE_API-KEY2")
+        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
+        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
 
@@ -928,8 +929,9 @@ def generate_image():
 
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        # 🚀 المرحلة 1: المدير الفني الذكي (يمنع الموكاب ويفرض البيئة الموريتانية)
-        gemini_url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key={k}"
+        # 🚀 المرحلة 1: المدير الفني الذكي
+        # 🚩 تم التوجيه إلى AI Studio ليتوافق مع الـ API Key الخاص بك
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -941,7 +943,8 @@ CRITICAL RULES:
 
         gemini_payload = {
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-            "systemInstruction": {"role": "system", "parts": [{"text": sys_instruct}]},
+            # 🚩 تم تصحيح هيكل systemInstruction ليقبله الخادم
+            "systemInstruction": {"parts": [{"text": sys_instruct}]},
             "generationConfig": {"temperature": 0.7}
         }
 
@@ -955,7 +958,7 @@ CRITICAL RULES:
             logger.warning(f"Gemini enhancement failed, using fallback: {e}")
             expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, Mauritanian cultural context. Subject: {user_prompt}"
 
-        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback (Imagen 4 Ultra -> Imagen 3)...")
+        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
 
         headers = {"Content-Type": "application/json"}
         payload = {
@@ -967,7 +970,7 @@ CRITICAL RULES:
             }
         }
 
-        # 🚀 قائمة النماذج من الأقوى (Imagen 4 Ultra) إلى الأضمن (Imagen 3)
+        # 🚀 قائمة النماذج من الأقوى إلى الأضمن
         models_to_try = [
             "imagen-4.0-ultra-generate-001",
             "imagen-4.0-generate-001",
@@ -976,7 +979,8 @@ CRITICAL RULES:
         ]
 
         for model_name in models_to_try:
-            url = f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model_name}:predict?key={k}"
+            # 🚩 تم التوجيه إلى AI Studio لتوليد الصور
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
@@ -989,7 +993,6 @@ CRITICAL RULES:
                             logger.info(f"✅ Design Generated Successfully with {model_name}!")
                             return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
             except urllib.error.HTTPError as e:
-                # إذا رد جوجل بخطأ (مثل 404 أو 403)، نتخطى النموذج فوراً للذي بعده
                 logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}). Skipping to next...")
                 continue 
             except Exception as e:
@@ -999,6 +1002,11 @@ CRITICAL RULES:
         # إذا فشلت جميع المحاولات
         logger.error("❌ All image models failed or are unsupported by this key.")
         return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، يرجى المحاولة لاحقاً."}), 500
+        
+    except Exception as e:
+        logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+
 
     except Exception as e:
         logger.error(f"Design Server Error: {str(e)}", exc_info=True)
