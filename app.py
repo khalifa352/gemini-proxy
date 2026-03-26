@@ -938,14 +938,15 @@ def generate_image():
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
         gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
-        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
+        s        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
 1. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
 2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
 3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
 4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
-5. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
+5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts.
+6. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
         # 🚩 دمج الصور المرجعية إن وجدت
         user_parts = [{"text": user_prompt}]
@@ -984,12 +985,13 @@ CRITICAL RULES:
             }
         }
 
-        # 🚀 التركيز على نماذج Imagen 3 الموثوقة على AI Studio
+              # 🚀 الترتيب الصحيح: من الأقوى في النصوص (الجيل الرابع) إلى الأساسي
         models_to_try = [
-            "imagen-3.0-generate-001",
+            "imagen-4.0-generate-001",
             "imagen-3.0-generate-002",
-            "imagen-4.0-generate-001"
+            "imagen-3.0-generate-001"
         ]
+
 
         last_error = ""
         for model_name in models_to_try:
