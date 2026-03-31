@@ -214,7 +214,8 @@ def get_style_prompt(style, mode):
 - 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns. The browser handles RTL/LTR table rendering automatically based on the `dir` attribute.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
-if mode == "simulation":
+
+    if mode == "simulation":
         return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
 IGNORE logos, stamps, signatures. Do NOT invent data.
 ⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
@@ -225,7 +226,6 @@ You are simulating a visual document. You MUST clean the structure and bind main
 {global_rules}
 RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
 RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
-
 
     design_base = ""
     if style == "modern":
