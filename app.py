@@ -18,12 +18,19 @@ from docx.shared import Inches, Cm, Pt
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
+# ══════════════════════════════════════════════════════════
+# ✅ مكتبات Vertex AI الجديدة
+# ══════════════════════════════════════════════════════════
+import google.cloud.aiplatform as aiplatform
+from vertexai.generative_models import GenerativeModel, Part, GenerationConfig
+import vertexai
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("Monjez_V10_Server")
 
 app = Flask(__name__)
 
-# ── Lazy Gemini ──
+# ── Lazy Gemini / Vertex AI ──
 _client = None
 _types = None
 _init = False
@@ -33,15 +40,29 @@ def get_client():
     if not _init:
         _init = True
         try:
-            from google import genai as g
-            from google.genai import types as t
-            _types = t
-            k = os.environ.get("GOOGLE_API_KEY")
-            if k:
-                _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V10 Server (Ready)")
+            # ✅ الخطوة 1: تهيئة Vertex AI بالمسار المباشر (Professional Tier)
+            credentials_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+            if credentials_json:
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(credentials_json)
+                    temp_path = f.name
+                
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_path
+                
+                project_id = "arctic-robot-496920-d0"
+                location = "us-central1"
+                
+                aiplatform.init(project=project_id, location=location)
+                vertexai.init(project=project_id, location=location)
+                
+                _client = True  # تم التهيئة بنجاح
+                _types = "vertex"  # علامة على استخدام Vertex
+                logger.info("✅ Monjez V10 Server (Vertex AI Professional Ready)")
+            else:
+                logger.error("❌ GOOGLE_APPLICATION_CREDENTIALS_JSON غير موجود في متغيرات البيئة")
         except Exception as e:
-            logger.error(f"Init: {e}")
+            logger.error(f"Init Error: {e}")
     return _client
 
 def get_types():
@@ -50,8 +71,70 @@ def get_types():
 
 def call_gemini(model, contents, config, timeout):
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        f = ex.submit(get_client().models.generate_content, model=model, contents=contents, config=config)
+        f = ex.submit(_vertex_generate_content, model=model, contents=contents, config=config)
         return f.result(timeout=timeout)
+
+def _vertex_generate_content(model, contents, config):
+    """
+    دالة التفاف لتحويل استدعاءات Gemini القديمة إلى Vertex AI
+    """
+    try:
+        # تحويل اسم النموذج إلى تنسيق Vertex AI
+        vertex_model_name = model.replace("gemini-", "gemini-")
+        
+        model_obj = GenerativeModel(vertex_model_name)
+        
+        # تحويل الإعدادات
+        generation_config = GenerationConfig(
+            temperature=getattr(config, 'temperature', 0.15),
+            max_output_tokens=getattr(config, 'max_output_tokens', 8192),
+            top_p=getattr(config, 'top_p', 0.95),
+        )
+        
+        # تحويل المحتويات
+        vertex_contents = []
+        for content in contents:
+            if isinstance(content, str):
+                vertex_contents.append(content)
+            elif hasattr(content, 'data') and hasattr(content, 'mime_type'):
+                # هذا Part من المكتبة القديمة، نحوله
+                vertex_contents.append(Part.from_data(data=content.data, mime_type=content.mime_type))
+            else:
+                vertex_contents.append(content)
+        
+        # التعامل مع system_instruction
+        system_instruction = getattr(config, 'system_instruction', None)
+        if system_instruction:
+            response = model_obj.generate_content(
+                vertex_contents,
+                generation_config=generation_config,
+                system_instruction=[system_instruction] if isinstance(system_instruction, str) else system_instruction
+            )
+        else:
+            response = model_obj.generate_content(
+                vertex_contents,
+                generation_config=generation_config
+            )
+        
+        # إضافة خاصية text للتوافق مع الكود القديم
+        if hasattr(response, 'text'):
+            response.text = response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            response.text = response.candidates[0].content.parts[0].text
+        
+        # إضافة usage_metadata للتوافق
+        if hasattr(response, 'usage_metadata'):
+            pass  # موجود بالفعل
+        else:
+            class FakeUsage:
+                total_token_count = 0
+            response.usage_metadata = FakeUsage()
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Vertex AI Generation Error: {e}")
+        raise
 
 # 💡 دالة جديدة لاستخراج الاستهلاك الدقيق للتوكنز
 def extract_tokens(resp):
@@ -301,17 +384,17 @@ OUTPUT: Return raw HTML only."""
 
         contents = [user_msg] if user_msg else ["Create a formal document."]
         if reference_b64:
-            contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
+            contents.append(Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         if letterhead_b64:
             contents.append("Ensure layout fits empty space below this letterhead.")
-            contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
+            contents.append(Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
 
-        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
+        gen_config = GenerationConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3.5-flash", contents, gen_config, 55)
+            resp = call_gemini("gemini-1.5-flash", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 50)
+            resp = call_gemini("gemini-1.5-flash-8b", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
@@ -360,7 +443,7 @@ OUTPUT FORMAT:
 (ضع هنا كود الـ HTML المعدل كاملاً)
 [/HTML]"""
 
-        cfg = get_types().GenerateContentConfig(
+        cfg = GenerationConfig(
             system_instruction=sys, 
             temperature=0.0, 
             max_output_tokens=16384
@@ -368,12 +451,12 @@ OUTPUT FORMAT:
 
         cts = [f"<CURRENT_HTML>\n{current_html}\n</CURRENT_HTML>\n\n<USER_REQUEST>\n{instruction}\n</USER_REQUEST>\n\nTASK: Apply the exact surgical change and return FULL updated HTML."]
         if ref_b64:
-            cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
+            cts.append(Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-3.5-flash", cts, cfg, 55)
+            resp = call_gemini("gemini-1.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 50)
+            resp = call_gemini("gemini-1.5-flash-8b", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -414,13 +497,13 @@ OUTPUT FORMAT:
 (ضع هنا كود الـ HTML المنسق كاملاً)
 [/HTML]"""
 
-        cfg = get_types().GenerateContentConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
+        cfg = GenerationConfig(system_instruction=sys, temperature=0.0, max_output_tokens=16384)
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-3.5-flash", cts, cfg, 55)
+            resp = call_gemini("gemini-1.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 50)
+            resp = call_gemini("gemini-1.5-flash-8b", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -468,16 +551,16 @@ CRITICAL RULES:
 2. 🚫 CRITICAL EXCLUSION RULE: IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures.
 3. TABLES & COLSPAN: Use proper `<table>`. NO background colors. For "Total" (الإجمالي) rows, use `colspan` nicely.
 4. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer cells. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
-5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`.
+5. 🚫 NO GHOST BOXES: NEVER use CSS borders on `<div>`, `<p>`, or `<span>`. Borders are for tables ONLY.
 6. 🔄 COLUMN ORDER: Extract columns exactly as they appear in their natural logical order without reversing them.
 7. NUMBERS: Wrap any standalone numbers/dates in `<span dir="ltr"></span>`.
 8. NO MARKDOWN: Output strictly pure HTML code."""
             
-            contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
-            gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
+            contents = [bridge_prompt, Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
+            gen_config = GenerationConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-3.5-flash", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 90)
+            try: resp = call_gemini("gemini-1.5-flash", contents, gen_config, 90)
+            except: resp = call_gemini("gemini-1.5-flash-8b", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
@@ -804,11 +887,11 @@ CRITICAL RULES:
 8. NUMBERS: Wrap standalone numbers/dates in `<span dir="ltr"></span>`.
 9. PURE HTML ONLY. Do not wrap in ```html."""
         
-        contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
-        gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
+        contents = [bridge_prompt, Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
+        gen_config = GenerationConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-3.5-flash", contents, gen_config, 90)
-        except: resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 90)
+        try: resp = call_gemini("gemini-1.5-flash", contents, gen_config, 90)
+        except: resp = call_gemini("gemini-1.5-flash-8b", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
@@ -899,16 +982,16 @@ OUTPUT: Return raw HTML only."""
 
         contents = [f"Translate this document to {target_language} while keeping the exact layout."]
         if reference_b64:
-            contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
+            contents.append(Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
         else:
             return jsonify({"error": "Failed", "details": "لم يتم إرفاق المستند", "used_tokens": 0}), 400
 
-        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
+        gen_config = GenerationConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3.5-flash", contents, gen_config, 55)
+            resp = call_gemini("gemini-1.5-flash", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 50)
+            resp = call_gemini("gemini-1.5-flash-8b", contents, gen_config, 50)
 
         used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
@@ -942,7 +1025,7 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=){k}"
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -990,17 +1073,16 @@ CRITICAL RULES:
             }
         }
 
-              # 🚀 الترتيب الصحيح: من الأقوى في النصوص (الجيل الرابع) إلى الأساسي
+        # 🚀 الترتيب الصحيح: من الأقوى في النصوص (الجيل الرابع) إلى الأساسي
         models_to_try = [
             "imagen-4.0-generate-001",
             "imagen-3.0-generate-002",
             "imagen-3.0-generate-001"
         ]
 
-
         last_error = ""
         for model_name in models_to_try:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
@@ -1056,7 +1138,7 @@ Return ONLY a valid JSON object with exactly these two keys:
 
 Do NOT wrap the response in ```json, just return the raw JSON object."""
 
-        cfg = get_types().GenerateContentConfig(
+        cfg = GenerationConfig(
             system_instruction=sys_prompt,
             temperature=0.1,
             response_mime_type="application/json"
@@ -1065,9 +1147,9 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-3.5-flash", contents, cfg, 30)
+            resp = call_gemini("gemini-1.5-flash", contents, cfg, 30)
         except:
-            resp = call_gemini("gemini-3.1-flash-lite", contents, cfg, 30)
+            resp = call_gemini("gemini-1.5-flash-8b", contents, cfg, 30)
             
         used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
