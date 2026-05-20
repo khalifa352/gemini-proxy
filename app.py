@@ -371,9 +371,9 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
+            resp = call_gemini("gemini-3.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
+            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
