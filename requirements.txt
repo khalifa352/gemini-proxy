@@ -5,5 +5,6 @@ google-genai
 openai
 python-docx
 beautifulsoup4
+google-cloud-aiplatform
 
 
