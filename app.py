@@ -74,20 +74,50 @@ def get_client():
         try:
             import vertexai
             from google.oauth2 import service_account
+            
+            credentials = None
+            
+            # 1. محاولة قراءة المفتاح كنص مباشر من متغيرات البيئة
             creds_json_str = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+            # 2. محاولة قراءة المفتاح كمسار ملف
+            creds_file_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
             if creds_json_str:
-                creds_info = json.loads(creds_json_str)
-                credentials = service_account.Credentials.from_service_account_info(
-                    creds_info,
-                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
-                )
+                try:
+                    logger.info("🔍 يتم الآن قراءة المفتاح من متغير GOOGLE_APPLICATION_CREDENTIALS_JSON...")
+                    creds_info = json.loads(creds_json_str)
+                    credentials = service_account.Credentials.from_service_account_info(
+                        creds_info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    logger.info("✅ تم تحميل المفتاح بنجاح من النص (JSON String).")
+                except Exception as parse_err:
+                    logger.error(f"❌ فشل في تحليل نص الـ JSON (تأكد من عدم وجود مسافات أو فواصل خاطئة): {parse_err}")
+            
+            elif creds_file_path:
+                try:
+                    logger.info(f"🔍 يتم الآن قراءة المفتاح من الملف: {creds_file_path}...")
+                    if os.path.exists(creds_file_path):
+                        credentials = service_account.Credentials.from_service_account_file(
+                            creds_file_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                        )
+                        logger.info("✅ تم تحميل المفتاح بنجاح من ملف الـ JSON.")
+                    else:
+                        logger.error(f"❌ مسار الملف موجود في المتغيرات ولكن الملف غير موجود في السيرفر: {creds_file_path}")
+                except Exception as file_err:
+                    logger.error(f"❌ خطأ أثناء قراءة ملف المفتاح: {file_err}")
+            
+            else:
+                logger.error("❌ لم يتم العثور على أي مفتاح! يرجى تعيين GOOGLE_APPLICATION_CREDENTIALS_JSON أو GOOGLE_APPLICATION_CREDENTIALS")
+
+            if credentials:
                 vertexai.init(project="arctic-robot-496920-d0", location="us-central1", credentials=credentials)
                 _client = _VertexClient()
-                logger.info("✅ Monjez V10 Server (Vertex AI Ready)")
+                logger.info("🚀 تم تشغيل محرك Vertex AI بنجاح للمنجز برو!")
             else:
-                logger.error("❌ GOOGLE_APPLICATION_CREDENTIALS_JSON not found")
+                logger.error("⚠️ لم يتم تفعيل Vertex AI بسبب غياب أو خطأ في المفتاح.")
+
         except Exception as e:
-            logger.error(f"Vertex AI Init Error: {e}")
+            logger.error(f"❌ Vertex AI Init Error (خطأ جذري في التهيئة): {e}", exc_info=True)
     return _client
 
 
@@ -990,7 +1020,7 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -1047,7 +1077,7 @@ CRITICAL RULES:
 
         last_error = ""
         for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
