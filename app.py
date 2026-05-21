@@ -76,10 +76,7 @@ def get_client():
             from google.oauth2 import service_account
             
             credentials = None
-            
-            # 1. محاولة قراءة المفتاح كنص مباشر من متغيرات البيئة
             creds_json_str = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-            # 2. محاولة قراءة المفتاح كمسار ملف
             creds_file_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
             if creds_json_str:
@@ -91,7 +88,7 @@ def get_client():
                     )
                     logger.info("✅ تم تحميل المفتاح بنجاح من النص (JSON String).")
                 except Exception as parse_err:
-                    logger.error(f"❌ فشل في تحليل نص الـ JSON (تأكد من عدم وجود مسافات أو فواصل خاطئة): {parse_err}")
+                    logger.error(f"❌ فشل في تحليل نص الـ JSON (تأكد من سلامة النسخ): {parse_err}")
             
             elif creds_file_path:
                 try:
@@ -102,7 +99,7 @@ def get_client():
                         )
                         logger.info("✅ تم تحميل المفتاح بنجاح من ملف الـ JSON.")
                     else:
-                        logger.error(f"❌ مسار الملف موجود في المتغيرات ولكن الملف غير موجود في السيرفر: {creds_file_path}")
+                        logger.error(f"❌ مسار الملف المعين غير موجود في الخادم: {creds_file_path}")
                 except Exception as file_err:
                     logger.error(f"❌ خطأ أثناء قراءة ملف المفتاح: {file_err}")
             
@@ -131,6 +128,7 @@ def call_gemini(model, contents, config, timeout):
         f = ex.submit(get_client().models.generate_content, model=model, contents=contents, config=config)
         return f.result(timeout=timeout)
 
+
 # 💡 دالة جديدة لاستخراج الاستهلاك الدقيق للتوكنز
 def extract_tokens(resp):
     try:
@@ -139,6 +137,7 @@ def extract_tokens(resp):
     except Exception as e:
         logger.error(f"Token extraction error: {e}")
     return 0
+
 
 def clean_html_output(raw_text):
     raw = raw_text.strip()
@@ -152,6 +151,7 @@ def clean_html_output(raw_text):
     raw = re.sub(r'\s?contenteditable=\'[^\']*\'', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\s?contenteditable', '', raw, flags=re.IGNORECASE)
     return raw.strip()
+
 
 # ══════════════════════════════════════════════════════════
 # 🛡️ حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
@@ -177,12 +177,14 @@ def force_table_borders(html_text):
     
     return html_text
 
+
 # ══════════════════════════════════════════════════════════
 # 🔧 تحويل اتجاه الجداول إلى LTR قبل تصدير الوورد
 # ══════════════════════════════════════════════════════════
 def force_tables_ltr_for_export(html_text):
     html_text = re.sub(r'(<table[^>]*?)\bdir\s*=\s*["\']rtl["\']', r'\1dir="ltr"', html_text, flags=re.IGNORECASE)
     return html_text
+
 
 # ══════════════════════════════════════════════════════════
 # 🚀 Local LibreOffice Converter
@@ -254,9 +256,11 @@ def local_libreoffice_convert(file_bytes, input_ext, output_ext):
         logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
         return None, f"استثناء المحرك: {str(e)}"
 
+
 # 💡 الرادار اللغوي الذكي
 def has_arabic(text):
     return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
+
 
 def get_style_prompt(style, mode):
     global_rules = """
@@ -333,6 +337,7 @@ def detect_document_type(user_msg):
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
+
 @app.route("/gemini", methods=["POST"])
 def generate():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
@@ -387,9 +392,10 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3.5-flash", contents, gen_config, 55)
-        except:
-            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل النموذج الأساسي في /gemini، جاري الانتقال للاحتياطي: {e}")
+            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
@@ -449,9 +455,10 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-3.5-flash", cts, cfg, 55)
-        except:
-            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل النموذج الأساسي في /modify، جاري الانتقال للاحتياطي: {e}")
+            resp = call_gemini("gemini-2.5-flash-lite", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -496,9 +503,10 @@ OUTPUT FORMAT:
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-3.5-flash", cts, cfg, 55)
-        except:
-            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل النموذج الأساسي في /format، جاري الانتقال للاحتياطي: {e}")
+            resp = call_gemini("gemini-2.5-flash-lite", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -554,8 +562,11 @@ CRITICAL RULES:
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-3.5-flash", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 90)
+            try: 
+                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+            except Exception as e: 
+                logger.warning(f"⚠️ فشل النموذج الأساسي في /convert_to_word (OCR)، جاري الانتقال للاحتياطي: {e}")
+                resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
@@ -885,8 +896,11 @@ CRITICAL RULES:
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-3.5-flash", contents, gen_config, 90)
-        except: resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 90)
+        try: 
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+        except Exception as e: 
+            logger.warning(f"⚠️ فشل النموذج الأساسي في /magic_convert، جاري الانتقال للاحتياطي: {e}")
+            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
@@ -984,9 +998,10 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3.5-flash", contents, gen_config, 55)
-        except:
-            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل النموذج الأساسي في /translate_document، جاري الانتقال للاحتياطي: {e}")
+            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 50)
 
         used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
@@ -995,6 +1010,7 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
+
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
@@ -1090,7 +1106,6 @@ CRITICAL RULES:
                             logger.info(f"✅ Design Generated Successfully with {model_name}!")
                             return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
             except urllib.error.HTTPError as e:
-                # 🚩 الكاشف العميق: سيكتب لنا سبب الرفض بالضبط في السجلات!
                 err_body = e.read().decode('utf-8')
                 last_error = err_body
                 logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
@@ -1142,9 +1157,10 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-3.5-flash", contents, cfg, 30)
-        except:
-            resp = call_gemini("gemini-3.1-flash-lite", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل النموذج الأساسي في /enhance_text، جاري الانتقال للاحتياطي: {e}")
+            resp = call_gemini("gemini-2.5-flash-lite", contents, cfg, 30)
             
         used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
