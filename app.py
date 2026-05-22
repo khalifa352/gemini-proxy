@@ -88,7 +88,7 @@ def call_gemini(fallback_model_name, contents, config, timeout):
     )
     
     # قائمة النماذج حسب الأولوية (الصاروخي أولاً، ثم المستقر الحالي)
-    target_hierarchy = ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    target_hierarchy = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash"]
     
     # نبدأ دائماً بالنموذج الذي نجح مسبقاً (لتجنب التأخير)، ثم نكمل البقية إذا فشل
     models_to_try = []
