@@ -23,6 +23,9 @@ logger = logging.getLogger("Monjez_V10_Server")
 
 app = Flask(__name__)
 
+# متغير عام لتخزين النموذج الناجح تلقائياً (لتجنب التأخير في الطلبات القادمة)
+_active_text_model = None
+
 # ══════════════════════════════════════════════════════════
 # 🚀 تهيئة الاتصال الجديد عبر Vertex AI (نظام الشركات المجاني)
 # ══════════════════════════════════════════════════════════
@@ -73,12 +76,10 @@ _types_instance = _DummyTypes()
 def get_types():
     return _types_instance
 
-def call_gemini(model_name, contents, config, timeout):
+def call_gemini(fallback_model_name, contents, config, timeout):
+    global _active_text_model
     init_vertex()
     from vertexai.generative_models import GenerativeModel, GenerationConfig
-    
-    # نجبر النظام دائماً على استخدام النموذج الأقوى والأسرع الذي اختبرناه
-    actual_model = "gemini-2.0-flash-001"
     
     gen_config = GenerationConfig(
         temperature=config.temperature,
@@ -86,11 +87,44 @@ def call_gemini(model_name, contents, config, timeout):
         response_mime_type=config.response_mime_type
     )
     
-    model = GenerativeModel(actual_model, system_instruction=config.system_instruction)
+    # قائمة النماذج حسب الأولوية (الصاروخي أولاً، ثم المستقر الحالي)
+    target_hierarchy = ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        f = ex.submit(model.generate_content, contents, generation_config=gen_config)
-        return f.result(timeout=timeout)
+    # نبدأ دائماً بالنموذج الذي نجح مسبقاً (لتجنب التأخير)، ثم نكمل البقية إذا فشل
+    models_to_try = []
+    if _active_text_model:
+        models_to_try.append(_active_text_model)
+    
+    for m in target_hierarchy:
+        if m not in models_to_try:
+            models_to_try.append(m)
+            
+    last_exception = None
+    for m_name in models_to_try:
+        try:
+            model = GenerativeModel(m_name, system_instruction=config.system_instruction)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                f = ex.submit(model.generate_content, contents, generation_config=gen_config)
+                resp = f.result(timeout=timeout)
+                
+                # تحديث النموذج النشط إذا تغير
+                if _active_text_model != m_name:
+                    _active_text_model = m_name
+                    logger.info(f"🚀 ACTIVE MODEL LOCKED TO: {m_name}")
+                    
+                return resp
+        except Exception as e:
+            last_exception = e
+            err_str = str(e).lower()
+            if "404" in err_str or "not found" in err_str:
+                logger.warning(f"⚠️ Model {m_name} not available. Falling back to next...")
+                continue
+            else:
+                logger.warning(f"⚠️ Model {m_name} failed with error: {e}. Trying next...")
+                continue
+                
+    # إذا فشلت جميع النماذج
+    raise last_exception or Exception("جميع النماذج فشلت في الاستجابة.")
 
 # 💡 دالة استخراج الاستهلاك الدقيق للتوكنز
 def extract_tokens(resp):
@@ -292,7 +326,11 @@ def detect_document_type(user_msg):
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
+    return jsonify({
+        "status": "Monjez V10 Server Active", 
+        "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"],
+        "active_text_model": _active_text_model or "قيد الانتظار لمعرفة النموذج السريع المتاح"
+    })
 
 @app.route("/gemini", methods=["POST"])
 def generate():
@@ -348,9 +386,9 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 55)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
@@ -410,9 +448,9 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-2.0-flash-001", cts, cfg, 55)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.0-flash-001", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -457,9 +495,9 @@ OUTPUT FORMAT:
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-2.0-flash-001", cts, cfg, 55)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.0-flash-001", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -515,8 +553,8 @@ CRITICAL RULES:
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 90)
+            try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+            except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
@@ -846,8 +884,8 @@ CRITICAL RULES:
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 90)
-        except: resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 90)
+        try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+        except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
@@ -945,9 +983,9 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 55)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.0-flash-001", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
@@ -981,7 +1019,7 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=){k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -990,7 +1028,8 @@ CRITICAL RULES:
 3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
 4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
 5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts.
-6. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
+6. ARABIC TEXT SUPPORT (STRICT): If the user prompt requires text, phrases, or logo names in Arabic, you MUST explicitly instruct the image generator to render PERFECT, fully readable, connected Arabic typography.
+7. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
         # 🚩 دمج الصور المرجعية إن وجدت
         user_parts = [{"text": user_prompt}]
@@ -1013,10 +1052,10 @@ CRITICAL RULES:
         except urllib.error.HTTPError as e:
             err_body = e.read().decode('utf-8')
             logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, Mauritanian cultural context. Subject: {user_prompt}"
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, precise readable Arabic typography, Mauritanian cultural context. Subject: {user_prompt}"
         except Exception as e:
             logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, Mauritanian cultural context. Subject: {user_prompt}"
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, precise readable Arabic typography, Mauritanian cultural context. Subject: {user_prompt}"
 
         logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
 
@@ -1029,13 +1068,12 @@ CRITICAL RULES:
             }
         }
 
-              # 🚀 الترتيب الصحيح: من الأقوى في النصوص (الجيل الرابع) إلى الأساسي
+        # 🚀 الترتيب الصحيح: من الأقوى في النصوص (الجيل الرابع إن وجد مستقبلا) ثم أقوى نسخ الجيل الثالث الموثوقة مع العربية
         models_to_try = [
             "imagen-4.0-generate-001",
             "imagen-3.0-generate-002",
             "imagen-3.0-generate-001"
         ]
-
 
         last_error = ""
         for model_name in models_to_try:
@@ -1104,9 +1142,9 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-2.0-flash-001", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
         except:
-            resp = call_gemini("gemini-2.0-flash-001", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
             
         used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
