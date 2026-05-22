@@ -1,7 +1,7 @@
 import os
 import re
 import json
-import logging
+import 
 import base64
 import time
 import io
@@ -87,8 +87,8 @@ def call_gemini(fallback_model_name, contents, config, timeout):
         response_mime_type=config.response_mime_type
     )
     
-    # قائمة النماذج حسب الأولوية (الصاروخي أولاً، ثم المستقر الحالي)
-    target_hierarchy = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3-flash-preview"]
+    # قائمة النماذج حسب الأولوية (الصاروخي أولاً، ثم المستقر الحالي) — بدون تكرار
+    target_hierarchy = ["gemini-2.5-flash", "gemini-2.0-flash"]
     
     # نبدأ دائماً بالنموذج الذي نجح مسبقاً (لتجنب التأخير)، ثم نكمل البقية إذا فشل
     models_to_try = []
@@ -149,7 +149,7 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡️ حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
+# 🛡 حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
     # 0. إزالة أوسمة البنية التي يُنشئها Gemini أحياناً وتسبب صفاً وهمياً في LibreOffice
@@ -254,6 +254,13 @@ def has_arabic(text):
     return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
 
 def get_style_prompt(style, mode):
+    output_lock = """🔴 OUTPUT CONTRACT — INVIOLABLE:
+Return ONLY raw HTML starting with the very first HTML tag and ending with the very last HTML tag.
+ZERO preamble. ZERO postamble. ZERO self-commentary. ZERO explanations. ZERO justifications.
+If you cannot fulfill any part of the request, SILENTLY SKIP IT. Never write why.
+Violating this rule by outputting ANY non-HTML text before or after the HTML is a critical failure.
+"""
+
     global_rules = """
 ⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
 - DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names.
@@ -270,7 +277,7 @@ def get_style_prompt(style, mode):
      * For Latin/French/English (e.g., "À monsieur..."): It MUST be aligned to the EXTREME LEFT (`text-align: left; margin-left: 0;`) OR explicitly CENTERED. NEVER push it to the right.
      * For Arabic (e.g., "إلى السيد..."): It MUST be strictly aligned to the EXTREME RIGHT (`text-align: right; margin-right: 0;`). NEVER push it to the left or center it.
    - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
-   - METADATA & FILLABLE FIELDS: Place them intelligently (e.g., using flexbox). If a field is meant to be filled by hand after printing (e.g., "التاريخ:" or "التوقيع:"), you MUST leave sufficient physical writing space next to it (e.g., using "التاريخ: ....................") and NEVER push it to the absolute edge of the page.
+   - METADATA & FILLABLE FIELDS: Place them intelligently (e.g., using flexbox). If a field is meant to be filled by hand after printing (e.g., "التاريخ:" or "التوقيع:"), you MUST leave exactly 10 dots of writing space next to it (e.g., "التاريخ: ..........") and NEVER push it to the absolute edge of the page.
    - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
    - Make the layout dynamic, breathing, and visually balanced!
 2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
@@ -289,7 +296,8 @@ def get_style_prompt(style, mode):
 """
 
     if mode == "simulation":
-        return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
+        return f"""{output_lock}
+CLONING: Reproduce EXACTLY text/tables from the reference image.
 IGNORE logos, stamps, signatures. Do NOT invent data.
 ⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
 
@@ -302,10 +310,12 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
+        design_base = f"""{output_lock}
+MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
 CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
     else:
-        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+        design_base = f"""{output_lock}
+FORMAL/OFFICIAL - Ultra clean, strictly official document design.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
 ⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
 TYPOGRAPHY: Dynamic sizes. Title bold centered."""
@@ -386,9 +396,9 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
@@ -448,9 +458,9 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -495,9 +505,9 @@ OUTPUT FORMAT:
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -553,8 +563,8 @@ CRITICAL RULES:
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+            try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+            except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
@@ -884,8 +894,8 @@ CRITICAL RULES:
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
-        except: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+        try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+        except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
@@ -983,9 +993,9 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
@@ -1019,7 +1029,7 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=){k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -1142,9 +1152,9 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
         except:
-            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
             
         used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
