@@ -88,7 +88,7 @@ def call_gemini(fallback_model_name, contents, config, timeout):
     )
     
     # قائمة النماذج حسب الأولوية (الصاروخي أولاً، ثم المستقر الحالي)
-    target_hierarchy = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash"]
+    target_hierarchy = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3-flash-preview"]
     
     # نبدأ دائماً بالنموذج الذي نجح مسبقاً (لتجنب التأخير)، ثم نكمل البقية إذا فشل
     models_to_try = []
@@ -386,9 +386,9 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
+            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
+            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
@@ -448,9 +448,9 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
+            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
+            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -495,9 +495,9 @@ OUTPUT FORMAT:
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
+            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
+            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -553,8 +553,8 @@ CRITICAL RULES:
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+            try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+            except: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
@@ -884,8 +884,8 @@ CRITICAL RULES:
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
-        except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
+        try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+        except: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
@@ -983,9 +983,9 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
+            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
+            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 50)
 
         used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
@@ -1019,7 +1019,7 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=){k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -1142,9 +1142,9 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
+            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
         except:
-            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
+            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
             
         used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
