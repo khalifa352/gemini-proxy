@@ -23,37 +23,76 @@ logger = logging.getLogger("Monjez_V10_Server")
 
 app = Flask(__name__)
 
-# ── Lazy Gemini ──
-_client = None
-_types = None
+# ══════════════════════════════════════════════════════════
+# 🚀 تهيئة الاتصال الجديد عبر Vertex AI (نظام الشركات المجاني)
+# ══════════════════════════════════════════════════════════
 _init = False
 
-def get_client():
-    global _client, _types, _init
+def init_vertex():
+    global _init
     if not _init:
         _init = True
         try:
-            from google import genai as g
-            from google.genai import types as t
-            _types = t
-            k = os.environ.get("GOOGLE_API_KEY")
-            if k:
-                _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
-                logger.info("✅ Monjez V10 Server (Ready)")
+            import vertexai
+            from google.oauth2 import service_account
+            
+            # يبحث عن ملف الجيسون في نفس مجلد المشروع (يجب رفع الملف باسم service_account.json)
+            json_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
+            
+            if os.path.exists(json_path):
+                creds = service_account.Credentials.from_service_account_file(json_path)
+                vertexai.init(project='arctic-robot-496920-d0', location='us-central1', credentials=creds)
+                logger.info("✅ Monjez V10 Server (Vertex AI Ready - Service Account JSON)")
+            else:
+                vertexai.init(project='arctic-robot-496920-d0', location='us-central1')
+                logger.info("✅ Monjez V10 Server (Vertex AI Ready - Default Auth)")
         except Exception as e:
-            logger.error(f"Init: {e}")
-    return _client
+            logger.error(f"Vertex Init Error: {e}")
+
+def get_client():
+    init_vertex()
+    return True  # نرجع True لتجاوز فحوصات الاتصال القديمة بنجاح
+
+# 💡 فئة وسيطة للحفاظ على توافق كل الكود القديم دون تعديله
+class _DummyTypes:
+    class Part:
+        @staticmethod
+        def from_bytes(data, mime_type):
+            from vertexai.generative_models import Part as VPart
+            return VPart.from_data(data=data, mime_type=mime_type)
+    
+    class GenerateContentConfig:
+        def __init__(self, system_instruction=None, temperature=None, max_output_tokens=None, response_mime_type=None):
+            self.system_instruction = system_instruction
+            self.temperature = temperature
+            self.max_output_tokens = max_output_tokens
+            self.response_mime_type = response_mime_type
+
+_types_instance = _DummyTypes()
 
 def get_types():
-    get_client()
-    return _types
+    return _types_instance
 
-def call_gemini(model, contents, config, timeout):
+def call_gemini(model_name, contents, config, timeout):
+    init_vertex()
+    from vertexai.generative_models import GenerativeModel, GenerationConfig
+    
+    # نجبر النظام دائماً على استخدام النموذج الأقوى والأسرع الذي اختبرناه
+    actual_model = "gemini-2.5-flash"
+    
+    gen_config = GenerationConfig(
+        temperature=config.temperature,
+        max_output_tokens=config.max_output_tokens,
+        response_mime_type=config.response_mime_type
+    )
+    
+    model = GenerativeModel(actual_model, system_instruction=config.system_instruction)
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        f = ex.submit(get_client().models.generate_content, model=model, contents=contents, config=config)
+        f = ex.submit(model.generate_content, contents, generation_config=gen_config)
         return f.result(timeout=timeout)
 
-# 💡 دالة جديدة لاستخراج الاستهلاك الدقيق للتوكنز
+# 💡 دالة استخراج الاستهلاك الدقيق للتوكنز
 def extract_tokens(resp):
     try:
         if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
@@ -309,7 +348,7 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
@@ -371,7 +410,7 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
@@ -418,7 +457,7 @@ OUTPUT FORMAT:
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", cts, cfg, 55)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
@@ -476,7 +515,7 @@ CRITICAL RULES:
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+            try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
@@ -807,7 +846,7 @@ CRITICAL RULES:
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 90)
+        try: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
         except: resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
@@ -906,7 +945,7 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-3-flash-preview", contents, gen_config, 55)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 55)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
@@ -942,7 +981,7 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -1000,7 +1039,7 @@ CRITICAL RULES:
 
         last_error = ""
         for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
@@ -1065,7 +1104,7 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-3-flash-preview", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
         except:
             resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
             
@@ -1089,5 +1128,3 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
-
-
