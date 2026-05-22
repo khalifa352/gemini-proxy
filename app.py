@@ -81,20 +81,20 @@ def call_gemini(fallback_model_name, contents, config, timeout):
     init_vertex()
     from vertexai.generative_models import GenerativeModel, GenerationConfig
     
-    gen_config = GenerationConfig(
-        temperature=config.temperature,
-        max_output_tokens=config.max_output_tokens,
-        response_mime_type=config.response_mime_type
-    )
+    gen_kwargs = {
+        "temperature": config.temperature,
+        "max_output_tokens": config.max_output_tokens,
+    }
+    if config.response_mime_type:
+        gen_kwargs["response_mime_type"] = config.response_mime_type
+    gen_config = GenerationConfig(**gen_kwargs)
     
-    # قائمة النماذج حسب الأولوية (الصاروخي أولاً، ثم المستقر الحالي) — بدون تكرار
+    # قائمة النماذج حسب الأولوية: الأسرع أولاً، ثم الأكثر استقراراً
     target_hierarchy = ["gemini-2.5-flash-lite", "gemini-2.0-flash"]
     
-    # نبدأ دائماً بالنموذج الذي نجح مسبقاً (لتجنب التأخير)، ثم نكمل البقية إذا فشل
     models_to_try = []
     if _active_text_model:
         models_to_try.append(_active_text_model)
-    
     for m in target_hierarchy:
         if m not in models_to_try:
             models_to_try.append(m)
@@ -106,24 +106,15 @@ def call_gemini(fallback_model_name, contents, config, timeout):
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
                 f = ex.submit(model.generate_content, contents, generation_config=gen_config)
                 resp = f.result(timeout=timeout)
-                
-                # تحديث النموذج النشط إذا تغير
-                if _active_text_model != m_name:
-                    _active_text_model = m_name
-                    logger.info(f"🚀 ACTIVE MODEL LOCKED TO: {m_name}")
-                    
-                return resp
+            if _active_text_model != m_name:
+                _active_text_model = m_name
+                logger.info(f"🚀 ACTIVE MODEL LOCKED TO: {m_name}")
+            return resp
         except Exception as e:
             last_exception = e
-            err_str = str(e).lower()
-            if "404" in err_str or "not found" in err_str:
-                logger.warning(f"⚠️ Model {m_name} not available. Falling back to next...")
-                continue
-            else:
-                logger.warning(f"⚠️ Model {m_name} failed with error: {e}. Trying next...")
-                continue
+            logger.warning(f"⚠️ Model {m_name} failed: {e}. Trying next...")
+            continue
                 
-    # إذا فشلت جميع النماذج
     raise last_exception or Exception("جميع النماذج فشلت في الاستجابة.")
 
 # 💡 دالة استخراج الاستهلاك الدقيق للتوكنز
@@ -149,27 +140,20 @@ def clean_html_output(raw_text):
     return raw.strip()
 
 # ══════════════════════════════════════════════════════════
-# 🛡 حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
+# 🛡️ حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
-    # 0. إزالة أوسمة البنية التي يُنشئها Gemini أحياناً وتسبب صفاً وهمياً في LibreOffice
     html_text = re.sub(r'</?thead[^>]*>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'</?tbody[^>]*>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'</?tfoot[^>]*>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'<colgroup[^>]*>.*?</colgroup>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
     html_text = re.sub(r'<caption[^>]*>.*?</caption>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
-    
-    # 1. إجبار الجدول على التنسيق النظيف المندمج لمنع الخطوط المزدوجة
     html_text = html_text.replace("<table", "<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse; border-spacing:0; width:100%; border: 1px solid black; margin: 10px 0;' ")
     html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 4px; text-align: center; vertical-align: middle; color: black;' ")
     html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 4px; vertical-align: middle;' ")
-    
-    # 2. درع التنظيف: مسح أي صفوف فارغة (Empty Rows) أنشأها الذكاء الاصطناعي وتسبب الخانة الفارغة
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*&nbsp;\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
-    # مسح صفوف فارغة تحتوي فقط على مسافات أو أسطر فارغة داخل الخلايا
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*(?:&nbsp;|\s)*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
-    
     return html_text
 
 # ══════════════════════════════════════════════════════════
@@ -179,148 +163,144 @@ def force_tables_ltr_for_export(html_text):
     html_text = re.sub(r'(<table[^>]*?)\bdir\s*=\s*["\']rtl["\']', r'\1dir="ltr"', html_text, flags=re.IGNORECASE)
     return html_text
 
-# ══════════════════════════════════════════════════════════
-# 🚀 Local LibreOffice Converter
-# ══════════════════════════════════════════════════════════
-def local_libreoffice_convert(file_bytes, input_ext, output_ext):
-    logger.info(f"🖥️ Local LibreOffice: Converting {input_ext.upper()} to {output_ext.upper()}...")
-    
-    # 🧹 [التعديل الجراحي]: تنظيف ملف قفل X99 لتجنب خطأ Server is already active for display 99
-    lock_file = "/tmp/.X99-lock"
-    if os.path.exists(lock_file):
-        try:
-            os.remove(lock_file)
-            logger.info("🧹 Cleared stale /tmp/.X99-lock file.")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to clear lock file: {e}")
-
-    try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            input_path = os.path.join(temp_dir, f"input.{input_ext}")
-            with open(input_path, 'wb') as f:
-                f.write(file_bytes)
-            
-            profile_dir = os.path.join(temp_dir, "lo_profile")
-            
-            filters = {
-                "docx": "docx:MS Word 2007 XML",
-                "xlsx": "xlsx:Calc MS Excel 2007 XML",
-                "pptx": "pptx:Impress MS PowerPoint 2007 XML",
-                "pdf": "pdf"
-            }
-            lo_filter = filters.get(output_ext, output_ext)
-            
-            command = [
-                'libreoffice',
-                f'-env:UserInstallation=file://{profile_dir}',
-                '--headless',
-                '--invisible',
-                '--nocrashreport',
-                '--nodefault',
-                '--nofirststartwizard',
-                '--nologo',
-                '--norestore',
-                '--convert-to', lo_filter,
-                '--outdir', temp_dir,
-                input_path
-            ]
-            
-            env = os.environ.copy()
-            env["SAL_USE_VCLPLUGIN"] = "gen"
-            env["LC_ALL"] = "C.UTF-8"
-            env["DISPLAY"] = ":99"
-            
-            process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, env=env)
-            output_path = os.path.join(temp_dir, f"input.{output_ext}")
-            
-            if process.returncode == 0 and os.path.exists(output_path):
-                with open(output_path, 'rb') as f:
-                    result_bytes = f.read()
-                logger.info("✅ Local LibreOffice: Conversion successful!")
-                return result_bytes, None
-            else:
-                error_msg = process.stderr.decode('utf-8', errors='ignore').strip()
-                if not error_msg:
-                    error_msg = process.stdout.decode('utf-8', errors='ignore').strip() or "Unknown error"
-                logger.error(f"❌ LibreOffice Failed! Code: {process.returncode}")
-                logger.error(f"❌ Error Details: {error_msg}")
-                return None, f"خطأ المحرك (Code {process.returncode}): {error_msg}"
-    except Exception as e:
-        logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
-        return None, f"استثناء المحرك: {str(e)}"
-
 # 💡 الرادار اللغوي الذكي
 def has_arabic(text):
     return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
 
 def get_style_prompt(style, mode):
+
     output_lock = """🔴 OUTPUT CONTRACT — INVIOLABLE:
-Return ONLY raw HTML starting with the very first HTML tag and ending with the very last HTML tag.
-ZERO preamble. ZERO postamble. ZERO self-commentary. ZERO explanations. ZERO justifications.
+Return ONLY raw HTML starting with the very first HTML tag and ending with the very last closing tag.
+ZERO preamble. ZERO postamble. ZERO self-commentary. ZERO explanations.
 If you cannot fulfill any part of the request, SILENTLY SKIP IT. Never write why.
 Violating this rule by outputting ANY non-HTML text before or after the HTML is a critical failure.
 """
 
-    global_rules = """
-⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
-- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names.
-- 🚫 NO PLACEHOLDERS: If the user does not provide a specific piece of information, DO NOT create empty placeholders UNLESS the user explicitly requests a fillable form or blank template. Otherwise, simply OMIT that element entirely.
-- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content. ZERO hallucination.
+    integrity_rules = """
+════════════════════════════════════════════════
+🧠 IDENTITY: WHO YOU ARE
+════════════════════════════════════════════════
+You are an elite Document Architect — a master specialist in creating, formatting, and structuring ALL types of official and professional documents across every domain: government letters, administrative decisions, legal contracts, commercial invoices, service quotes, certificates, attestations, reports, feasibility studies, research papers, financial statements, HR documents, and more.
+You have deep expertise in the formal conventions of Arabic, French, and English official documents. You understand the structural hierarchy, tonal register, and visual layout conventions of EACH document type. You produce documents that look and feel like they were created by a professional human expert, not generated by AI.
 
-⚠️ EXCLUSION RULE:
-- 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
+════════════════════════════════════════════════
+🔍 STEP 1 — CLASSIFY THE INPUT (MANDATORY FIRST STEP)
+════════════════════════════════════════════════
+Before generating any HTML, silently classify the user's input into ONE of these three modes:
 
-⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
-1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language:
-   - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
-   - RECIPIENT BLOCK (المرسل إليه / À Monsieur): 
-     * For Latin/French/English (e.g., "À monsieur..."): It MUST be aligned to the EXTREME LEFT (`text-align: left; margin-left: 0;`) OR explicitly CENTERED. NEVER push it to the right.
-     * For Arabic (e.g., "إلى السيد..."): It MUST be strictly aligned to the EXTREME RIGHT (`text-align: right; margin-right: 0;`). NEVER push it to the left or center it.
-   - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
-   - METADATA & FILLABLE FIELDS: Place them intelligently (e.g., using flexbox). If a field is meant to be filled by hand after printing (e.g., "التاريخ:" or "التوقيع:"), you MUST leave exactly 10 dots of writing space next to it (e.g., "التاريخ: ..........") and NEVER push it to the absolute edge of the page.
-   - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
-   - Make the layout dynamic, breathing, and visually balanced!
-2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
-3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
-4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
-6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
-7. 🚫 NO FIXED FONT SIZES (CRITICAL FOR DYNAMIC SCALING): NEVER use hardcoded pixel or point sizes (e.g., `font-size: 14px;` or `12pt`). You MUST use standard semantic tags (`<h1>`, `<h2>`) or relative sizes (e.g., `font-size: 1.2em;`, `120%`) for visual hierarchy. The parent container controls the base size.
+MODE A — READY CONTENT (تنسيق محتوى جاهز):
+  Signal: User provides complete text, data, or a full draft to be formatted.
+  Your Job: Format their EXACT content into professional HTML. You are a formatter, NOT a writer.
+  Iron Rule: DO NOT add, remove, rephrase, or hallucinate a SINGLE word. Every character must come from the user.
 
-⚠️ BIDI & MULTILINGUAL LAYOUT LOCKS (MANDATORY):
-- Outermost wrapper MUST use `dir="ltr"`.
-- Arabic text and `<table>` elements MUST explicitly use `dir="rtl"`.
-- Latin/French/English text and `<table>` elements MUST explicitly use `dir="ltr"`.
-- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns. The browser handles RTL/LTR table rendering automatically based on the `dir` attribute.
-- NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
+MODE B — DRAFTING FROM BRIEF (صياغة من فكرة):
+  Signal: User provides a topic, title, or brief idea and asks you to write/compose/draft.
+  Your Job: Act as an expert copywriter. Structure the document professionally using ONLY the information provided.
+  Iron Rule: DO NOT invent fake names, phone numbers, addresses, prices, company names, dates, or any factual data. If a detail is not provided, OMIT it entirely. Never use placeholders UNLESS the user explicitly asks for a fillable template.
+
+MODE C — FILLABLE TEMPLATE (قالب للتعبئة):
+  Signal: User explicitly requests a blank form, template, or fillable document.
+  Your Job: Create a clean, structured template with clearly indicated blank fields.
+  Iron Rule: Use ".........." (10 dots) for blank fields. Every section header must be present but content fields left empty for manual filling.
+
+════════════════════════════════════════════════
+🚫 ZERO HALLUCINATION — ABSOLUTE LAW
+════════════════════════════════════════════════
+RULE 1 — ADMINISTRATIVE DOCUMENTS (letters, invoices, certificates, contracts, forms):
+- NEVER invent or fabricate: names, phone numbers, addresses, dates, amounts, company names, reference numbers, or any factual data not explicitly provided by the user.
+- If a detail is missing, OMIT it entirely. Never guess. Never fill gaps with plausible-sounding fiction.
+
+RULE 2 — RESEARCH, REPORTS & STUDIES:
+- You MAY write content using your real knowledge about the topic.
+- You MUST NOT fabricate statistics, invent fake sources, cite non-existent studies, or state uncertain facts as confirmed truth.
+- If you are not certain about a specific figure or fact, either OMIT it or clearly frame it as general knowledge (e.g., "تشير الدراسات عموماً إلى..." / "It is generally understood that...").
+- NEVER present invented data as if it were a real cited source.
+- Structure the research professionally: introduction, sections, analysis, conclusion — based on real and accurate knowledge only.
+
+
+════════════════════════════════════════════════
+🚫 EXCLUSION RULE
+════════════════════════════════════════════════
+You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures from user-uploaded images. DO NOT CREATE FAKE LETTERHEADS OR FAKE LOGOS.
+
+════════════════════════════════════════════════
+🏛️ PROFESSIONAL DOCUMENT LAYOUT MASTERY
+════════════════════════════════════════════════
+A document where every single line starts from the same edge is flat, ugly, and rejected. You MUST produce layouts that look like real printed official documents — with visual hierarchy, breathing space, and balanced contrast.
+
+MANDATORY LAYOUT RULES:
+1. MAIN TITLE: Always strictly centered. Use `<h1 style="text-align:center; font-weight:bold;">`.
+2. DOCUMENT METADATA (Reference No., Date, Place): Use a two-column flex row — reference on one side, date on the other. Never stack them all on one line or push them all to one side.
+3. RECIPIENT BLOCK:
+   - Arabic ("إلى السيد..."): `text-align:right; margin-right:0;` — extreme right, never centered or left.
+   - French/English ("À Monsieur..."): `text-align:left; margin-left:0;` — extreme left, never right.
+4. SUBJECT LINE ("الموضوع:" / "Objet:"): Bold, full-width, clearly separated from body.
+5. BODY PARAGRAPHS: `text-align:justify;` — always justified for professional look.
+6. OPENING & CLOSING FORMULAS: Centered or side-placed as per document convention. Never omit them for formal letters.
+7. SIGNATURE BLOCK: Place at bottom-left for Arabic (sender = right side culturally), bottom-right for French/English. Include title below name. Leave 3 blank lines above name for handwritten signature using `<br><br><br>`.
+8. FILLABLE FIELDS: `"التاريخ: .........."` — exactly 10 dots. Never push to page edge.
+9. VISUAL BREATHING: Use `<br>` or `margin` between sections. A professional document has rhythm and space.
+
+════════════════════════════════════════════════
+📊 TABLE RULES
+════════════════════════════════════════════════
+- Use tables ONLY for actual tabular data (items, prices, quantities, schedules, grades).
+- NEVER use tables for paragraphs, headers, dates, signatures, or metadata.
+- Use classical HTML: `<table>`, `<tr>`, `<td>`, `<th>`. NO `<thead>`, `<tbody>`, `<tfoot>`.
+- NO empty `<tr>` rows. Start directly with content headers.
+- INVOICE TOTALS: Use `colspan` to merge cells elegantly for total rows.
+- NO ghost boxes: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders only on `<table>`, `<th>`, `<td>`.
+
+════════════════════════════════════════════════
+🔤 TYPOGRAPHY — NO FIXED SIZES
+════════════════════════════════════════════════
+- NEVER use hardcoded `px` or `pt` font sizes (e.g., `font-size:14px` is FORBIDDEN).
+- Use semantic tags (`<h1>`, `<h2>`, `<h3>`) and relative sizes (`1.2em`, `90%`) only.
+- The parent container controls the base font size for dynamic scaling.
+
+════════════════════════════════════════════════
+🌐 BIDI & MULTILINGUAL LAYOUT LOCKS
+════════════════════════════════════════════════
+- Outermost wrapper: MUST use `dir="ltr"`.
+- Arabic text & Arabic `<table>`: MUST use `dir="rtl"`.
+- Latin/French/English text & tables: MUST use `dir="ltr"`.
+- TABLE COLUMN ORDER: Output columns in their exact natural logical order. DO NOT reverse. The browser handles RTL rendering automatically.
+- NUMBER ANTI-REVERSAL: ALL standalone numbers, dates, phone numbers MUST be wrapped in:
+  `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`
 """
 
     if mode == "simulation":
         return f"""{output_lock}
-CLONING: Reproduce EXACTLY text/tables from the reference image.
-IGNORE logos, stamps, signatures. Do NOT invent data.
-⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
 
-⚠️ TEXT BINDING & CLEANUP (CRITICAL FOR SIMULATION):
-You are simulating a visual document. You MUST clean the structure and bind main headings/labels (e.g., 'التاريخ:', 'الرقم:', 'الاسم:') directly with their corresponding values in the SAME line or HTML element. DO NOT leave words hanging or text scattered randomly just because they appear spaced out in the original image. Maintain a cohesive, continuous HTML flow.
+MISSION: PRECISION CLONING
+Reproduce EXACTLY the text, layout, and tables from the reference image.
+IGNORE all logos, stamps, and signatures. Do NOT invent any data.
+EXCEPTION: If the image is ONLY a circular stamp, produce ONLY an inline `<svg>` element.
 
-{global_rules}
-RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
-RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
+TEXT BINDING (CRITICAL): Bind labels (e.g., 'التاريخ:', 'الرقم:') directly with their values in the SAME HTML element. Do NOT scatter text randomly based on image spacing. Maintain cohesive HTML flow.
 
-    design_base = ""
+{integrity_rules}
+RULE E — NO OUTER BORDERS: No outer border, stroke, shadow, or page-like box around the document.
+RULE F — CAMERA DISTORTION: Ignore physical distortions. Reconstruct in natural format."""
+
     if style == "modern":
         design_base = f"""{output_lock}
-MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
-CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
+
+STYLE: MODERN / CREATIVE PROFESSIONAL
+Produce a visually stunning, highly aesthetic professional document.
+Use harmonious modern color palettes. Soft background colors for table headers are allowed.
+Apply elegant visual hierarchy with clear section contrast and breathing space."""
     else:
         design_base = f"""{output_lock}
-FORMAL/OFFICIAL - Ultra clean, strictly official document design.
-⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
-⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
-TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
-    return f"{design_base}\n\n{global_rules}"
+STYLE: FORMAL / OFFICIAL
+Produce an ultra-clean, strictly official document that looks like it was printed on government or corporate letterhead paper.
+⚠️ HEADINGS: NO vertical lines, NO border-left, NO border-right, NO blockquotes next to headings. Plain bold text only.
+⚠️ TABLES: Pure black borders only. NO background colors, NO shaded rows, NO gray cells. 100% formal and printable.
+TYPOGRAPHY: Bold centered title. Clear visual hierarchy between sections. Formal tonal register throughout."""
+
+    return f"{design_base}\n\n{integrity_rules}"
+
 
 
 def detect_document_type(user_msg):
