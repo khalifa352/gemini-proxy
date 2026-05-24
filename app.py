@@ -23,101 +23,37 @@ logger = logging.getLogger("Monjez_V10_Server")
 
 app = Flask(__name__)
 
-# متغير عام لتخزين النموذج الناجح تلقائياً (لتجنب التأخير في الطلبات القادمة)
-_active_text_model = None
-
-# ══════════════════════════════════════════════════════════
-# 🚀 تهيئة الاتصال الجديد عبر Vertex AI (نظام الشركات المجاني)
-# ══════════════════════════════════════════════════════════
+# ── Lazy Gemini ──
+_client = None
+_types = None
 _init = False
 
-def init_vertex():
-    global _init
+def get_client():
+    global _client, _types, _init
     if not _init:
         _init = True
         try:
-            import vertexai
-            from google.oauth2 import service_account
-            
-            # يبحث عن ملف الجيسون في نفس مجلد المشروع (يجب رفع الملف باسم service_account.json)
-            json_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
-            
-            if os.path.exists(json_path):
-                creds = service_account.Credentials.from_service_account_file(json_path)
-                vertexai.init(project='arctic-robot-496920-d0', location='us-central1', credentials=creds)
-                logger.info("✅ Monjez V10 Server (Vertex AI Ready - Service Account JSON)")
-            else:
-                vertexai.init(project='arctic-robot-496920-d0', location='us-central1')
-                logger.info("✅ Monjez V10 Server (Vertex AI Ready - Default Auth)")
+            from google import genai as g
+            from google.genai import types as t
+            _types = t
+            k = os.environ.get("GOOGLE_API_KEY")
+            if k:
+                _client = g.Client(api_key=k, http_options={"api_version": "v1beta"})
+                logger.info("✅ Monjez V10 Server (Ready)")
         except Exception as e:
-            logger.error(f"Vertex Init Error: {e}")
-
-def get_client():
-    init_vertex()
-    return True  # نرجع True لتجاوز فحوصات الاتصال القديمة بنجاح
-
-# 💡 فئة وسيطة للحفاظ على توافق كل الكود القديم دون تعديله
-class _DummyTypes:
-    class Part:
-        @staticmethod
-        def from_bytes(data, mime_type):
-            from vertexai.generative_models import Part as VPart
-            return VPart.from_data(data=data, mime_type=mime_type)
-    
-    class GenerateContentConfig:
-        def __init__(self, system_instruction=None, temperature=None, max_output_tokens=None, response_mime_type=None):
-            self.system_instruction = system_instruction
-            self.temperature = temperature
-            self.max_output_tokens = max_output_tokens
-            self.response_mime_type = response_mime_type
-
-_types_instance = _DummyTypes()
+            logger.error(f"Init: {e}")
+    return _client
 
 def get_types():
-    return _types_instance
+    get_client()
+    return _types
 
-def call_gemini(fallback_model_name, contents, config, timeout):
-    global _active_text_model
-    init_vertex()
-    from vertexai.generative_models import GenerativeModel, GenerationConfig
-    
-    gen_kwargs = {
-        "temperature": config.temperature,
-        "max_output_tokens": config.max_output_tokens,
-    }
-    if config.response_mime_type:
-        gen_kwargs["response_mime_type"] = config.response_mime_type
-    gen_config = GenerationConfig(**gen_kwargs)
-    
-    # قائمة النماذج حسب الأولوية: الأسرع أولاً، ثم الأكثر استقراراً
-    target_hierarchy = ["gemini-2.5-flash-lite", "gemini-2.0-flash"]
-    
-    models_to_try = []
-    if _active_text_model:
-        models_to_try.append(_active_text_model)
-    for m in target_hierarchy:
-        if m not in models_to_try:
-            models_to_try.append(m)
-            
-    last_exception = None
-    for m_name in models_to_try:
-        try:
-            model = GenerativeModel(m_name, system_instruction=config.system_instruction)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                f = ex.submit(model.generate_content, contents, generation_config=gen_config)
-                resp = f.result(timeout=timeout)
-            if _active_text_model != m_name:
-                _active_text_model = m_name
-                logger.info(f"🚀 ACTIVE MODEL LOCKED TO: {m_name}")
-            return resp
-        except Exception as e:
-            last_exception = e
-            logger.warning(f"⚠️ Model {m_name} failed: {e}. Trying next...")
-            continue
-                
-    raise last_exception or Exception("جميع النماذج فشلت في الاستجابة.")
+def call_gemini(model, contents, config, timeout):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        f = ex.submit(get_client().models.generate_content, model=model, contents=contents, config=config)
+        return f.result(timeout=timeout)
 
-# 💡 دالة استخراج الاستهلاك الدقيق للتوكنز
+# 💡 دالة جديدة لاستخراج الاستهلاك الدقيق للتوكنز
 def extract_tokens(resp):
     try:
         if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
@@ -143,17 +79,24 @@ def clean_html_output(raw_text):
 # 🛡️ حقنة الجداول (درع الخطوط المزدوجة والصفوف الوهمية)
 # ══════════════════════════════════════════════════════════
 def force_table_borders(html_text):
+    # 0. إزالة أوسمة البنية التي يُنشئها Gemini أحياناً وتسبب صفاً وهمياً في LibreOffice
     html_text = re.sub(r'</?thead[^>]*>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'</?tbody[^>]*>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'</?tfoot[^>]*>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'<colgroup[^>]*>.*?</colgroup>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
     html_text = re.sub(r'<caption[^>]*>.*?</caption>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
+    
+    # 1. إجبار الجدول على التنسيق النظيف المندمج لمنع الخطوط المزدوجة
     html_text = html_text.replace("<table", "<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse; border-spacing:0; width:100%; border: 1px solid black; margin: 10px 0;' ")
     html_text = html_text.replace("<th", "<th style='border: 1px solid black; padding: 4px; text-align: center; vertical-align: middle; color: black;' ")
     html_text = html_text.replace("<td", "<td style='border: 1px solid black; padding: 4px; vertical-align: middle;' ")
+    
+    # 2. درع التنظيف: مسح أي صفوف فارغة (Empty Rows) أنشأها الذكاء الاصطناعي وتسبب الخانة الفارغة
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*&nbsp;\s*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
+    # مسح صفوف فارغة تحتوي فقط على مسافات أو أسطر فارغة داخل الخلايا
     html_text = re.sub(r'<tr>\s*(?:<t[hd][^>]*>\s*(?:&nbsp;|\s)*</t[hd]>\s*)+</tr>', '', html_text, flags=re.IGNORECASE)
+    
     return html_text
 
 # ══════════════════════════════════════════════════════════
@@ -163,144 +106,138 @@ def force_tables_ltr_for_export(html_text):
     html_text = re.sub(r'(<table[^>]*?)\bdir\s*=\s*["\']rtl["\']', r'\1dir="ltr"', html_text, flags=re.IGNORECASE)
     return html_text
 
+# ══════════════════════════════════════════════════════════
+# 🚀 Local LibreOffice Converter
+# ══════════════════════════════════════════════════════════
+def local_libreoffice_convert(file_bytes, input_ext, output_ext):
+    logger.info(f"🖥️ Local LibreOffice: Converting {input_ext.upper()} to {output_ext.upper()}...")
+    
+    # 🧹 [التعديل الجراحي]: تنظيف ملف قفل X99 لتجنب خطأ Server is already active for display 99
+    lock_file = "/tmp/.X99-lock"
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            logger.info("🧹 Cleared stale /tmp/.X99-lock file.")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to clear lock file: {e}")
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = os.path.join(temp_dir, f"input.{input_ext}")
+            with open(input_path, 'wb') as f:
+                f.write(file_bytes)
+            
+            profile_dir = os.path.join(temp_dir, "lo_profile")
+            
+            filters = {
+                "docx": "docx:MS Word 2007 XML",
+                "xlsx": "xlsx:Calc MS Excel 2007 XML",
+                "pptx": "pptx:Impress MS PowerPoint 2007 XML",
+                "pdf": "pdf"
+            }
+            lo_filter = filters.get(output_ext, output_ext)
+            
+            command = [
+                'libreoffice',
+                f'-env:UserInstallation=file://{profile_dir}',
+                '--headless',
+                '--invisible',
+                '--nocrashreport',
+                '--nodefault',
+                '--nofirststartwizard',
+                '--nologo',
+                '--norestore',
+                '--convert-to', lo_filter,
+                '--outdir', temp_dir,
+                input_path
+            ]
+            
+            env = os.environ.copy()
+            env["SAL_USE_VCLPLUGIN"] = "gen"
+            env["LC_ALL"] = "C.UTF-8"
+            env["DISPLAY"] = ":99"
+            
+            process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, env=env)
+            output_path = os.path.join(temp_dir, f"input.{output_ext}")
+            
+            if process.returncode == 0 and os.path.exists(output_path):
+                with open(output_path, 'rb') as f:
+                    result_bytes = f.read()
+                logger.info("✅ Local LibreOffice: Conversion successful!")
+                return result_bytes, None
+            else:
+                error_msg = process.stderr.decode('utf-8', errors='ignore').strip()
+                if not error_msg:
+                    error_msg = process.stdout.decode('utf-8', errors='ignore').strip() or "Unknown error"
+                logger.error(f"❌ LibreOffice Failed! Code: {process.returncode}")
+                logger.error(f"❌ Error Details: {error_msg}")
+                return None, f"خطأ المحرك (Code {process.returncode}): {error_msg}"
+    except Exception as e:
+        logger.error(f"❌ Local LibreOffice Exception: {str(e)}")
+        return None, f"استثناء المحرك: {str(e)}"
+
 # 💡 الرادار اللغوي الذكي
 def has_arabic(text):
     return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
 
 def get_style_prompt(style, mode):
+    global_rules = """
+⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
+- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names.
+- 🚫 NO PLACEHOLDERS: If the user does not provide a specific piece of information, DO NOT create empty placeholders UNLESS the user explicitly requests a fillable form or blank template. Otherwise, simply OMIT that element entirely.
+- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content. ZERO hallucination.
 
-    output_lock = """🔴 OUTPUT CONTRACT — INVIOLABLE:
-Return ONLY raw HTML starting with the very first HTML tag and ending with the very last closing tag.
-ZERO preamble. ZERO postamble. ZERO self-commentary. ZERO explanations.
-If you cannot fulfill any part of the request, SILENTLY SKIP IT. Never write why.
-Violating this rule by outputting ANY non-HTML text before or after the HTML is a critical failure.
-"""
+⚠️ EXCLUSION RULE:
+- 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
 
-    integrity_rules = """
-════════════════════════════════════════════════
-🧠 IDENTITY: WHO YOU ARE
-════════════════════════════════════════════════
-You are an elite Document Architect — a master specialist in creating, formatting, and structuring ALL types of official and professional documents across every domain: government letters, administrative decisions, legal contracts, commercial invoices, service quotes, certificates, attestations, reports, feasibility studies, research papers, financial statements, HR documents, and more.
-You have deep expertise in the formal conventions of Arabic, French, and English official documents. You understand the structural hierarchy, tonal register, and visual layout conventions of EACH document type. You produce documents that look and feel like they were created by a professional human expert, not generated by AI.
+⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
+1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language:
+   - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
+   - RECIPIENT BLOCK (المرسل إليه / À Monsieur): 
+     * For Latin/French/English (e.g., "À monsieur..."): It MUST be aligned to the EXTREME LEFT (`text-align: left; margin-left: 0;`) OR explicitly CENTERED. NEVER push it to the right.
+     * For Arabic (e.g., "إلى السيد..."): It MUST be strictly aligned to the EXTREME RIGHT (`text-align: right; margin-right: 0;`). NEVER push it to the left or center it.
+   - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
+   - METADATA & FILLABLE FIELDS: Place them intelligently (e.g., using flexbox). If a field is meant to be filled by hand after printing (e.g., "التاريخ:" or "التوقيع:"), you MUST leave sufficient physical writing space next to it (e.g., using "التاريخ: ....................") and NEVER push it to the absolute edge of the page.
+   - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
+   - Make the layout dynamic, breathing, and visually balanced!
+2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
+3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
+4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
+5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
+6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
+7. 🚫 NO FIXED FONT SIZES (CRITICAL FOR DYNAMIC SCALING): NEVER use hardcoded pixel or point sizes (e.g., `font-size: 14px;` or `12pt`). You MUST use standard semantic tags (`<h1>`, `<h2>`) or relative sizes (e.g., `font-size: 1.2em;`, `120%`) for visual hierarchy. The parent container controls the base size.
 
-════════════════════════════════════════════════
-🔍 STEP 1 — CLASSIFY THE INPUT (MANDATORY FIRST STEP)
-════════════════════════════════════════════════
-Before generating any HTML, silently classify the user's input into ONE of these three modes:
-
-MODE A — READY CONTENT (تنسيق محتوى جاهز):
-  Signal: User provides complete text, data, or a full draft to be formatted.
-  Your Job: Format their EXACT content into professional HTML. You are a formatter, NOT a writer.
-  Iron Rule: DO NOT add, remove, rephrase, or hallucinate a SINGLE word. Every character must come from the user.
-
-MODE B — DRAFTING FROM BRIEF (صياغة من فكرة):
-  Signal: User provides a topic, title, or brief idea and asks you to write/compose/draft.
-  Your Job: Act as an expert copywriter. Structure the document professionally using ONLY the information provided.
-  Iron Rule: DO NOT invent fake names, phone numbers, addresses, prices, company names, dates, or any factual data. If a detail is not provided, OMIT it entirely. Never use placeholders UNLESS the user explicitly asks for a fillable template.
-
-MODE C — FILLABLE TEMPLATE (قالب للتعبئة):
-  Signal: User explicitly requests a blank form, template, or fillable document.
-  Your Job: Create a clean, structured template with clearly indicated blank fields.
-  Iron Rule: Use ".........." (10 dots) for blank fields. Every section header must be present but content fields left empty for manual filling.
-
-════════════════════════════════════════════════
-🚫 ZERO HALLUCINATION — ABSOLUTE LAW
-════════════════════════════════════════════════
-RULE 1 — ADMINISTRATIVE DOCUMENTS (letters, invoices, certificates, contracts, forms):
-- NEVER invent or fabricate: names, phone numbers, addresses, dates, amounts, company names, reference numbers, or any factual data not explicitly provided by the user.
-- If a detail is missing, OMIT it entirely. Never guess. Never fill gaps with plausible-sounding fiction.
-
-RULE 2 — RESEARCH, REPORTS & STUDIES:
-- You MAY write content using your real knowledge about the topic.
-- You MUST NOT fabricate statistics, invent fake sources, cite non-existent studies, or state uncertain facts as confirmed truth.
-- If you are not certain about a specific figure or fact, either OMIT it or clearly frame it as general knowledge (e.g., "تشير الدراسات عموماً إلى..." / "It is generally understood that...").
-- NEVER present invented data as if it were a real cited source.
-- Structure the research professionally: introduction, sections, analysis, conclusion — based on real and accurate knowledge only.
-
-
-════════════════════════════════════════════════
-🚫 EXCLUSION RULE
-════════════════════════════════════════════════
-You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads, footers, logos, stamps, and signatures from user-uploaded images. DO NOT CREATE FAKE LETTERHEADS OR FAKE LOGOS.
-
-════════════════════════════════════════════════
-🏛️ PROFESSIONAL DOCUMENT LAYOUT MASTERY
-════════════════════════════════════════════════
-A document where every single line starts from the same edge is flat, ugly, and rejected. You MUST produce layouts that look like real printed official documents — with visual hierarchy, breathing space, and balanced contrast.
-
-MANDATORY LAYOUT RULES:
-1. MAIN TITLE: Always strictly centered. Use `<h1 style="text-align:center; font-weight:bold;">`.
-2. DOCUMENT METADATA (Reference No., Date, Place): Use a two-column flex row — reference on one side, date on the other. Never stack them all on one line or push them all to one side.
-3. RECIPIENT BLOCK:
-   - Arabic ("إلى السيد..."): `text-align:right; margin-right:0;` — extreme right, never centered or left.
-   - French/English ("À Monsieur..."): `text-align:left; margin-left:0;` — extreme left, never right.
-4. SUBJECT LINE ("الموضوع:" / "Objet:"): Bold, full-width, clearly separated from body.
-5. BODY PARAGRAPHS: `text-align:justify;` — always justified for professional look.
-6. OPENING & CLOSING FORMULAS: Centered or side-placed as per document convention. Never omit them for formal letters.
-7. SIGNATURE BLOCK: Place at bottom-left for Arabic (sender = right side culturally), bottom-right for French/English. Include title below name. Leave 3 blank lines above name for handwritten signature using `<br><br><br>`.
-8. FILLABLE FIELDS: `"التاريخ: .........."` — exactly 10 dots. Never push to page edge.
-9. VISUAL BREATHING: Use `<br>` or `margin` between sections. A professional document has rhythm and space.
-
-════════════════════════════════════════════════
-📊 TABLE RULES
-════════════════════════════════════════════════
-- Use tables ONLY for actual tabular data (items, prices, quantities, schedules, grades).
-- NEVER use tables for paragraphs, headers, dates, signatures, or metadata.
-- Use classical HTML: `<table>`, `<tr>`, `<td>`, `<th>`. NO `<thead>`, `<tbody>`, `<tfoot>`.
-- NO empty `<tr>` rows. Start directly with content headers.
-- INVOICE TOTALS: Use `colspan` to merge cells elegantly for total rows.
-- NO ghost boxes: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders only on `<table>`, `<th>`, `<td>`.
-
-════════════════════════════════════════════════
-🔤 TYPOGRAPHY — NO FIXED SIZES
-════════════════════════════════════════════════
-- NEVER use hardcoded `px` or `pt` font sizes (e.g., `font-size:14px` is FORBIDDEN).
-- Use semantic tags (`<h1>`, `<h2>`, `<h3>`) and relative sizes (`1.2em`, `90%`) only.
-- The parent container controls the base font size for dynamic scaling.
-
-════════════════════════════════════════════════
-🌐 BIDI & MULTILINGUAL LAYOUT LOCKS
-════════════════════════════════════════════════
-- Outermost wrapper: MUST use `dir="ltr"`.
-- Arabic text & Arabic `<table>`: MUST use `dir="rtl"`.
-- Latin/French/English text & tables: MUST use `dir="ltr"`.
-- TABLE COLUMN ORDER: Output columns in their exact natural logical order. DO NOT reverse. The browser handles RTL rendering automatically.
-- NUMBER ANTI-REVERSAL: ALL standalone numbers, dates, phone numbers MUST be wrapped in:
-  `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`
+⚠️ BIDI & MULTILINGUAL LAYOUT LOCKS (MANDATORY):
+- Outermost wrapper MUST use `dir="ltr"`.
+- Arabic text and `<table>` elements MUST explicitly use `dir="rtl"`.
+- Latin/French/English text and `<table>` elements MUST explicitly use `dir="ltr"`.
+- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns. The browser handles RTL/LTR table rendering automatically based on the `dir` attribute.
+- NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
 
     if mode == "simulation":
-        return f"""{output_lock}
+        return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
+IGNORE logos, stamps, signatures. Do NOT invent data.
+⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
 
-MISSION: PRECISION CLONING
-Reproduce EXACTLY the text, layout, and tables from the reference image.
-IGNORE all logos, stamps, and signatures. Do NOT invent any data.
-EXCEPTION: If the image is ONLY a circular stamp, produce ONLY an inline `<svg>` element.
+⚠️ TEXT BINDING & CLEANUP (CRITICAL FOR SIMULATION):
+You are simulating a visual document. You MUST clean the structure and bind main headings/labels (e.g., 'التاريخ:', 'الرقم:', 'الاسم:') directly with their corresponding values in the SAME line or HTML element. DO NOT leave words hanging or text scattered randomly just because they appear spaced out in the original image. Maintain a cohesive, continuous HTML flow.
 
-TEXT BINDING (CRITICAL): Bind labels (e.g., 'التاريخ:', 'الرقم:') directly with their values in the SAME HTML element. Do NOT scatter text randomly based on image spacing. Maintain cohesive HTML flow.
+{global_rules}
+RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
+RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
 
-{integrity_rules}
-RULE E — NO OUTER BORDERS: No outer border, stroke, shadow, or page-like box around the document.
-RULE F — CAMERA DISTORTION: Ignore physical distortions. Reconstruct in natural format."""
-
+    design_base = ""
     if style == "modern":
-        design_base = f"""{output_lock}
-
-STYLE: MODERN / CREATIVE PROFESSIONAL
-Produce a visually stunning, highly aesthetic professional document.
-Use harmonious modern color palettes. Soft background colors for table headers are allowed.
-Apply elegant visual hierarchy with clear section contrast and breathing space."""
+        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
+CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
     else:
-        design_base = f"""{output_lock}
+        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
+⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
+TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
-STYLE: FORMAL / OFFICIAL
-Produce an ultra-clean, strictly official document that looks like it was printed on government or corporate letterhead paper.
-⚠️ HEADINGS: NO vertical lines, NO border-left, NO border-right, NO blockquotes next to headings. Plain bold text only.
-⚠️ TABLES: Pure black borders only. NO background colors, NO shaded rows, NO gray cells. 100% formal and printable.
-TYPOGRAPHY: Bold centered title. Clear visual hierarchy between sections. Formal tonal register throughout."""
-
-    return f"{design_base}\n\n{integrity_rules}"
-
+    return f"{design_base}\n\n{global_rules}"
 
 
 def detect_document_type(user_msg):
@@ -316,11 +253,7 @@ def detect_document_type(user_msg):
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({
-        "status": "Monjez V10 Server Active", 
-        "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"],
-        "active_text_model": _active_text_model or "قيد الانتظار لمعرفة النموذج السريع المتاح"
-    })
+    return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
 @app.route("/gemini", methods=["POST"])
 def generate():
@@ -376,9 +309,10 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 55)
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
@@ -438,9 +372,10 @@ OUTPUT FORMAT:
             cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
 
         try:
-            resp = call_gemini("gemini-2.5-flash-lite", cts, cfg, 55)
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash-lite", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -485,9 +420,10 @@ OUTPUT FORMAT:
         cts = [f"<MESSY_HTML>\n{current_html}\n</MESSY_HTML>\n\nPlease format and fix Bidi issues professionally without changing text."]
 
         try:
-            resp = call_gemini("gemini-2.5-flash-lite", cts, cfg, 55)
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash-lite", cts, cfg, 50)
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 50)
 
         used_tokens = extract_tokens(resp)
         text = resp.text or ""
@@ -543,8 +479,11 @@ CRITICAL RULES:
             contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type="application/pdf")]
             gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
             
-            try: resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 90)
-            except: resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 90)
+            try: 
+                # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+                resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 90)
+            except: 
+                resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
             
             used_tokens = extract_tokens(resp)
             extracted_html = clean_html_output(resp.text or "")
@@ -874,8 +813,11 @@ CRITICAL RULES:
         contents = [bridge_prompt, get_types().Part.from_bytes(data=gemini_bytes, mime_type=gemini_mime)]
         gen_config = get_types().GenerateContentConfig(temperature=0.0, max_output_tokens=16384)
         
-        try: resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 90)
-        except: resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 90)
+        try: 
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 90)
+        except: 
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 90)
         
         used_tokens = extract_tokens(resp)
         extracted_html = clean_html_output(resp.text or "")
@@ -973,9 +915,10 @@ OUTPUT: Return raw HTML only."""
         gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
-            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 55)
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash-lite", contents, gen_config, 50)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
         used_tokens = extract_tokens(resp)
         clean_html = clean_html_output(resp.text or "")
@@ -1009,7 +952,9 @@ def generate_image():
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
         # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=){k}"
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
+        
+        # 💡 [تعديل جراحي]: إضافة تعليمة صارمة لضمان اتصال ووضوح الحروف العربية
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -1017,9 +962,8 @@ CRITICAL RULES:
 2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
 3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
 4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
-5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts.
-6. ARABIC TEXT SUPPORT (STRICT): If the user prompt requires text, phrases, or logo names in Arabic, you MUST explicitly instruct the image generator to render PERFECT, fully readable, connected Arabic typography.
-7. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
+5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
+6. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
         # 🚩 دمج الصور المرجعية إن وجدت
         user_parts = [{"text": user_prompt}]
@@ -1042,10 +986,10 @@ CRITICAL RULES:
         except urllib.error.HTTPError as e:
             err_body = e.read().decode('utf-8')
             logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, precise readable Arabic typography, Mauritanian cultural context. Subject: {user_prompt}"
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
         except Exception as e:
             logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, precise readable Arabic typography, Mauritanian cultural context. Subject: {user_prompt}"
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
 
         logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
 
@@ -1058,12 +1002,13 @@ CRITICAL RULES:
             }
         }
 
-        # 🚀 الترتيب الصحيح: من الأقوى في النصوص (الجيل الرابع إن وجد مستقبلا) ثم أقوى نسخ الجيل الثالث الموثوقة مع العربية
+        # 🚀 [تعديل جراحي]: تقديم نموذج imagen 3.0 (الأقوى والأكثر استقراراً في رسم النصوص العربية، وهو نفسه المستخدم حالياً في تطبيق Gemini) ليكون الخيار الأول
         models_to_try = [
-            "imagen-4.0-generate-001",
+            "imagen-3.0-generate-001",
             "imagen-3.0-generate-002",
-            "imagen-3.0-generate-001"
+            "imagen-4.0-generate-001"
         ]
+
 
         last_error = ""
         for model_name in models_to_try:
@@ -1132,9 +1077,10 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         contents = [f"Text to enhance: {text}"]
         
         try:
-            resp = call_gemini("gemini-2.5-flash-lite", contents, cfg, 30)
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", contents, cfg, 30)
         except:
-            resp = call_gemini("gemini-2.5-flash-lite", contents, cfg, 30)
+            resp = call_gemini("gemini-2.5-flash", contents, cfg, 30)
             
         used_tokens = extract_tokens(resp)
         result_text = resp.text.strip()
