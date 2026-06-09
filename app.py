@@ -230,12 +230,12 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
     design_base = ""
     if style == "modern":
         design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
-CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
+CREATIVE FREEDOM: Act as a master designer. Freely use highly creative shapes, harmonious modern color palettes, elegant typography, and sophisticated layouts to make the document visually stunning, while strictly adhering to all global constraints and rules."""
     else:
-        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design. Act as an expert with 20 years of experience in drafting state and corporate documents.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
 ⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
-TYPOGRAPHY: Dynamic sizes. Title bold centered."""
+TYPOGRAPHY, SPACING & CONTRAST: Apply exceptionally professional spacing, high visual contrast, and flawless alignment. Ensure dynamic sizes with the title bold and centered so the document commands ultimate authority, readability, and professional perfection."""
 
     return f"{design_base}\n\n{global_rules}"
 
