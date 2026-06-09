@@ -229,15 +229,17 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        design_base = """MODERN/CREATIVE - Highly innovative, beautiful, and distinctly aesthetic document design.
-CREATIVE FREEDOM & AVOIDING REPETITION: Act as a master designer. You MUST NOT repeat the same layouts, structures, or colors. STRICTLY PROHIBITED to reuse a single dominant color (like standard flat blue or gray) across different documents. Force yourself to pick a completely new, context-appropriate, and vibrant color palette for EVERY single generation.
-ADVANCED LAYOUT & DISTRIBUTION (NO WEAK LAYOUTS): Break the standard top-to-bottom flow. You MUST use advanced CSS layouts dynamically (e.g., Flexbox `display: flex; justify-content: space-between; align-items: center;`) to distribute elements like dates, references, headers, and sender/recipient info in a sophisticated, well-balanced manner. Do not just stack everything with weak alignment. Create visual harmony, spatial depth, and a highly structured grid-like feel without using actual HTML tables for layout.
-STYLING (WITHIN CONSTRAINTS): 
-- Rich, diverse typography (varying font weights, dynamic sizing, letter-spacing).
-- Distinctive text colors for main titles and emphasis. NEVER default to the same color.
-- Beautifully styled `<hr>` separators (colored, dotted, dashed, or gradient).
-- Highly customized `<table>`: Use soft, UNIQUE background colors for table headers (`<th>`), alternating row colors (`<td>`), and styled borders. Change the table style every single time.
-Make every document visually stunning, structurally superior, and radically different from previous outputs!"""
+        design_base = """MODERN/CREATIVE & ADVANCED LAYOUT - Sophisticated, high-end design meant for complex professional documents (reports, proposals, invoices, advanced letters).
+⚠️ PROFESSIONAL COLOR PALETTE: STRICTLY AVOID inappropriate, playful, or glaring colors (NO Purple, NO Pink, NO Neon). Use elegant, authoritative, and diverse professional palettes (e.g., Deep Navy, Slate Gray, Forest Green, Muted Teal, Charcoal, or Burgundy). DO NOT repeat the same colors every time; create a unique, suitable palette for each document.
+⚠️ ADVANCED BLOCK DISTRIBUTION & SPACING: DO NOT blindly stack everything vertically (one item under the other). You are a senior UI/UX document designer. You MUST use intelligent horizontal spacing!
+- Use CSS Flexbox (`display: flex; justify-content: space-between; align-items: center;`) on wrappers to distribute elements beautifully on the SAME line.
+- Example: Place the 'Date' on the far left and the 'Reference Number' on the far right of the same row.
+- Example: Place 'Sender Info' and 'Recipient Info' side-by-side when appropriate, instead of creating a massive vertical list.
+STYLING (WITHIN CONSTRAINTS):
+- Express creativity through rich typography (varying font-weights, elegant letter-spacing, semantic heading sizes).
+- Use distinct, professional text colors for main headings to establish visual hierarchy.
+- Use beautifully styled `<hr>` tags (e.g., subtle colored lines) to separate major document sections.
+- For `<table>`, apply sophisticated designs: use soft, professional background colors ONLY for `<th>`, clean borders, and subtle alternating row colors (`<td>`) to ensure the table looks premium and easy to read."""
     else:
         design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design. Act as an expert with 20 years of experience in drafting state and corporate documents.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
