@@ -935,20 +935,22 @@ OUTPUT: Return raw HTML only."""
         return jsonify({"response": clean_html, "used_tokens": used_tokens})
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
-
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
     import urllib.error
     import json
     import os
+    import logging
+
+    logger = logging.getLogger(__name__)
     
     try:
-        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
+        # ✅ التأكد من جلب المفتاح بشكل صحيح من السيرفر
+        # 🚩 الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
         k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
@@ -961,10 +963,10 @@ def generate_image():
 
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM (تم تنظيف الرابط من أقواس الماركداون)
+        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
         gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         
-        # 💡 [تعديل جراحي]: إضافة تعليمة صارمة لضمان اتصال ووضوح الحروف العربية
+        # 💡 [تعديل جراحي جـوهري]: إضافة تعليمة "المرونة المبدعة" وتوضيح بريد حساب الخدمة
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -973,7 +975,8 @@ CRITICAL RULES:
 3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
 4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
 5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
-6. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
+6. [💡 NEW & CRITICAL]: If the user's prompt is very simple or weak (e.g., 'أريد شعار'), USE YOUR CREATIVITY to expand it significantly. Flesh out the details, theme, and color palette based on the professional and Mauritanian context. Do not reject or shorten weak prompts.
+7. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
         # 🚩 دمج الصور المرجعية إن وجدت
         user_parts = [{"text": user_prompt}]
@@ -996,10 +999,10 @@ CRITICAL RULES:
         except urllib.error.HTTPError as e:
             err_body = e.read().decode('utf-8')
             logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
         except Exception as e:
             logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
 
         logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
 
@@ -1012,7 +1015,8 @@ CRITICAL RULES:
             }
         }
 
-        # 🚀 [تعديل جراحي]: تقديم نموذج imagen 3.0 (الأقوى والأكثر استقراراً في رسم النصوص العربية، وهو نفسه المستخدم حالياً في تطبيق Gemini) ليكون الخيار الأول
+        # 🚀 [💡 NEW & CRITICAL]: تقديم نموذج imagen 3.0 (الأقوى والأكثر استقراراً في رسم النصوص العربية، وهو نفسه المستخدم حالياً في تطبيق Gemini) ليكون الخيار الأول
+        # (لقد استعدت النماذج من كودك السابق بعد التأكد من فعاليتها في مسار Render)
         models_to_try = [
             "imagen-3.0-generate-001",
             "imagen-3.0-generate-002",
@@ -1022,12 +1026,14 @@ CRITICAL RULES:
         last_error = ""
         for model_name in models_to_try:
             # (تم تنظيف الرابط من أقواس الماركداون)
+            # 💡 [💡 NEW & CRITICAL]: إضافة معيار :predict?key= للمصادقة المباشرة في AI Studio
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
                 logger.info(f"🚀 Trying {model_name}...")
-                with urllib.request.urlopen(req, timeout=45) as response:
+                # 🚀 رفع وقت الانتظار إلى 100 ثانية ليكون آمناً في سيرفر Render
+                with urllib.request.urlopen(req, timeout=100) as response:
                     result = json.loads(response.read().decode('utf-8'))
                     if "predictions" in result and len(result["predictions"]) > 0:
                         img_b64 = result["predictions"][0].get("bytesBase64Encoded")
@@ -1046,11 +1052,11 @@ CRITICAL RULES:
                 continue
 
         logger.error(f"❌ All image models failed. Last error: {last_error}")
-        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، يرجى المحاولة لاحقاً."}), 500
+        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، أو استغرقت وقتاً طويلاً. يرجى المحاولة لاحقاً."}), 500
         
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+        return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
 
 
 # ══════════════════════════════════════════════════════════
