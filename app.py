@@ -947,14 +947,12 @@ def generate_image():
     
     try:
         # ✅ التأكد من جلب المفتاح بشكل صحيح من السيرفر
-        # 🚩 الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
         k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        # 🚩 استرجاع الصور المرجعية والأبعاد من تطبيق سويفت
         reference_images = data.get("reference_images", [])
         aspect_ratio = data.get("aspectRatio", "1:1")
 
@@ -963,10 +961,9 @@ def generate_image():
 
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
         gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         
-        # 💡 [تعديل جراحي جـوهري]: إضافة تعليمة "المرونة المبدعة" وتوضيح بريد حساب الخدمة
+        # 💡 [تحديث التعليمات]: إضافة أمر صريح للنموذج باستخدام الإبداع لتقوية الطلبات الضعيفة
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -975,10 +972,9 @@ CRITICAL RULES:
 3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
 4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
 5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
-6. [💡 NEW & CRITICAL]: If the user's prompt is very simple or weak (e.g., 'أريد شعار'), USE YOUR CREATIVITY to expand it significantly. Flesh out the details, theme, and color palette based on the professional and Mauritanian context. Do not reject or shorten weak prompts.
+6. If the user's prompt is very simple or weak (e.g., 'أريد شعار'), USE YOUR CREATIVITY to expand it significantly. Flesh out the details, theme, and color palette based on the professional and Mauritanian context. Do not reject or shorten weak prompts.
 7. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
-        # 🚩 دمج الصور المرجعية إن وجدت
         user_parts = [{"text": user_prompt}]
         for b64_img in reference_images:
             clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
@@ -1015,24 +1011,21 @@ CRITICAL RULES:
             }
         }
 
-        # 🚀 [💡 NEW & CRITICAL]: تقديم نموذج imagen 3.0 (الأقوى والأكثر استقراراً في رسم النصوص العربية، وهو نفسه المستخدم حالياً في تطبيق Gemini) ليكون الخيار الأول
-        # (لقد استعدت النماذج من كودك السابق بعد التأكد من فعاليتها في مسار Render)
+        # 🚀 [تحديث النماذج]: استخدام نماذج Nano Banana الخاصة بتطبيق Gemini المتاحة لحسابك كأولوية أولى
         models_to_try = [
-            "imagen-3.0-generate-001",
-            "imagen-3.0-generate-002",
+            "nano-banana-pro-preview",
+            "gemini-3-pro-image",
+            "gemini-3.1-flash-image",
             "imagen-4.0-generate-001"
         ]
 
         last_error = ""
         for model_name in models_to_try:
-            # (تم تنظيف الرابط من أقواس الماركداون)
-            # 💡 [💡 NEW & CRITICAL]: إضافة معيار :predict?key= للمصادقة المباشرة في AI Studio
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
                 logger.info(f"🚀 Trying {model_name}...")
-                # 🚀 رفع وقت الانتظار إلى 100 ثانية ليكون آمناً في سيرفر Render
                 with urllib.request.urlopen(req, timeout=100) as response:
                     result = json.loads(response.read().decode('utf-8'))
                     if "predictions" in result and len(result["predictions"]) > 0:
@@ -1041,7 +1034,6 @@ CRITICAL RULES:
                             logger.info(f"✅ Design Generated Successfully with {model_name}!")
                             return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
             except urllib.error.HTTPError as e:
-                # 🚩 الكاشف العميق: سيكتب لنا سبب الرفض بالضبط في السجلات!
                 err_body = e.read().decode('utf-8')
                 last_error = err_body
                 logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
@@ -1057,7 +1049,6 @@ CRITICAL RULES:
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
-
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
