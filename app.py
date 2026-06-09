@@ -264,72 +264,122 @@ def detect_document_type(user_msg):
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
-@app.route("/gemini", methods=["POST"])
-def generate():
-    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
+@app.route("/generate_image", methods=["POST"])
+def generate_image():
+    import urllib.request
+    import urllib.error
+    import json
+    import os
+    import logging
+
+    logger = logging.getLogger(__name__)
+    
     try:
+        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
+        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
+        if not k:
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
+
         data = request.json
-        user_msg = data.get("message", "")
-        mode = data.get("mode", "documents")
-        style = data.get("style", "formal")
-        page_size = data.get("pageSize", "a4Portrait")
-        reference_b64 = data.get("reference_image")
-        letterhead_b64 = data.get("letterhead_image")
+        user_prompt = data.get("prompt", "")
+        # 🚩 استرجاع الصور المرجعية والأبعاد من تطبيق سويفت
+        reference_images = data.get("reference_images", [])
+        aspect_ratio = data.get("aspectRatio", "1:1")
 
-        style_prompt = get_style_prompt(style, mode)
-        doc_type = detect_document_type(user_msg)
+        if not user_prompt.strip():
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        page_dimensions = {
-            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait", "physical": "21.0cm x 29.7cm"},
-            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape", "physical": "29.7cm x 21.0cm"},
-            "a3": {"w": 842, "h": 1191, "orientation": "portrait A3", "physical": "29.7cm x 42.0cm"},
-            "a5": {"w": 420, "h": 595, "orientation": "portrait A5", "physical": "14.8cm x 21.0cm"},
-        }
-        page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
-        is_landscape = page_info["w"] > page_info["h"]
+        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards." if is_landscape else ""
-        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra}"
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         
-        ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if reference_b64 and mode != "simulation" else ""
+        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
+The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
+CRITICAL RULES:
+1. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
+2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
+3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
+4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
+5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
+6. If the user's prompt is very simple or weak (e.g., 'أريد شعار'), USE YOUR CREATIVITY to expand it significantly. Flesh out the details, theme, and color palette based on the professional and Mauritanian context. Do not reject or shorten weak prompts.
+7. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
-        doc_type_instruction = "SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page." if doc_type == "single_page" else "MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages."
+        user_parts = [{"text": user_prompt}]
+        for b64_img in reference_images:
+            clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
+            user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
 
-        svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)." if mode == "simulation" else "NO `<svg>`, `<html>`, `<body>`."
-
-        prompt = f"""You are a STRICT Document Formatter.
-{style_prompt}
-{orientation_instruction}
-{ref_note}
-{doc_type_instruction}
-TECHNICAL RULES:
-1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
-2. NO BORDERS AROUND DOCUMENT.
-3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
-OUTPUT: Return raw HTML only."""
-
-        contents = [user_msg] if user_msg else ["Create a formal document."]
-        if reference_b64:
-            contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
-        if letterhead_b64:
-            contents.append("Ensure layout fits empty space below this letterhead.")
-            contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
-
-        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
+        gemini_payload = {
+            "contents": [{"role": "user", "parts": user_parts}],
+            "systemInstruction": {"parts": [{"text": sys_instruct}]},
+            "generationConfig": {"temperature": 0.7}
+        }
 
         try:
-            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
-            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 55)
-        except:
-            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
+            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req_gemini, timeout=15) as response:
+                gemini_result = json.loads(response.read().decode('utf-8'))
+                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                logger.info(f"✨ Super Prompt: {expanded_prompt}")
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
+        except Exception as e:
+            logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
 
-        clean_html = clean_html_output(resp.text or "")
-        used_tokens = extract_tokens(resp)
-        logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size}) | Tokens: {used_tokens}")
-        return jsonify({"response": clean_html, "used_tokens": used_tokens})
+        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
+
+        headers = {"Content-Type": "application/json"}
+        
+        # ✅ ضبط الـ Payload بالبيانات والمعايير الصحيحة للمحرك الفعلي
+        payload = {
+            "instances": [{"prompt": expanded_prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": aspect_ratio,
+                "safetySetting": "block_some",
+                "personGeneration": "allow_adult"
+            }
+        }
+
+        # ✅ المحركات الرسمية المتاحة عبر واجهة برمجيات AI Studio
+        models_to_try = [
+            "imagen-3.0-generate-002",
+            "imagen-3.0-fast-generate-001"
+        ]
+
+        last_error = ""
+        for model_name in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
+            
+            try:
+                logger.info(f"🚀 Trying {model_name}...")
+                with urllib.request.urlopen(req, timeout=100) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if "predictions" in result and len(result["predictions"]) > 0:
+                        img_b64 = result["predictions"][0].get("bytesBase64Encoded")
+                        if img_b64:
+                            logger.info(f"✅ Design Generated Successfully with {model_name}!")
+                            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode('utf-8')
+                last_error = err_body
+                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
+                continue 
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
+                continue
+
+        logger.error(f"❌ All image models failed. Last error: {last_error}")
+        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، أو استغرقت وقتاً طويلاً. يرجى المحاولة لاحقاً."}), 500
+        
     except Exception as e:
-        logger.error(f"Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
+        logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
 
 
 @app.route("/modify", methods=["POST"])
