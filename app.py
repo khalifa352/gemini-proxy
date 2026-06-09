@@ -942,6 +942,7 @@ def generate_image():
     import urllib.request
     import urllib.error
     import json
+    import os
     
     try:
         # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
@@ -960,8 +961,8 @@ def generate_image():
 
         logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
+        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM (تم تنظيف الرابط من أقواس الماركداون)
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         
         # 💡 [تعديل جراحي]: إضافة تعليمة صارمة لضمان اتصال ووضوح الحروف العربية
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
@@ -1018,10 +1019,10 @@ CRITICAL RULES:
             "imagen-4.0-generate-001"
         ]
 
-
         last_error = ""
         for model_name in models_to_try:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
+            # (تم تنظيف الرابط من أقواس الماركداون)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
             
             try:
