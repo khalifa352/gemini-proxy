@@ -229,8 +229,14 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
-CREATIVE FREEDOM: Act as a master designer. Freely use highly creative shapes, harmonious modern color palettes, elegant typography, and sophisticated layouts to make the document visually stunning, while strictly adhering to all global constraints and rules."""
+        design_base = """MODERN/CREATIVE - Highly innovative, beautiful, and distinctly aesthetic document design.
+CREATIVE FREEDOM & RADICAL DIVERSITY: Act as a master designer. You MUST break away from repetitive templates. NEVER use the same default color palettes (strictly avoid falling back to the standard flat blues or grays every time). INVENT unique, vibrant, yet harmonious color schemes for every single document based on its context.
+STYLING (WITHIN CONSTRAINTS): Since you cannot use backgrounds or borders on basic text elements (per global rules), express your creativity boldly through:
+- Rich, diverse, and elegant typography (varying font weights, dynamic sizing, letter-spacing).
+- Distinctive and unique text colors or subtle inline text styling for main titles and emphasis.
+- Beautifully styled `<hr>` separators (e.g., colored, dotted, dashed, or gradient borders).
+- Highly customized `<table>` designs: In modern mode, you are HIGHLY ENCOURAGED to use soft, unique background colors for table headers (`<th>`), alternating row colors (`<td>`), and styled borders.
+Make every document visually stunning, uniquely tailored, and constantly varied!"""
     else:
         design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design. Act as an expert with 20 years of experience in drafting state and corporate documents.
 ⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
