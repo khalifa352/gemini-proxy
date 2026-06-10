@@ -878,36 +878,50 @@ def generate_image():
     logger = logging.getLogger(__name__)
     
     try:
-        # ✅ جلب المفتاح الموثق
+        # ✅ جلب المفتاح الموثق من بيئة السيرفر
         k = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API-KEY2")
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
+        reference_images = data.get("reference_images", [])
+        aspect_ratio = data.get("aspectRatio", "1:1")
+
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
         logger.info("🚀 Generating image natively via Gemini 3.1 Flash Image (Nano Banana 2)...")
         
-        # ✅ استخدام نقطة النهاية الصحيحة للنموذج المدمج (Nano Banana) بدون مكتبات خارجية
+        # ✅ استخدام نقطة النهاية المدمجة والمطابقة لتطبيق Gemini لضمان استقرار خطوط اللغة العربية
         model_name = "gemini-3.1-flash-image"
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={k}"
         
-        # 💡 التعليمات الصارمة
-        sys_instruct = """You are an elite Art Director.
-CRITICAL RULES:
-1. NO MOCKUPS ALLOWED. Provide the RAW, FLAT, modern, and professional 2D design directly.
-2. CULTURE: If people are included, they MUST have authentic Mauritanian facial features (Men in Daraa/Boubou, Women in Melhfa).
-3. TYPOGRAPHY (CRITICAL): You must render Arabic typography flawlessly. Command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters". Use professional fonts like Arial, Cairo, or Tajawal style.
-4. Expand simple prompts creatively to match a professional standard."""
+        # 💡 [منفذ الأوامر القوي]: توجيهات صارمة للتحكم بالخلفيات، منع الموك أب، وجودة التصميم العصري
+        sys_instruct = """You are an elite Art Director and a powerful command executor for an automated professional design application.
+The user will provide a design request in Arabic. You must interpret it, apply the following absolute rules, and execute a masterpiece professional 2D design.
 
-        # ✅ الهيكل الدقيق مترجم إلى REST API
+STRICT LAWS OF EXECUTION:
+1. STRICTLY NO MOCKUPS ALLOWED: Do not place the design on walls, paper, merchandise, t-shirts, business cards, screens, or real-world objects. Output the raw, flat, direct design. No shadows casting on surfaces.
+2. CONTEXT-BASED BACKGROUND (ABSOLUTE):
+   - IF THE REQUEST IS A LOGO (شعار): The background MUST be a solid, flat, pure plain white background. No gradients or details in the background. This is mandatory so the user can easily handle and extract the logo. The logo style must be flat 2D, minimalist, ultra-modern, and highly scalable.
+   - IF THE REQUEST IS AN ADVERTISEMENT, SOCIAL MEDIA POST, FLYER, OR BANNER (إعلان, سوشيال ميديا, فلاير): It CAN have rich, creative, modern commercial backgrounds with professional studio lighting and cinematic depth.
+3. TYPOGRAPHY & ARABIC TEXT: For any text requested, explicitly command the image modality to render perfectly connected Arabic letters, written from right to left, with no broken or detached characters. Typography must be crisp, clear, and perfectly spelled using high-end modern styles (similar to Cairo/Tajawal fonts).
+4. MAURITANIAN CULTURE: If people or lifestyle elements are requested, they MUST have authentic Mauritanian facial features. Men must wear traditional Daraa/Boubou, and women must wear traditional Melhfa. The environment must convey a distinct, modern Mauritanian vibe.
+5. PROMPT EXPANSION: If the input prompt is brief or weak (e.g., 'شعار مقهى'), use your creative directing powers to fully expand it into a detailed, luxurious, and highly professional design concept, while obeying Rules 1 and 2 strictly."""
+
+        # 🚩 دمج الصور المرجعية إن وجدت من تطبيق سويفت لضمان استمرار الميزة
+        user_parts = [{"text": user_prompt}]
+        for b64_img in reference_images:
+            clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
+            user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
+
+        # ✅ ضبط الـ Payload بالبنية الصحيحة والمدعومة لمسار REST الخام في Gemini 3.1
         payload = {
             "contents": [
                 {
                     "role": "user",
-                    "parts": [{"text": user_prompt}]
+                    "parts": user_parts
                 }
             ],
             "systemInstruction": {
@@ -915,11 +929,8 @@ CRITICAL RULES:
             },
             "generationConfig": {
                 "temperature": 0.7,
-                # 🚀 إجبار النموذج على إخراج صورة
-                "responseModalities": ["IMAGE"],
-                "imageConfig": {
-                    "outputMimeType": "image/png"
-                }
+                # 🚀 إجبار النموذج اللغوي والبصري على إرجاع صورة كـ Base64 مباشرة
+                "responseModalities": ["IMAGE"]
             }
         }
 
@@ -931,10 +942,11 @@ CRITICAL RULES:
         )
         
         try:
+            # مهلة انتظار آمنة لمعالجة وتوليد الصورة بدقة عالية في سيرفر Render
             with urllib.request.urlopen(req, timeout=120) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 
-                # ✅ استخراج الصورة من هيكل Gemini
+                # ✅ استخراج الصورة من الهيكل البصري الخاص بـ Gemini 3.1
                 if "candidates" in result and len(result["candidates"]) > 0:
                     parts = result["candidates"][0]["content"]["parts"]
                     img_b64 = None
@@ -952,19 +964,23 @@ CRITICAL RULES:
                             "model_used": model_name
                         })
                     else:
-                        return jsonify({"error": "Failed", "details": "لم يتم العثور على بيانات الصورة في الاستجابة"}), 500
+                        logger.error(f"Unexpected response structure: {result}")
+                        return jsonify({"error": "Failed", "details": "بيانات الصورة غير موجودة في استجابة السيرفر"}), 500
+                else:
+                    logger.error(f"No candidates returned from API: {result}")
+                    return jsonify({"error": "Failed", "details": "لم يتم إرجاع أي نتائج من خوادم جوجل"}), 500
                         
         except urllib.error.HTTPError as e:
             err_body = e.read().decode('utf-8')
             logger.error(f"❌ {model_name} Error (HTTP {e.code}): {err_body}")
             return jsonify({
                 "error": "Failed", 
-                "details": f"خطأ من API: {err_body}"
+                "details": f"خطأ في الاتصال بخوادم التصميم: {err_body}"
             }), 500
 
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"خطأ داخلي: {str(e)}"}), 500
+        return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
