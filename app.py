@@ -868,132 +868,103 @@ OUTPUT: Return raw HTML only."""
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
 @app.route("/generate_image", methods=["POST"])
-from google import genai
-from google.genai import types
-import base64
-import os
+def generate_image():
+    import urllib.request
+    import urllib.error
+    import json
+    import os
+    import logging
 
-def generate():
-  client = genai.Client(
-      vertexai=True,
-      api_key=os.environ.get("GOOGLE_CLOUD_API_KEY"),
-  )
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # ✅ جلب المفتاح الموثق
+        k = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API-KEY2")
+        if not k:
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
-  msg1_text1 = types.Part.from_text(text=""". The Arabic text \"قهوتي ملكي\" (My Royal Coffee) as the central focus.
-2. A stylized, abstract crown icon, integrated subtly above or within the typography, conveying royalty and prestige without being overly ornate.
-3. A very subtle, abstract coffee bean or coffee cup silhouette, perhaps forming part of a flourish or a negative space element, to signify coffee without cluttering the design.
-**Aesthetic & Style:**
-*  **Color Palette:** Rich, opulent gold (with a metallic sheen), deep espresso brown, and elegant cream or off-white for contrast. A hint of deep charcoal or black for definition and sophistication.
-*  **Typography:** The Arabic text \"قهوتي ملكي\" must be rendered with perfect spelling, crispness, and clarity. Command: \"Perfectly connected Arabic letters, written from right to left, no broken or detached characters.\" Use a premium, legible, elegant serif or a refined geometric sans-serif font that conveys luxury and heritage.
-*  **Design Principles:** Clean lines, high contrast, ample negative space, balanced composition, strong visual impact, and scalability. The overall feel should be timeless yet contemporary.
-*  **Output:** A single, isolated, flat logo design presented directly, without any mockups, products, or real-world applications.""")
-  msg2_text1 = types.Part.from_text(text="""**Refining Logo Design**
+        data = request.json
+        user_prompt = data.get("prompt", "")
+        if not user_prompt.strip():
+            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-I'm currently focusing on integrating the specified Arabic text \"قهوتي ملكي\" and the crown icon. My thought process involves ensuring these elements blend seamlessly with subtle coffee bean and cup motifs, aiming for a regal yet inviting aesthetic.
+        logger.info("🚀 Generating image natively via Gemini 3.1 Flash Image (Nano Banana 2)...")
+        
+        # ✅ استخدام نقطة النهاية الصحيحة للنموذج المدمج (Nano Banana) بدون مكتبات خارجية
+        model_name = "gemini-3.1-flash-image"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={k}"
+        
+        # 💡 التعليمات الصارمة
+        sys_instruct = """You are an elite Art Director.
+CRITICAL RULES:
+1. NO MOCKUPS ALLOWED. Provide the RAW, FLAT, modern, and professional 2D design directly.
+2. CULTURE: If people are included, they MUST have authentic Mauritanian facial features (Men in Daraa/Boubou, Women in Melhfa).
+3. TYPOGRAPHY (CRITICAL): You must render Arabic typography flawlessly. Command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters". Use professional fonts like Arial, Cairo, or Tajawal style.
+4. Expand simple prompts creatively to match a professional standard."""
 
-**Clarifying Capabilities**
+        # ✅ الهيكل الدقيق مترجم إلى REST API
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": user_prompt}]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [{"text": sys_instruct}]
+            },
+            "generationConfig": {
+                "temperature": 0.7,
+                # 🚀 إجبار النموذج على إخراج صورة
+                "responseModalities": ["IMAGE"],
+                "imageConfig": {
+                    "outputMimeType": "image/png"
+                }
+            }
+        }
 
-I've been processing the latest input, and it appears to be a prompt for an image generation tool. As a text-based AI, I can't create images directly, but I'm ready to help refine the prompt, generate design concepts, or offer further textual assistance if you'd like.
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(payload).encode('utf-8'), 
+            headers=headers
+        )
+        
+        try:
+            with urllib.request.urlopen(req, timeout=120) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+                # ✅ استخراج الصورة من هيكل Gemini
+                if "candidates" in result and len(result["candidates"]) > 0:
+                    parts = result["candidates"][0]["content"]["parts"]
+                    img_b64 = None
+                    
+                    for part in parts:
+                        if "inlineData" in part:
+                            img_b64 = part["inlineData"]["data"]
+                            break
+                            
+                    if img_b64:
+                        logger.info(f"✅ Design Generated Successfully with {model_name}!")
+                        return jsonify({
+                            "response": img_b64, 
+                            "message": "تم التصميم بنجاح ✨",
+                            "model_used": model_name
+                        })
+                    else:
+                        return jsonify({"error": "Failed", "details": "لم يتم العثور على بيانات الصورة في الاستجابة"}), 500
+                        
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.error(f"❌ {model_name} Error (HTTP {e.code}): {err_body}")
+            return jsonify({
+                "error": "Failed", 
+                "details": f"خطأ من API: {err_body}"
+            }), 500
 
-**Assessing Generation Options**
-
-I'm evaluating how best to assist with your logo request. Since direct image creation isn't within my capabilities, I'm considering providing guidance on prompt optimization for image generators and suggesting workflow adjustments for text accuracy.""")
-  msg2_text2 = types.Part.from_text(text="""It looks like you have written a fantastic, highly detailed prompt for an AI image generator (like Midjourney, DALL-E 3, or Ideogram) to create a luxury coffee logo! 
-
-Because I am a text-based AI, **I cannot directly generate or output the image for you.** However, I can give you some advice on how to get the best results when you paste this into an image generation tool:
-
-### Tips for Generating this Logo:
-1. **Handling the Arabic Text:** 
-   * AI image generators notoriously struggle with perfect spelling, and this is especially true for right-to-left connected scripts like Arabic. Even with your excellent command (\"Perfectly connected Arabic letters...\"), tools like Midjourney often scramble the letters or break the connections.
-   * **Best approach:** Use the AI to generate the **logo mark** (the stylized crown and coffee bean/cup icon in gold and espresso brown). Once you have an icon you love, take the image into a program like Canva, Adobe Illustrator, or Photoshop, and type the text **\"قهوتي ملكي\"** yourself using a premium Arabic font (like *Tajawal*, *Cairo*, or a custom Kufic/Thuluth typeface).
-2. **Which Tool to Use:**
-   * **DALL-E 3 (via ChatGPT Plus or Bing Image Creator):** This is currently the best tool for following exact instructions (like flat design, isolated background) and has a slightly better chance of getting the text closer to correct. 
-   * **Ideogram.ai:** This tool specializes in typography and might do the best job of rendering the text cleanly. 
-   * **Midjourney (v6):** This will give you the most stunning, high-quality, luxurious gold aesthetics, but will almost certainly mess up the Arabic text. 
-
-### Refined Prompt for Midjourney/DALL-E
-If you want to try pasting this right now into an image generator, here is a slightly optimized version of your prompt designed to get a flat, vector-style logo:
-
-> **Prompt:** *A flat, isolated vector logo design on a pure white background. The central focus is the Arabic text \"قهوتي ملكي\". Above the text is a stylized, abstract crown icon conveying royalty and prestige. Integrated subtly into the crown or negative space is an abstract coffee bean silhouette. Aesthetic: Rich, opulent metallic gold, deep espresso brown, and a hint of deep charcoal for definition. Typography: Perfect, legible, elegant serif Arabic font. Clean lines, ample negative space, balanced composition, highly scalable. No mockups, 2D flat vector design, UI/UX graphic style. --no shadows, gradients, 3d, realistic, mockups*
-
-Let me know if you would like help brainstorming brand slogans, writing a business plan for your coffee brand, or refining this design concept further!""")
-  msg3_text1 = types.Part.from_text(text=""". The Arabic text \"قهوتي ملكي\" (My Royal Coffee) as the central focus.
-2. A stylized, abstract crown icon, integrated subtly above or within the typography, conveying royalty and prestige without being overly ornate.
-3. A very subtle, abstract coffee bean or coffee cup silhouette, perhaps forming part of a flourish or a negative space element, to signify coffee without cluttering the design.
-**Aesthetic & Style:**
-*  **Color Palette:** Rich, opulent gold (with a metallic sheen), deep espresso brown, and elegant cream or off-white for contrast. A hint of deep charcoal or black for definition and sophistication.
-*  **Typography:** The Arabic text \"قهوتي ملكي\" must be rendered with perfect spelling, crispness, and clarity. Command: \"Perfectly connected Arabic letters, written from right to left, no broken or detached characters.\" Use a premium, legible, elegant serif or a refined geometric sans-serif font that conveys luxury and heritage.
-*  **Design Principles:** Clean lines, high contrast, ample negative space, balanced composition, strong visual impact, and scalability. The overall feel should be timeless yet contemporary.
-*  **Output:** A single, isolated, flat logo design presented directly, without any mockups, products, or real-world applications.""")
-  si_text1 = """.  The Arabic text \"قهوتي ملكي\" (My Royal Coffee) as the central focus.
-2.  A stylized, abstract crown icon, integrated subtly above or within the typography, conveying royalty and prestige without being overly ornate.
-3.  A very subtle, abstract coffee bean or coffee cup silhouette, perhaps forming part of a flourish or a negative space element, to signify coffee without cluttering the design.
-**Aesthetic & Style:**
-*   **Color Palette:** Rich, opulent gold (with a metallic sheen), deep espresso brown, and elegant cream or off-white for contrast. A hint of deep charcoal or black for definition and sophistication.
-*   **Typography:** The Arabic text \"قهوتي ملكي\" must be rendered with perfect spelling, crispness, and clarity. Command: \"Perfectly connected Arabic letters, written from right to left, no broken or detached characters.\" Use a premium, legible, elegant serif or a refined geometric sans-serif font that conveys luxury and heritage.
-*   **Design Principles:** Clean lines, high contrast, ample negative space, balanced composition, strong visual impact, and scalability. The overall feel should be timeless yet contemporary.
-*   **Output:** A single, isolated, flat logo design presented directly, without any mockups, products, or real-world applications."""
-
-  model = "gemini-3.1-flash-image"
-  contents = [
-    types.Content(
-      role="user",
-      parts=[
-        msg1_text1
-      ]
-    ),
-    types.Content(
-      role="model",
-      parts=[
-        msg2_text1,
-        msg2_text2
-      ]
-    ),
-    types.Content(
-      role="user",
-      parts=[
-        msg3_text1
-      ]
-    ),
-  ]
-
-  generate_content_config = types.GenerateContentConfig(
-    temperature = 1,
-    top_p = 0.95,
-    max_output_tokens = 32768,
-    response_modalities = ["TEXT", "IMAGE"],
-    safety_settings = [types.SafetySetting(
-      category="HARM_CATEGORY_HATE_SPEECH",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_DANGEROUS_CONTENT",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_HARASSMENT",
-      threshold="OFF"
-    )],
-    system_instruction=[types.Part.from_text(text=si_text1)],
-    image_config=types.ImageConfig(
-      aspect_ratio="auto",
-      image_size="1K",
-      output_mime_type="image/png",
-    ),
-    thinking_config=types.ThinkingConfig(
-      thinking_level="MINIMAL",
-    ),
-  )
-
-  for chunk in client.models.generate_content_stream(
-    model = model,
-    contents = contents,
-    config = generate_content_config,
-    ):
-    print(chunk.text, end="")
-
-generate()
+    except Exception as e:
+        logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"خطأ داخلي: {str(e)}"}), 500
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
