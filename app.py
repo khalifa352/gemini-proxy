@@ -264,124 +264,6 @@ def detect_document_type(user_msg):
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
-@app.route("/generate_image", methods=["POST"])
-def generate_image():
-    import urllib.request
-    import urllib.error
-    import json
-    import os
-    import logging
-
-    logger = logging.getLogger(__name__)
-    
-    try:
-        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
-        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
-        if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
-
-        data = request.json
-        user_prompt = data.get("prompt", "")
-        # 🚩 استرجاع الصور المرجعية والأبعاد من تطبيق سويفت
-        reference_images = data.get("reference_images", [])
-        aspect_ratio = data.get("aspectRatio", "1:1")
-
-        if not user_prompt.strip():
-            return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
-
-        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
-
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
-        
-        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
-The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
-CRITICAL RULES:
-1. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
-2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
-3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
-4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
-5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
-6. If the user's prompt is very simple or weak (e.g., 'أريد شعار'), USE YOUR CREATIVITY to expand it significantly. Flesh out the details, theme, and color palette based on the professional and Mauritanian context. Do not reject or shorten weak prompts.
-7. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
-
-        user_parts = [{"text": user_prompt}]
-        for b64_img in reference_images:
-            clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
-            user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
-
-        gemini_payload = {
-            "contents": [{"role": "user", "parts": user_parts}],
-            "systemInstruction": {"parts": [{"text": sys_instruct}]},
-            "generationConfig": {"temperature": 0.7}
-        }
-
-        try:
-            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req_gemini, timeout=15) as response:
-                gemini_result = json.loads(response.read().decode('utf-8'))
-                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
-                logger.info(f"✨ Super Prompt: {expanded_prompt}")
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode('utf-8')
-            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
-        except Exception as e:
-            logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
-
-        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
-
-        headers = {"Content-Type": "application/json"}
-        
-        # ✅ ضبط الـ Payload بالبيانات والمعايير الصحيحة للمحرك الفعلي
-        payload = {
-            "instances": [{"prompt": expanded_prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": aspect_ratio,
-                "safetySetting": "block_some",
-                "personGeneration": "allow_adult"
-            }
-        }
-
-        # ✅ المحركات الرسمية المتاحة عبر واجهة برمجيات AI Studio
-        models_to_try = [
-            "imagen-3.0-generate-002",
-            "imagen-3.0-fast-generate-001"
-        ]
-
-        last_error = ""
-        for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
-            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
-            
-            try:
-                logger.info(f"🚀 Trying {model_name}...")
-                with urllib.request.urlopen(req, timeout=100) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    if "predictions" in result and len(result["predictions"]) > 0:
-                        img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                        if img_b64:
-                            logger.info(f"✅ Design Generated Successfully with {model_name}!")
-                            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-            except urllib.error.HTTPError as e:
-                err_body = e.read().decode('utf-8')
-                last_error = err_body
-                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
-                continue 
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
-                continue
-
-        logger.error(f"❌ All image models failed. Last error: {last_error}")
-        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، أو استغرقت وقتاً طويلاً. يرجى المحاولة لاحقاً."}), 500
-        
-    except Exception as e:
-        logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
-
-
 @app.route("/modify", methods=["POST"])
 def modify():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
@@ -996,8 +878,8 @@ def generate_image():
     logger = logging.getLogger(__name__)
     
     try:
-        # ✅ التأكد من جلب المفتاح بشكل صحيح من السيرفر
-        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
+        # ✅ جلب المفتاح الموثق
+        k = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API-KEY2")
         if not k:
             return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
@@ -1009,11 +891,11 @@ def generate_image():
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
-
+        # ✅ الخطوة 1: تحسين الـ prompt عبر Gemini
+        logger.info("🧠 Step 1: Enhancing prompt via Gemini...")
+        
         gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
         
-        # 💡 [تحديث التعليمات]: إضافة أمر صريح للنموذج باستخدام الإبداع لتقوية الطلبات الضعيفة
         sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
 The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
 CRITICAL RULES:
@@ -1037,65 +919,75 @@ CRITICAL RULES:
         }
 
         try:
-            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
+            req_gemini = urllib.request.Request(
+                gemini_url, 
+                data=json.dumps(gemini_payload).encode('utf-8'), 
+                headers={"Content-Type": "application/json"}
+            )
             with urllib.request.urlopen(req_gemini, timeout=15) as response:
                 gemini_result = json.loads(response.read().decode('utf-8'))
                 expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
                 logger.info(f"✨ Super Prompt: {expanded_prompt}")
         except urllib.error.HTTPError as e:
-            err_body = e.read().decode('utf-8')
-            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
+            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {e.read().decode('utf-8')}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k. Subject: {user_prompt}"
         except Exception as e:
-            logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution. Subject: {user_prompt}"
+            logger.warning(f"⚠️ Gemini enhancement failed: {e}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k. Subject: {user_prompt}"
 
-        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
-
-        headers = {"Content-Type": "application/json"}
+        # ✅ الخطوة 2: توليد الصورة عبر Imagen 4 Ultra مباشرة وبدون فول باك
+        logger.info("🎨 Step 2: Generating image exclusively via Imagen 4 Ultra...")
+        
+        model_name = "imagen-4.0-ultra-generate-001"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
+        
         payload = {
             "instances": [{"prompt": expanded_prompt}],
             "parameters": {
                 "sampleCount": 1,
-                "aspectRatio": aspect_ratio
+                "aspectRatio": aspect_ratio,
+                "personGeneration": "ALLOW_ADULT",
+                "safetySetting": "BLOCK_ONLY_HIGH"
             }
         }
 
-        # 🚀 [تحديث النماذج]: استخدام نماذج Nano Banana الخاصة بتطبيق Gemini المتاحة لحسابك كأولوية أولى
-        models_to_try = [
-            "nano-banana-pro-preview",
-            "gemini-3-pro-image",
-            "gemini-3.1-flash-image",
-            "imagen-4.0-generate-001"
-        ]
-
-        last_error = ""
-        for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
-            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
-            
-            try:
-                logger.info(f"🚀 Trying {model_name}...")
-                with urllib.request.urlopen(req, timeout=100) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    if "predictions" in result and len(result["predictions"]) > 0:
-                        img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                        if img_b64:
-                            logger.info(f"✅ Design Generated Successfully with {model_name}!")
-                            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-            except urllib.error.HTTPError as e:
-                err_body = e.read().decode('utf-8')
-                last_error = err_body
-                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
-                continue 
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
-                continue
-
-        logger.error(f"❌ All image models failed. Last error: {last_error}")
-        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، أو استغرقت وقتاً طويلاً. يرجى المحاولة لاحقاً."}), 500
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(payload).encode('utf-8'), 
+            headers=headers
+        )
         
+        try:
+            # 🚀 رفع وقت الانتظار إلى 120 ثانية لأن Ultra يأخذ وقتاً للرسم بدقة عالية
+            with urllib.request.urlopen(req, timeout=120) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+                if "predictions" in result and len(result["predictions"]) > 0:
+                    img_b64 = result["predictions"][0].get("bytesBase64Encoded")
+                    if img_b64:
+                        logger.info("✅ Design Generated Successfully with Ultra!")
+                        return jsonify({
+                            "response": img_b64, 
+                            "message": "تم التصميم بنجاح ✨",
+                            "model_used": model_name
+                        })
+                    else:
+                        logger.error(f"Unexpected response structure: {result}")
+                        return jsonify({
+                            "error": "Failed", 
+                            "details": "البنية غير متوقعة من API",
+                            "debug": str(result)
+                        }), 500
+                        
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.error(f"❌ Imagen 4 Ultra Error (HTTP {e.code}): {err_body}")
+            return jsonify({
+                "error": "Failed", 
+                "details": f"رفض من خوادم جوجل: {err_body}"
+            }), 500
+
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
