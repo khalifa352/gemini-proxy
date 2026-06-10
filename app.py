@@ -941,13 +941,14 @@ CRITICAL RULES:
         model_name = "imagen-4.0-ultra-generate-001"
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={k}"
         
+        # ✅ التعديل الدقيق لمعايير الأمان حسب متطلبات جوجل
         payload = {
             "instances": [{"prompt": expanded_prompt}],
             "parameters": {
                 "sampleCount": 1,
                 "aspectRatio": aspect_ratio,
-                "personGeneration": "ALLOW_ADULT",
-                "safetySetting": "BLOCK_ONLY_HIGH"
+                "personGeneration": "allow_adult",
+                "safetySetting": "block_low_and_above"
             }
         }
 
@@ -959,7 +960,7 @@ CRITICAL RULES:
         )
         
         try:
-            # 🚀 رفع وقت الانتظار إلى 120 ثانية لأن Ultra يأخذ وقتاً للرسم بدقة عالية
+            # 🚀 وقت الانتظار 120 ثانية لأن Ultra يأخذ وقتاً للرسم بدقة عالية
             with urllib.request.urlopen(req, timeout=120) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 
