@@ -8,6 +8,7 @@ import io
 import concurrent.futures
 import subprocess
 import tempfile
+import traceback  # 🔍 إضافة مكتبة تتبع الأخطاء العميقة للحساس
 from flask import Flask, request, jsonify
 
 # ══════════════════════════════════════════════════════════
@@ -333,7 +334,12 @@ OUTPUT FORMAT:
 
         return jsonify({"response": new_inner, "message": message, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error(f"Modify Error: {str(e)}", exc_info=True)
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /modify 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -382,7 +388,12 @@ OUTPUT FORMAT:
         logger.info("✅ Document Smartly Formatted")
         return jsonify({"response": new_inner, "message": message, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error(f"Format Error: {str(e)}", exc_info=True)
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /format 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -643,7 +654,12 @@ CRITICAL RULES:
         logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
         return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨", "used_tokens": used_tokens})
     except Exception as e:
-        logger.error(f"Word Error: {str(e)}", exc_info=True)
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /convert_to_word 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}", "used_tokens": 0}), 500
 
 
@@ -796,7 +812,12 @@ CRITICAL RULES:
         })
 
     except Exception as e:
-        logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /magic_convert 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -866,7 +887,15 @@ OUTPUT: Return raw HTML only."""
         logger.info(f"✅ Generated Translation HTML (Target: {target_language}) | Tokens: {used_tokens}")
         return jsonify({"response": clean_html, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error(f"Error: {str(e)}", exc_info=True)
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /translate_document 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
+
+
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
@@ -895,7 +924,7 @@ def generate_image():
         
         # ✅ استخدام نقطة النهاية المدمجة والمطابقة لتطبيق Gemini لضمان استقرار خطوط اللغة العربية
         model_name = "gemini-3.1-flash-image"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={k}"
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:generateContent?key={k}"
         
         # 💡 [منفذ الأوامر القوي]: توجيهات صارمة للتحكم بالخلفيات، منع الموك أب، وجودة التصميم العصري
         sys_instruct = """You are an elite Art Director and a powerful command executor for an automated professional design application.
@@ -979,8 +1008,15 @@ STRICT LAWS OF EXECUTION:
             }), 500
 
     except Exception as e:
-        logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
+        import traceback
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /generate_image 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
         return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
+
 
 # ══════════════════════════════════════════════════════════
 # 🌟 مسار ENHANCE TEXT (لتصحيح وتحسين وصف البنود)
@@ -1034,7 +1070,12 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         return jsonify(parsed_json)
         
     except Exception as e:
-        logger.error(f"Enhance Error: {str(e)}", exc_info=True)
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /enhance_text 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
