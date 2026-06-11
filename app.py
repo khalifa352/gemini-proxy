@@ -183,36 +183,37 @@ def has_arabic(text):
 
 def get_style_prompt(style, mode):
     global_rules = """
-⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
-- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names.
-- 🚫 NO PLACEHOLDERS: If the user does not provide a specific piece of information, DO NOT create empty placeholders UNLESS the user explicitly requests a fillable form or blank template. Otherwise, simply OMIT that element entirely.
-- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content. ZERO hallucination.
+⚠️ DRAFTING & ZERO-REFUSAL POLICY (CRITICAL):
+- YOU MUST NEVER REFUSE A REQUEST OR CHAT WITH THE USER. 
+- If the user provides a brief, vague, or very short prompt (e.g., "رسالة إلى وزارة الثقافة"), YOU MUST ACCEPT IT and use your professional copywriting expertise to generate a complete, standard, formal document template suitable for that context. 
+- DO NOT reply with conversational text, justifications, or questions asking for more details. 
+- If specific details are missing (names, dates), use standard empty spaces (e.g., "...........") so the user can fill them later, but YOU MUST GENERATE THE HTML DOCUMENT NO MATTER WHAT.
+
+⚠️ FORMATTING MODE (IF TEXT IS PROVIDED):
+- If the user provides ready-made text, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content.
 
 ⚠️ EXCLUSION RULE:
 - 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
 
 ⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
-1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language:
+1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS:
    - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
-   - RECIPIENT BLOCK (المرسل إليه / À Monsieur): 
-     * For Latin/French/English (e.g., "À monsieur..."): It MUST be aligned to the EXTREME LEFT (`text-align: left; margin-left: 0;`) OR explicitly CENTERED. NEVER push it to the right.
-     * For Arabic (e.g., "إلى السيد..."): It MUST be strictly aligned to the EXTREME RIGHT (`text-align: right; margin-right: 0;`). NEVER push it to the left or center it.
-   - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
-   - METADATA & FILLABLE FIELDS: Place them intelligently (e.g., using flexbox). If a field is meant to be filled by hand after printing (e.g., "التاريخ:" or "التوقيع:"), you MUST leave sufficient physical writing space next to it (e.g., using "التاريخ: ....................") and NEVER push it to the absolute edge of the page.
-   - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
-   - Make the layout dynamic, breathing, and visually balanced!
-2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
-3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
-4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
-5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
-6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
-7. 🚫 NO FIXED FONT SIZES (CRITICAL FOR DYNAMIC SCALING): NEVER use hardcoded pixel or point sizes (e.g., `font-size: 14px;` or `12pt`). You MUST use standard semantic tags (`<h1>`, `<h2>`) or relative sizes (e.g., `font-size: 1.2em;`, `120%`) for visual hierarchy. The parent container controls the base size.
+   - RECIPIENT BLOCK: For Latin/French/English it MUST be aligned LEFT. For Arabic it MUST be aligned RIGHT.
+   - LONG PARAGRAPHS: MUST be justified (`text-align: justify;`).
+   - METADATA & FILLABLE FIELDS: Leave physical writing space next to it (e.g., "التاريخ: ....................").
+   - SIGNATURES: Move them to the opposite bottom corner.
+2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs. Use tables ONLY for actual grids.
+3. NO DIV TABLES: Use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
+4. 🚫 NO GHOST BOXES: NEVER use CSS `border` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
+5. 🚫 NO EMPTY ROWS: Start directly with text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>`.
+6. 📊 INVOICE TOTALS: For rows calculating "Total", use the `colspan` attribute nicely.
+7. 🚫 NO FIXED FONT SIZES: NEVER use hardcoded pixel sizes. Use standard semantic tags (`<h1>`) or relative sizes (`1.2em`).
 
 ⚠️ BIDI & MULTILINGUAL LAYOUT LOCKS (MANDATORY):
 - Outermost wrapper MUST use `dir="ltr"`.
 - Arabic text and `<table>` elements MUST explicitly use `dir="rtl"`.
 - Latin/French/English text and `<table>` elements MUST explicitly use `dir="ltr"`.
-- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns. The browser handles RTL/LTR table rendering automatically based on the `dir` attribute.
+- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order. Browser handles RTL/LTR.
 - NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
 
@@ -230,22 +231,18 @@ RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NAT
 
     design_base = ""
     if style == "modern":
-        design_base = """MODERN/CREATIVE & ADVANCED LAYOUT - Sophisticated, high-end design meant for complex professional documents (reports, proposals, invoices, advanced letters).
-⚠️ PROFESSIONAL COLOR PALETTE: STRICTLY AVOID inappropriate, playful, or glaring colors (NO Purple, NO Pink, NO Neon). Use elegant, authoritative, and diverse professional palettes (e.g., Deep Navy, Slate Gray, Forest Green, Muted Teal, Charcoal, or Burgundy). DO NOT repeat the same colors every time; create a unique, suitable palette for each document.
-⚠️ ADVANCED BLOCK DISTRIBUTION & SPACING: DO NOT blindly stack everything vertically (one item under the other). You are a senior UI/UX document designer. You MUST use intelligent horizontal spacing!
-- Use CSS Flexbox (`display: flex; justify-content: space-between; align-items: center;`) on wrappers to distribute elements beautifully on the SAME line.
-- Example: Place the 'Date' on the far left and the 'Reference Number' on the far right of the same row.
-- Example: Place 'Sender Info' and 'Recipient Info' side-by-side when appropriate, instead of creating a massive vertical list.
-STYLING (WITHIN CONSTRAINTS):
-- Express creativity through rich typography (varying font-weights, elegant letter-spacing, semantic heading sizes).
-- Use distinct, professional text colors for main headings to establish visual hierarchy.
-- Use beautifully styled `<hr>` tags (e.g., subtle colored lines) to separate major document sections.
-- For `<table>`, apply sophisticated designs: use soft, professional background colors ONLY for `<th>`, clean borders, and subtle alternating row colors (`<td>`) to ensure the table looks premium and easy to read."""
+        design_base = """MODERN/CREATIVE & ADVANCED LAYOUT - Sophisticated, high-end design meant for complex professional documents.
+⚠️ PROFESSIONAL COLOR PALETTE: STRICTLY AVOID inappropriate colors (NO Purple, Pink, Neon). Use elegant palettes (Navy, Slate, Forest Green, Charcoal).
+⚠️ ADVANCED BLOCK DISTRIBUTION: Use CSS Flexbox (`display: flex; justify-content: space-between;`) on wrappers to distribute elements beautifully on the SAME line (e.g., Date on left, Ref on right).
+STYLING:
+- Use distinct, professional text colors for main headings.
+- Use styled `<hr>` tags to separate major document sections.
+- Apply soft, professional background colors ONLY for `<th>`, clean borders, and subtle alternating row colors (`<td>`)."""
     else:
-        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design. Act as an expert with 20 years of experience in drafting state and corporate documents.
-⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
-⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
-TYPOGRAPHY, SPACING & CONTRAST: Apply exceptionally professional spacing, high visual contrast, and flawless alignment. Ensure dynamic sizes with the title bold and centered so the document commands ultimate authority, readability, and professional perfection."""
+        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO blockquotes next to any headings. Plain, clean, bold text only.
+⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO shaded rows. 100% formal and transparent.
+TYPOGRAPHY & CONTRAST: Apply exceptionally professional spacing, high visual contrast, and flawless alignment."""
 
     return f"{design_base}\n\n{global_rules}"
 
