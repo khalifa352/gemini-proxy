@@ -265,6 +265,77 @@ def detect_document_type(user_msg):
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
+
+# ══════════════════════════════════════════════════════════
+# 🚀 المسار المفقود: إنشاء المستندات (/gemini)
+# ══════════════════════════════════════════════════════════
+@app.route("/gemini", methods=["POST"])
+def generate_document():
+    if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
+    try:
+        data = request.json
+        prompt = data.get("message", "")
+        mode = data.get("mode", "documents")
+        style = data.get("style", "formal")
+        ref_b64 = data.get("reference_image")
+
+        sys_prompt = get_style_prompt(style, mode)
+        
+        sys_prompt += """
+OUTPUT FORMAT MUST BE EXACTLY LIKE THIS:
+[NOTE]
+اكتب هنا ملاحظة قصيرة للمستخدم بالعربية إذا لزم الأمر، أو اتركها فارغة.
+[/NOTE]
+[HTML]
+ضع كود الـ HTML هنا بالكامل.
+[/HTML]"""
+
+        cfg = get_types().GenerateContentConfig(
+            system_instruction=sys_prompt, 
+            temperature=0.2, 
+            max_output_tokens=16384
+        )
+
+        cts = [f"<USER_REQUEST>\n{prompt}\n</USER_REQUEST>"]
+        if ref_b64:
+            cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
+
+        try:
+            # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
+            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 60)
+        except:
+            resp = call_gemini("gemini-2.5-flash", cts, cfg, 60)
+
+        used_tokens = extract_tokens(resp)
+        text = resp.text or ""
+        
+        note_match = re.search(r'\[NOTE\](.*?)\[/NOTE\]', text, re.DOTALL | re.IGNORECASE)
+        html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
+
+        note = note_match.group(1).strip() if note_match else ""
+        
+        if html_match:
+            final_html = html_match.group(1).strip()
+        else:
+            final_html = clean_html_output(text)
+            final_html = re.sub(r'\[NOTE\].*?\[/NOTE\]', '', final_html, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        return jsonify({
+            "response": final_html, 
+            "note": note, 
+            "used_tokens": used_tokens
+        })
+
+    except Exception as e:
+        logger.error("\n" + "═"*60)
+        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /gemini 🚨")
+        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
+        logger.error(f"⚠️ السبب المباشر: {str(e)}")
+        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
+        logger.error("═"*60 + "\n")
+        return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
+
+
 @app.route("/modify", methods=["POST"])
 def modify():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
