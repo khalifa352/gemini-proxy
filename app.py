@@ -933,114 +933,115 @@ def generate_image():
     import urllib.request
     import urllib.error
     import json
+    import os
+    import logging
+
+    logger = logging.getLogger(__name__)
     
     try:
-        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
-        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
+        # ✅ جلب المفتاح الموثق من بيئة السيرفر
+        k = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API-KEY2")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
-        # 🚩 استرجاع الصور المرجعية والأبعاد من تطبيق سويفت
         reference_images = data.get("reference_images", [])
         aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
-
-        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
-        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
+        logger.info("🚀 Generating image natively via Gemini 3.1 Flash Image (Nano Banana 2)...")
         
-        # 💡 [تعديل جراحي]: إضافة تعليمة صارمة لضمان اتصال ووضوح الحروف العربية
-        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
-The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
-CRITICAL RULES:
-1. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
-2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
-3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
-4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
-5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
-6. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
+        # ✅ استخدام نقطة النهاية المدمجة والمطابقة لتطبيق Gemini لضمان استقرار خطوط اللغة العربية
+        model_name = "gemini-3.1-flash-image"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={k}"
+        
+        # 💡 [منفذ الأوامر القوي]: توجيهات صارمة للتحكم بالخلفيات، منع الموك أب، وجودة التصميم العصري
+        sys_instruct = """You are an elite Art Director and a powerful command executor for an automated professional design application.
+The user will provide a design request in Arabic. You must interpret it, apply the following absolute rules, and execute a masterpiece professional 2D design.
 
-        # 🚩 دمج الصور المرجعية إن وجدت
+STRICT LAWS OF EXECUTION:
+1. STRICTLY NO MOCKUPS ALLOWED: Do not place the design on walls, paper, merchandise, t-shirts, business cards, screens, or real-world objects. Output the raw, flat, direct design. No shadows casting on surfaces.
+2. CONTEXT-BASED BACKGROUND (ABSOLUTE):
+   - IF THE REQUEST IS A LOGO (شعار): The background MUST be a solid, flat, pure plain white background. No gradients or details in the background. This is mandatory so the user can easily handle and extract the logo. The logo style must be flat 2D, minimalist, ultra-modern, and highly scalable.
+   - IF THE REQUEST IS AN ADVERTISEMENT, SOCIAL MEDIA POST, FLYER, OR BANNER (إعلان, سوشيال ميديا, فلاير): It CAN have rich, creative, modern commercial backgrounds with professional studio lighting and cinematic depth.
+3. TYPOGRAPHY & ARABIC TEXT: For any text requested, explicitly command the image modality to render perfectly connected Arabic letters, written from right to left, with no broken or detached characters. Typography must be crisp, clear, and perfectly spelled using high-end modern styles (similar to Cairo/Tajawal fonts).
+4. MAURITANIAN CULTURE: If people or lifestyle elements are requested, they MUST have authentic Mauritanian facial features. Men must wear traditional Daraa/Boubou, and women must wear traditional Melhfa. The environment must convey a distinct, modern Mauritanian vibe.
+5. PROMPT EXPANSION: If the input prompt is brief or weak (e.g., 'شعار مقهى'), use your creative directing powers to fully expand it into a detailed, luxurious, and highly professional design concept, while obeying Rules 1 and 2 strictly."""
+
+        # 🚩 دمج الصور المرجعية إن وجدت من تطبيق سويفت لضمان استمرار الميزة
         user_parts = [{"text": user_prompt}]
         for b64_img in reference_images:
             clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
             user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
 
-        gemini_payload = {
-            "contents": [{"role": "user", "parts": user_parts}],
-            "systemInstruction": {"parts": [{"text": sys_instruct}]},
-            "generationConfig": {"temperature": 0.7}
-        }
-
-        try:
-            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req_gemini, timeout=15) as response:
-                gemini_result = json.loads(response.read().decode('utf-8'))
-                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
-                logger.info(f"✨ Super Prompt: {expanded_prompt}")
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode('utf-8')
-            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
-        except Exception as e:
-            logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
-            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
-
-        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
-
-        headers = {"Content-Type": "application/json"}
+        # ✅ ضبط الـ Payload بالبنية الصحيحة والمدعومة لمسار REST الخام في Gemini 3.1
         payload = {
-            "instances": [{"prompt": expanded_prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": aspect_ratio
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": user_parts
+                }
+            ],
+            "systemInstruction": {
+                "parts": [{"text": sys_instruct}]
+            },
+            "generationConfig": {
+                "temperature": 0.7,
+                # 🚀 إجبار النموذج اللغوي والبصري على إرجاع صورة كـ Base64 مباشرة
+                "responseModalities": ["IMAGE"]
             }
         }
 
-        # 🚀 [تعديل جراحي]: تقديم نموذج imagen 3.0 (الأقوى والأكثر استقراراً في رسم النصوص العربية، وهو نفسه المستخدم حالياً في تطبيق Gemini) ليكون الخيار الأول
-        models_to_try = [
-            "imagen-3.0-generate-001",
-            "imagen-3.0-generate-002",
-            "imagen-4.0-generate-001"
-        ]
-
-
-        last_error = ""
-        for model_name in models_to_try:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
-            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
-            
-            try:
-                logger.info(f"🚀 Trying {model_name}...")
-                with urllib.request.urlopen(req, timeout=45) as response:
-                    result = json.loads(response.read().decode('utf-8'))
-                    if "predictions" in result and len(result["predictions"]) > 0:
-                        img_b64 = result["predictions"][0].get("bytesBase64Encoded")
-                        if img_b64:
-                            logger.info(f"✅ Design Generated Successfully with {model_name}!")
-                            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
-            except urllib.error.HTTPError as e:
-                # 🚩 الكاشف العميق: سيكتب لنا سبب الرفض بالضبط في السجلات!
-                err_body = e.read().decode('utf-8')
-                last_error = err_body
-                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
-                continue 
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
-                continue
-
-        logger.error(f"❌ All image models failed. Last error: {last_error}")
-        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، يرجى المحاولة لاحقاً."}), 500
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(payload).encode('utf-8'), 
+            headers=headers
+        )
         
+        try:
+            # مهلة انتظار آمنة لمعالجة وتوليد الصورة بدقة عالية في سيرفر Render
+            with urllib.request.urlopen(req, timeout=120) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+                # ✅ استخراج الصورة من الهيكل البصري الخاص بـ Gemini 3.1
+                if "candidates" in result and len(result["candidates"]) > 0:
+                    parts = result["candidates"][0]["content"]["parts"]
+                    img_b64 = None
+                    
+                    for part in parts:
+                        if "inlineData" in part:
+                            img_b64 = part["inlineData"]["data"]
+                            break
+                            
+                    if img_b64:
+                        logger.info(f"✅ Design Generated Successfully with {model_name}!")
+                        return jsonify({
+                            "response": img_b64, 
+                            "message": "تم التصميم بنجاح ✨",
+                            "model_used": model_name
+                        })
+                    else:
+                        logger.error(f"Unexpected response structure: {result}")
+                        return jsonify({"error": "Failed", "details": "بيانات الصورة غير موجودة في استجابة السيرفر"}), 500
+                else:
+                    logger.error(f"No candidates returned from API: {result}")
+                    return jsonify({"error": "Failed", "details": "لم يتم إرجاع أي نتائج من خوادم جوجل"}), 500
+                        
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.error(f"❌ {model_name} Error (HTTP {e.code}): {err_body}")
+            return jsonify({
+                "error": "Failed", 
+                "details": f"خطأ في الاتصال بخوادم التصميم: {err_body}"
+            }), 500
+
     except Exception as e:
         logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
+        return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
 
 
 # ══════════════════════════════════════════════════════════
