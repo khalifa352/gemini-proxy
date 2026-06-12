@@ -8,7 +8,6 @@ import io
 import concurrent.futures
 import subprocess
 import tempfile
-import traceback  # 🔍 إضافة مكتبة تتبع الأخطاء العميقة للحساس
 from flask import Flask, request, jsonify
 
 # ══════════════════════════════════════════════════════════
@@ -183,24 +182,60 @@ def has_arabic(text):
 
 def get_style_prompt(style, mode):
     global_rules = """
-🚨 OVERRIDE COMMAND: ZERO-REFUSAL & NO-CHAT POLICY 🚨
-1. NEVER REFUSE, NEVER APOLOGIZE, AND NEVER LEAVE THE DOCUMENT EMPTY!
-2. If the user sends a very short or vague prompt (e.g., "رسالة لوزارة الثقافة", "شكوى", "طلب إجازة"), YOU MUST IMMEDIATELY GENERATE A FULL PROFESSIONAL DOCUMENT TEMPLATE.
-3. INVENT missing data using professional placeholders (e.g., "..................." or "[اسم الجهة]").
-4. DO NOT use the [NOTE] section to ask the user for details or chat. Instead, use your expertise to build a standard template that they can fill out after printing.
-5. THE [HTML] SECTION MUST ALWAYS CONTAIN A FULLY FORMATTED, COMPLETE HTML DOCUMENT. NEVER leave it empty.
-6. EXCLUSION RULE: DO NOT CREATE FAKE LETTERHEADS or logos.
-7. SMART HTML: No borders on <div> or <p>. Use `dir="rtl" style="text-align: right;"` for Arabic text. Outermost wrapper must be `dir="ltr"`. Use classical <table> for grids only.
+⚠️ DRAFTING VS. FORMATTING & ZERO HALLUCINATION (CRITICAL RULE):
+- DRAFTING MODE: If the user asks you to "write", "compose", or "draft" a document based on a brief topic, act as a professional copywriter to structure the letter/document. HOWEVER, YOU MUST STRICTLY USE ONLY THE INFORMATION PROVIDED BY THE USER. DO NOT invent or hallucinate fake names, fake phone numbers, fake prices, or fake company names.
+- 🚫 NO PLACEHOLDERS: If the user does not provide a specific piece of information, DO NOT create empty placeholders UNLESS the user explicitly requests a fillable form or blank template. Otherwise, simply OMIT that element entirely.
+- FORMATTING MODE: If the user provides ready-made text, a draft, or specific data, your ONLY job is to format their EXACT text into professional HTML. You MUST NOT add, modify, or remove a single word of their content. ZERO hallucination.
+
+⚠️ EXCLUSION RULE:
+- 🚫 You MUST completely IGNORE, DELETE, and EXCLUDE any letterheads (headers at the top), footers (at the bottom), logos, stamps, and signatures from the user's uploaded images. DO NOT CREATE FAKE LETTERHEADS.
+
+⚠️ SMART HTML STRUCTURE, DYNAMIC ALIGNMENT & TABLE USAGE (ALL LANGUAGES):
+1. 🚫 BREAK THE WALL OF TEXT! A document where every single line starts from the same edge is ugly and rejected. You MUST vary the alignment using inline CSS to make it look like a real printed professional document in ANY language:
+   - MAIN TITLES: MUST be strictly centered using `<h1 style="text-align: center;">`.
+   - RECIPIENT BLOCK (المرسل إليه / À Monsieur): 
+     * For Latin/French/English (e.g., "À monsieur..."): It MUST be aligned to the EXTREME LEFT (`text-align: left; margin-left: 0;`) OR explicitly CENTERED. NEVER push it to the right.
+     * For Arabic (e.g., "إلى السيد..."): It MUST be strictly aligned to the EXTREME RIGHT (`text-align: right; margin-right: 0;`). NEVER push it to the left or center it.
+   - LONG PARAGRAPHS: MUST be justified to fill the line evenly using `text-align: justify;`.
+   - METADATA & FILLABLE FIELDS: Place them intelligently (e.g., using flexbox). If a field is meant to be filled by hand after printing (e.g., "التاريخ:" or "التوقيع:"), you MUST leave sufficient physical writing space next to it (e.g., using "التاريخ: ....................") and NEVER push it to the absolute edge of the page.
+   - SIGNATURES / SENDER INFO: Move them to the opposite bottom corner or center them. Do not stack everything on one side.
+   - Make the layout dynamic, breathing, and visually balanced!
+2. AVOID UNNECESSARY TABLES: DO NOT use tables for standard paragraphs, headers, dates, or signatures. Use tables ONLY for actual tabular data grids (e.g., items, prices, schedules).
+3. NO DIV TABLES: When you DO use tables, use classical HTML `<table>`, `<tr>`, `<td>`, `<th>`.
+4. 🚫 NO GHOST BOXES: NEVER use CSS `border`, `outline`, or `background` on `<div>`, `<p>`, or `<span>`. Borders are STRICTLY allowed ONLY on `<table>`, `<th>`, and `<td>`.
+5. 🚫 NO EMPTY ROWS: NEVER create empty `<tr>` rows or spacer rows at the top of the table. Start directly with the actual text headers. Do NOT use `<thead>`, `<tbody>`, or `<tfoot>` tags.
+6. 📊 INVOICE TOTALS (COLSPAN): For rows calculating "Total" (الإجمالي), use the `colspan` attribute to merge empty cells nicely.
+7. 🚫 NO FIXED FONT SIZES (CRITICAL FOR DYNAMIC SCALING): NEVER use hardcoded pixel or point sizes (e.g., `font-size: 14px;` or `12pt`). You MUST use standard semantic tags (`<h1>`, `<h2>`) or relative sizes (e.g., `font-size: 1.2em;`, `120%`) for visual hierarchy. The parent container controls the base size.
+
+⚠️ BIDI & MULTILINGUAL LAYOUT LOCKS (MANDATORY):
+- Outermost wrapper MUST use `dir="ltr"`.
+- Arabic text and `<table>` elements MUST explicitly use `dir="rtl"`.
+- Latin/French/English text and `<table>` elements MUST explicitly use `dir="ltr"`.
+- 🔄 TABLE COLUMN ORDER: Extract columns in their exact natural logical order as they appear. DO NOT attempt to manually reverse or flip the columns. The browser handles RTL/LTR table rendering automatically based on the `dir` attribute.
+- NUMBER ANTI-REVERSAL: ALL numbers MUST strictly be wrapped in: `<span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate; white-space:nowrap;"></span>`.
 """
 
     if mode == "simulation":
-        return f"CLONING MODE: Reproduce EXACTLY text/tables from the image. DO NOT invent data. IGNORE logos.\n{global_rules}"
+        return f"""CLONING: Reproduce EXACTLY text/tables from the reference image.
+IGNORE logos, stamps, signatures. Do NOT invent data.
+⚠️ EXCEPTIONAL SCENARIO: If the image is a SINGLE circular stamp, produce ONLY an inline <svg> element.
+
+⚠️ TEXT BINDING & CLEANUP (CRITICAL FOR SIMULATION):
+You are simulating a visual document. You MUST clean the structure and bind main headings/labels (e.g., 'التاريخ:', 'الرقم:', 'الاسم:') directly with their corresponding values in the SAME line or HTML element. DO NOT leave words hanging or text scattered randomly just because they appear spaced out in the original image. Maintain a cohesive, continuous HTML flow.
+
+{global_rules}
+RULE E – NO BORDERS: You MUST NOT add any outer border, stroke, or page-like box.
+RULE F – CAMERA DISTORTION: Ignore physical distortion. Reconstruct in its NATURAL format adapting to the canvas."""
 
     design_base = ""
     if style == "modern":
-        design_base = "MODERN/CREATIVE LAYOUT: Use CSS Flexbox, elegant colors (Navy, Slate), and subtle table backgrounds."
+        design_base = """MODERN/CREATIVE - Professional, beautiful, and highly aesthetic document design.
+CREATIVE FREEDOM: Choose harmonious modern color palettes, elegant typography. Use soft background colors for table headers."""
     else:
-        design_base = "FORMAL/OFFICIAL LAYOUT: Ultra clean. Plain headings. Pure black table borders. NO background colors."
+        design_base = """FORMAL/OFFICIAL - Ultra clean, strictly official document design.
+⚠️ CRITICAL HEADINGS RULE: ABSOLUTELY NO vertical lines, NO border-left, NO border-right, and NO blockquotes next to any headings. Headings MUST be plain, clean, bold text.
+⚠️ CRITICAL TABLE RULE: STRICTLY use plain `<table>` with pure black borders. NO background colors, NO gray cells, NO shaded rows. Keep it 100% formal, printable, and transparent.
+TYPOGRAPHY: Dynamic sizes. Title bold centered."""
 
     return f"{design_base}\n\n{global_rules}"
 
@@ -220,74 +255,71 @@ def detect_document_type(user_msg):
 def index():
     return jsonify({"status": "Monjez V10 Server Active", "features": ["documents", "simulation", "design", "translation", "word_export", "magic_convert"]})
 
-
-# ══════════════════════════════════════════════════════════
-# 🚀 المسار المفقود: إنشاء المستندات (/gemini)
-# ══════════════════════════════════════════════════════════
 @app.route("/gemini", methods=["POST"])
-def generate_document():
+def generate():
     if not get_client(): return jsonify({"error": "Gemini API Offline"}), 500
     try:
         data = request.json
-        prompt = data.get("message", "")
+        user_msg = data.get("message", "")
         mode = data.get("mode", "documents")
         style = data.get("style", "formal")
-        ref_b64 = data.get("reference_image")
+        page_size = data.get("pageSize", "a4Portrait")
+        reference_b64 = data.get("reference_image")
+        letterhead_b64 = data.get("letterhead_image")
 
-        sys_prompt = get_style_prompt(style, mode)
+        style_prompt = get_style_prompt(style, mode)
+        doc_type = detect_document_type(user_msg)
+
+        page_dimensions = {
+            "a4Portrait": {"w": 595, "h": 842, "orientation": "portrait", "physical": "21.0cm x 29.7cm"},
+            "a4Landscape": {"w": 842, "h": 595, "orientation": "landscape", "physical": "29.7cm x 21.0cm"},
+            "a3": {"w": 842, "h": 1191, "orientation": "portrait A3", "physical": "29.7cm x 42.0cm"},
+            "a5": {"w": 420, "h": 595, "orientation": "portrait A5", "physical": "14.8cm x 21.0cm"},
+        }
+        page_info = page_dimensions.get(page_size, page_dimensions["a4Portrait"])
+        is_landscape = page_info["w"] > page_info["h"]
+
+        landscape_extra = f" LANDSCAPE LAYOUT: Tables MUST fit within this width horizontally, but text can flow naturally downwards." if is_landscape else ""
+        orientation_instruction = f"PAGE FORMAT: {page_info['orientation']} — Physical Canvas Size: {page_info['physical']} (Target width: {page_info['w']}px). {landscape_extra}"
         
-        sys_prompt += """
-OUTPUT FORMAT MUST BE EXACTLY LIKE THIS:
-[NOTE]
-اكتب هنا ملاحظة قصيرة للمستخدم بالعربية إذا لزم الأمر، أو اتركها فارغة.
-[/NOTE]
-[HTML]
-ضع كود الـ HTML هنا بالكامل.
-[/HTML]"""
+        ref_note = "\nATTACHED IMAGE: Insert using <img src='data:image/jpeg;base64,...' style='max-width:80%; height:auto; margin:8px auto; display:block;' />" if reference_b64 and mode != "simulation" else ""
 
-        cfg = get_types().GenerateContentConfig(
-            system_instruction=sys_prompt, 
-            temperature=0.2, 
-            max_output_tokens=16384
-        )
+        doc_type_instruction = "SINGLE-PAGE DOCUMENT: Optimize space beautifully on one page." if doc_type == "single_page" else "MULTI-PAGE DOCUMENT: Allow natural flow across multiple pages."
 
-        cts = [f"<USER_REQUEST>\n{prompt}\n</USER_REQUEST>"]
-        if ref_b64:
-            cts.append(get_types().Part.from_bytes(data=base64.b64decode(ref_b64), mime_type="image/jpeg"))
+        svg_rule = "NO `<html>`, `<body>`. (EXCEPTION: `<svg>` is ONLY allowed for the standalone circular stamp scenario)." if mode == "simulation" else "NO `<svg>`, `<html>`, `<body>`."
+
+        prompt = f"""You are a STRICT Document Formatter.
+{style_prompt}
+{orientation_instruction}
+{ref_note}
+{doc_type_instruction}
+TECHNICAL RULES:
+1. PURE HTML ONLY. Just `<div>`, `<table>`, `<h1>`, `<p>`. {svg_rule}
+2. NO BORDERS AROUND DOCUMENT.
+3. WRAPPER CONFIG: The outermost wrapper MUST NOT have excessive padding. Use `<div style="width:100%; max-width:100%; margin:0 auto; padding:5px; box-sizing:border-box; direction:ltr; overflow-wrap:anywhere; word-break:break-word; overflow:hidden;">`.
+OUTPUT: Return raw HTML only."""
+
+        contents = [user_msg] if user_msg else ["Create a formal document."]
+        if reference_b64:
+            contents.append(get_types().Part.from_bytes(data=base64.b64decode(reference_b64), mime_type="image/jpeg"))
+        if letterhead_b64:
+            contents.append("Ensure layout fits empty space below this letterhead.")
+            contents.append(get_types().Part.from_bytes(data=base64.b64decode(letterhead_b64), mime_type="image/jpeg"))
+
+        gen_config = get_types().GenerateContentConfig(system_instruction=prompt, temperature=0.15, max_output_tokens=20000)
 
         try:
             # ✅ الاعتماد الرسمي على نموذج 3.1 كخيار أول
-            resp = call_gemini("gemini-3.1-flash-lite", cts, cfg, 60)
+            resp = call_gemini("gemini-3.1-flash-lite", contents, gen_config, 55)
         except:
-            resp = call_gemini("gemini-2.5-flash", cts, cfg, 60)
+            resp = call_gemini("gemini-2.5-flash", contents, gen_config, 50)
 
+        clean_html = clean_html_output(resp.text or "")
         used_tokens = extract_tokens(resp)
-        text = resp.text or ""
-        
-        note_match = re.search(r'\[NOTE\](.*?)\[/NOTE\]', text, re.DOTALL | re.IGNORECASE)
-        html_match = re.search(r'\[HTML\](.*?)\[/HTML\]', text, re.DOTALL | re.IGNORECASE)
-
-        note = note_match.group(1).strip() if note_match else ""
-        
-        if html_match:
-            final_html = html_match.group(1).strip()
-        else:
-            final_html = clean_html_output(text)
-            final_html = re.sub(r'\[NOTE\].*?\[/NOTE\]', '', final_html, flags=re.DOTALL | re.IGNORECASE).strip()
-
-        return jsonify({
-            "response": final_html, 
-            "note": note, 
-            "used_tokens": used_tokens
-        })
-
+        logger.info(f"✅ Generated HTML (mode: {mode}, page: {page_size}) | Tokens: {used_tokens}")
+        return jsonify({"response": clean_html, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /gemini 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -360,12 +392,7 @@ OUTPUT FORMAT:
 
         return jsonify({"response": new_inner, "message": message, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /modify 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Modify Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -414,12 +441,7 @@ OUTPUT FORMAT:
         logger.info("✅ Document Smartly Formatted")
         return jsonify({"response": new_inner, "message": message, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /format 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Format Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -680,12 +702,7 @@ CRITICAL RULES:
         logger.info(f"✅ Final Word Document generated successfully ({len(docx_bytes)} bytes)")
         return jsonify({"docx_base64": docx_b64, "message": "تم التحويل إلى Word بنجاح ✨", "used_tokens": used_tokens})
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /convert_to_word 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Word Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": f"فشل التحويل: {str(e)}", "used_tokens": 0}), 500
 
 
@@ -838,12 +855,7 @@ CRITICAL RULES:
         })
 
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /magic_convert 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Magic Convert Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
@@ -913,135 +925,122 @@ OUTPUT: Return raw HTML only."""
         logger.info(f"✅ Generated Translation HTML (Target: {target_language}) | Tokens: {used_tokens}")
         return jsonify({"response": clean_html, "used_tokens": used_tokens})
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /translate_document 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
-
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     import urllib.request
     import urllib.error
     import json
-    import os
-    import logging
-
-    logger = logging.getLogger(__name__)
     
     try:
-        # ✅ جلب المفتاح الموثق من بيئة السيرفر
-        k = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API-KEY2")
+        # ✅ الإبقاء على اسم المفتاح بالشرطة كما هو في بيئتك
+        k = os.environ.get("GOOGLE_API-KEY2") or os.environ.get("GOOGLE_API_KEY")
         if not k:
-            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API_KEY غير موجود في إعدادات السيرفر."}), 500
+            return jsonify({"error": "Failed", "details": "مفتاح GOOGLE_API-KEY2 غير موجود."}), 500
 
         data = request.json
         user_prompt = data.get("prompt", "")
+        # 🚩 استرجاع الصور المرجعية والأبعاد من تطبيق سويفت
         reference_images = data.get("reference_images", [])
         aspect_ratio = data.get("aspectRatio", "1:1")
 
         if not user_prompt.strip():
             return jsonify({"error": "Failed", "details": "يرجى كتابة وصف للتصميم المطلوب."}), 400
 
-        logger.info("🚀 Generating image natively via Gemini 3.1 Flash Image (Nano Banana 2)...")
-        
-        # ✅ استخدام نقطة النهاية المدمجة والمطابقة لتطبيق Gemini لضمان استقرار خطوط اللغة العربية
-        model_name = "gemini-3.1-flash-image"
-        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:generateContent?key={k}"
-        
-        # 💡 [منفذ الأوامر القوي]: توجيهات صارمة للتحكم بالخلفيات، منع الموك أب، وجودة التصميم العصري
-        sys_instruct = """You are an elite Art Director and a powerful command executor for an automated professional design application.
-The user will provide a design request in Arabic. You must interpret it, apply the following absolute rules, and execute a masterpiece professional 2D design.
+        logger.info(f"🧠 Step 1: Enhancing prompt via Gemini (Direct REST)...")
 
-STRICT LAWS OF EXECUTION:
-1. STRICTLY NO MOCKUPS ALLOWED: Do not place the design on walls, paper, merchandise, t-shirts, business cards, screens, or real-world objects. Output the raw, flat, direct design. No shadows casting on surfaces.
-2. CONTEXT-BASED BACKGROUND (ABSOLUTE):
-   - IF THE REQUEST IS A LOGO (شعار): The background MUST be a solid, flat, pure plain white background. No gradients or details in the background. This is mandatory so the user can easily handle and extract the logo. The logo style must be flat 2D, minimalist, ultra-modern, and highly scalable.
-   - IF THE REQUEST IS AN ADVERTISEMENT, SOCIAL MEDIA POST, FLYER, OR BANNER (إعلان, سوشيال ميديا, فلاير): It CAN have rich, creative, modern commercial backgrounds with professional studio lighting and cinematic depth.
-3. TYPOGRAPHY & ARABIC TEXT: For any text requested, explicitly command the image modality to render perfectly connected Arabic letters, written from right to left, with no broken or detached characters. Typography must be crisp, clear, and perfectly spelled using high-end modern styles (similar to Cairo/Tajawal fonts).
-4. MAURITANIAN CULTURE: If people or lifestyle elements are requested, they MUST have authentic Mauritanian facial features. Men must wear traditional Daraa/Boubou, and women must wear traditional Melhfa. The environment must convey a distinct, modern Mauritanian vibe.
-5. PROMPT EXPANSION: If the input prompt is brief or weak (e.g., 'شعار مقهى'), use your creative directing powers to fully expand it into a detailed, luxurious, and highly professional design concept, while obeying Rules 1 and 2 strictly."""
+        # 🚩 التوجيه إلى AI Studio لتجاوز قيد IAM
+        gemini_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){k}"
+        
+        # 💡 [تعديل جراحي]: إضافة تعليمة صارمة لضمان اتصال ووضوح الحروف العربية
+        sys_instruct = """You are an elite Art Director and Expert Prompt Engineer.
+The user will provide a brief idea in Arabic. UNDERSTAND THE CONTEXT and expand it into a MASTERPIECE English prompt for Imagen.
+CRITICAL RULES:
+1. NO MOCKUPS ALLOWED (STRICTLY FORBIDDEN). DO NOT place designs on walls, paper, screens, 3D objects, or merchandise. Provide the RAW, FLAT, modern, and professional design directly.
+2. CONTEXT: IF PRINT (مطبوعات, كرت, فلاير): Clean layout, negative space. IF SOCIAL MEDIA: Visually striking, commercial studio lighting. IF LOGO: Clean, scalable, flat professional design.
+3. QUALITY: 8k resolution, cinematic lighting, hyper-realistic photography. NO vector/cartoon unless explicitly requested.
+4. CULTURE (STRICT): If people/lifestyle are included, they MUST have authentic Mauritanian facial features and reflect Mauritanian culture (Men MUST wear traditional Daraa/Boubou, Women MUST wear traditional Melhfa). The vibe should be distinctly Mauritanian.
+5. TYPOGRAPHY & TEXT (CRITICAL): If the design requires text, letters, or a logo name, explicitly command the image generator to render the typography with PERFECT spelling, crisp, and clear readable fonts. For Arabic text, strictly command: "Perfectly connected Arabic letters, written from right to left, no broken or detached characters".
+6. OUTPUT ONLY THE ENGLISH PROMPT. No intros."""
 
-        # 🚩 دمج الصور المرجعية إن وجدت من تطبيق سويفت لضمان استمرار الميزة
+        # 🚩 دمج الصور المرجعية إن وجدت
         user_parts = [{"text": user_prompt}]
         for b64_img in reference_images:
             clean_b64 = b64_img.split(",", 1)[1] if "," in b64_img else b64_img
             user_parts.append({"inlineData": {"mimeType": "image/jpeg", "data": clean_b64}})
 
-        # ✅ ضبط الـ Payload بالبنية الصحيحة والمدعومة لمسار REST الخام في Gemini 3.1
+        gemini_payload = {
+            "contents": [{"role": "user", "parts": user_parts}],
+            "systemInstruction": {"parts": [{"text": sys_instruct}]},
+            "generationConfig": {"temperature": 0.7}
+        }
+
+        try:
+            req_gemini = urllib.request.Request(gemini_url, data=json.dumps(gemini_payload).encode('utf-8'), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req_gemini, timeout=15) as response:
+                gemini_result = json.loads(response.read().decode('utf-8'))
+                expanded_prompt = gemini_result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                logger.info(f"✨ Super Prompt: {expanded_prompt}")
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.warning(f"⚠️ Gemini enhancement HTTP Error: {err_body}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
+        except Exception as e:
+            logger.warning(f"⚠️ Gemini enhancement failed, using fallback: {e}")
+            expanded_prompt = f"RAW, FLAT design, NO mockups. Ultra-realistic, 8k resolution, perfectly connected Arabic letters. Subject: {user_prompt}"
+
+        logger.info(f"🎨 Step 2: Generating image using Dynamic Fallback...")
+
+        headers = {"Content-Type": "application/json"}
         payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": user_parts
-                }
-            ],
-            "systemInstruction": {
-                "parts": [{"text": sys_instruct}]
-            },
-            "generationConfig": {
-                "temperature": 0.7,
-                # 🚀 إجبار النموذج اللغوي والبصري على إرجاع صورة كـ Base64 مباشرة
-                "responseModalities": ["IMAGE"]
+            "instances": [{"prompt": expanded_prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": aspect_ratio
             }
         }
 
-        headers = {"Content-Type": "application/json"}
-        req = urllib.request.Request(
-            url, 
-            data=json.dumps(payload).encode('utf-8'), 
-            headers=headers
-        )
-        
-        try:
-            # مهلة انتظار آمنة لمعالجة وتوليد الصورة بدقة عالية في سيرفر Render
-            with urllib.request.urlopen(req, timeout=120) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                
-                # ✅ استخراج الصورة من الهيكل البصري الخاص بـ Gemini 3.1
-                if "candidates" in result and len(result["candidates"]) > 0:
-                    parts = result["candidates"][0]["content"]["parts"]
-                    img_b64 = None
-                    
-                    for part in parts:
-                        if "inlineData" in part:
-                            img_b64 = part["inlineData"]["data"]
-                            break
-                            
-                    if img_b64:
-                        logger.info(f"✅ Design Generated Successfully with {model_name}!")
-                        return jsonify({
-                            "response": img_b64, 
-                            "message": "تم التصميم بنجاح ✨",
-                            "model_used": model_name
-                        })
-                    else:
-                        logger.error(f"Unexpected response structure: {result}")
-                        return jsonify({"error": "Failed", "details": "بيانات الصورة غير موجودة في استجابة السيرفر"}), 500
-                else:
-                    logger.error(f"No candidates returned from API: {result}")
-                    return jsonify({"error": "Failed", "details": "لم يتم إرجاع أي نتائج من خوادم جوجل"}), 500
-                        
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode('utf-8')
-            logger.error(f"❌ {model_name} Error (HTTP {e.code}): {err_body}")
-            return jsonify({
-                "error": "Failed", 
-                "details": f"خطأ في الاتصال بخوادم التصميم: {err_body}"
-            }), 500
+        # 🚀 [تعديل جراحي]: تقديم نموذج imagen 3.0 (الأقوى والأكثر استقراراً في رسم النصوص العربية، وهو نفسه المستخدم حالياً في تطبيق Gemini) ليكون الخيار الأول
+        models_to_try = [
+            "imagen-3.0-generate-001",
+            "imagen-3.0-generate-002",
+            "imagen-4.0-generate-001"
+        ]
 
+
+        last_error = ""
+        for model_name in models_to_try:
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model_name}:predict?key={k}"
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
+            
+            try:
+                logger.info(f"🚀 Trying {model_name}...")
+                with urllib.request.urlopen(req, timeout=45) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if "predictions" in result and len(result["predictions"]) > 0:
+                        img_b64 = result["predictions"][0].get("bytesBase64Encoded")
+                        if img_b64:
+                            logger.info(f"✅ Design Generated Successfully with {model_name}!")
+                            return jsonify({"response": img_b64, "message": "تم التصميم بنجاح ✨"})
+            except urllib.error.HTTPError as e:
+                # 🚩 الكاشف العميق: سيكتب لنا سبب الرفض بالضبط في السجلات!
+                err_body = e.read().decode('utf-8')
+                last_error = err_body
+                logger.warning(f"⚠️ {model_name} unavailable (HTTP {e.code}): {err_body}")
+                continue 
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"⚠️ {model_name} failed: {e}. Skipping to next...")
+                continue
+
+        logger.error(f"❌ All image models failed. Last error: {last_error}")
+        return jsonify({"error": "Failed", "details": "جميع نماذج الصور غير متاحة حالياً، يرجى المحاولة لاحقاً."}), 500
+        
     except Exception as e:
-        import traceback
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /generate_image 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
-        return jsonify({"error": "Failed", "details": f"خطأ داخلي في الخادم: {str(e)}"}), 500
+        logger.error(f"Image Gen Error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Failed", "details": f"خطأ في الخادم: {str(e)}"}), 500
 
 
 # ══════════════════════════════════════════════════════════
@@ -1096,12 +1095,7 @@ Do NOT wrap the response in ```json, just return the raw JSON object."""
         return jsonify(parsed_json)
         
     except Exception as e:
-        logger.error("\n" + "═"*60)
-        logger.error("🚨 [حساس الأخطاء الذكي] انهيار في مسار: /enhance_text 🚨")
-        logger.error(f"🛑 نوع الخطأ: {type(e).__name__}")
-        logger.error(f"⚠️ السبب المباشر: {str(e)}")
-        logger.error(f"🔍 التفاصيل (لماذا وأين بالضبط):\n{traceback.format_exc()}")
-        logger.error("═"*60 + "\n")
+        logger.error(f"Enhance Error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed", "details": str(e), "used_tokens": 0}), 500
 
 
